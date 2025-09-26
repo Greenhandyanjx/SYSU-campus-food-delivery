@@ -1,5 +1,6 @@
 # SYSU-campus-food-delivery
 中珠外卖校园送优化系统
+每个人在 dev 上再新建自己负责模块的分支，main我设置了权限，大家在dev上PR后，组长再进行merge整合到main上面，main维持一个稳定运行的版本。
 开发流程（每个人日常操作）
 克隆项目（只做一次）
 git clone git@github.com:xxx/SYSU-campus-food-delivery
