@@ -18,7 +18,7 @@ git push origin feature/frontend-homepage
 发起 Pll Request (PR)
 在 GitHub 网页上点 New Pull Request
 目标分支：dev
-由组长 or 相关人 review → merge
+由组长 review → merge
 开发前一定先同步最新代码（避免冲突
 git checkout dev
 git pull origin dev
