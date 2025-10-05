@@ -1,0 +1,27 @@
+frontend/
+├── src/
+│   ├── api/                   # 封装 axios 请求（可按角色分类）
+│   │   ├── merchant/          # 商家端接口
+│   │   ├── rider/             # 骑手端接口
+│   │   └── user/              # 用户端接口
+│   ├── assets/                # 图片、样式、图标
+│   ├── components/            # 公共组件（如导航栏、加载动画）
+│   ├── router/                # 路由配置
+│   │   ├── merchant.js
+│   │   ├── rider.js
+│   │   ├── user.js
+│   │   └── index.js
+│   ├── store/                 # Pinia 状态管理
+│   ├── utils/                 # 工具函数（如token验证、时间格式化）
+│   ├── views/
+│   │   ├── merchant/          # 商家端界面
+│   │   │   ├── Dashboard.vue  # 商家首页
+│   │   │   ├── Orders.vue     # 订单管理
+│   │   │   ├── Menu.vue       # 菜品管理
+│   │   │   └── Statistics.vue # 数据统计
+│   │   ├── rider/
+│   │   └── user/
+│   ├── App.vue
+│   └── main.js
+├── vite.config.js
+└── package.json
