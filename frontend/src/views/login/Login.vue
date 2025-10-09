@@ -14,6 +14,20 @@
           <div class="login-form-title">
             <span class="title-label">校园外卖管理系统</span>
           </div>
+          <el-radio-group v-model="loginForm.role"  class="role-selector">
+            <el-radio-button label="user">          
+              <el-icon><User /></el-icon>
+              <span>我是用户</span>
+            </el-radio-button>
+            <el-radio-button label="rider">
+              <el-icon><Bicycle /></el-icon>
+              <span>我是骑手</span>
+            </el-radio-button>
+            <el-radio-button label="merchant">          
+              <el-icon><Shop /></el-icon>
+              <span>我是商家</span>
+            </el-radio-button>
+          </el-radio-group>
           <el-form-item prop="username">
             <el-input
               v-model="loginForm.username"
@@ -55,6 +69,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, FormInstance, FormRules } from 'element-plus'
+import { User, Bicycle, Shop } from '@element-plus/icons-vue'
 // import { loginApi } from '@/api/user' ////等我们封装loginapi
 
 const router = useRouter()
@@ -62,6 +77,7 @@ const loginFormRef = ref<FormInstance>()
 const loginForm = ref({
   username: 'aaaaaa',
   password: '121341',
+  role:'user' // 默认
 })
 
 const loginRules: FormRules = {
@@ -91,7 +107,17 @@ const handleLogin = async () => {
 
         if (String(res.code) === '1') {
           ElMessage.success('登录成功')
-          router.push('/')
+          switch (loginForm.value.role) {
+            case 'user':
+              router.push('/user/home')
+              break
+            case 'rider':
+              router.push('/rider/dashboard')
+              break
+            case 'merchant':
+              router.push('/merchant/dashboard')
+              break
+          }
         } else {
           ElMessage.error(res.msg || '用户名或密码错误')
         }
@@ -174,7 +200,7 @@ const handleLogin = async () => {
     height: 307px;
   }
   .el-form-item {   
-    margin-top: 30px;
+    margin-bottom: 15px;
     opacity: 0.9;
   }
   .el-form-item.is-error .el-input__inner {
@@ -182,6 +208,53 @@ const handleLogin = async () => {
     border-bottom: 1px solid #fd7065 !important;
     background: #fff !important;
   }
+.role-selector {
+  display: flex;
+  width: 100%;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 0px;
+}
+
+.role-selector .el-radio-button {
+  flex: 1;
+  margin: 0;
+}
+
+.role-selector .el-radio-button__inner {
+  border: none;
+  border-right: 1px solid #dcdfe6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: #606266;
+  transition: all 0.3s;
+  background-color: #f9f9f9;
+}
+
+.role-selector .el-radio-button:last-child .el-radio-button__inner {
+  border-right: none;
+}
+
+.role-selector .el-radio-button__original-radio:checked + .el-radio-button__inner {
+  background-color: #409eff;
+  color: #fff;
+}
+
+.role-selector .el-radio-button__inner:hover {
+  background-color: #ecf5ff;
+  color: #409eff;
+}
+
+.role-selector .el-icon {
+  font-size: 20px;
+  margin-bottom: 4px;
+}
   .input-icon {
     height: 32px;
     width: 18px;
