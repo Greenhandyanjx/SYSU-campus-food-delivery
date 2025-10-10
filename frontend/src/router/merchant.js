@@ -19,7 +19,7 @@ const routes = [
     children: [
       {
         path: "dashboard",
-        component: () => import("@/views/merchant/Dashboard.vue"),
+        component: () => import("@/views/merchant/dashboard/index.vue"),
         name: "MerchantDashboard",
         meta: {
           title: "工作台",
@@ -45,10 +45,18 @@ const routes = [
       },
       {
         path: "menu",
-        component: () => import("@/views/merchant/Menu.vue"),
+        component: () => import("@/views/merchant/menu/index.vue"),
         meta: {
           title: "菜品管理",
           icon: "icon-dish",
+        },
+      },
+      {
+        path: "meal",
+        component: () => import("@/views/merchant/SetMeal.vue"),
+        meta: {
+          title: "套餐管理",
+          icon: "icon-setmeal",
         },
       },
     ],

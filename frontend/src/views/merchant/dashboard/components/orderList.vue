@@ -408,7 +408,8 @@ import {
 } from '@/api/merchant/order'
 
 const props = defineProps<{ orderStatics?: any }>()
-const emit = defineEmits<['getOrderListBy3Status']>()
+const emit = defineEmits(['getOrderListBy3Status'])
+
 
 const { proxy } = getCurrentInstance() as any
 
