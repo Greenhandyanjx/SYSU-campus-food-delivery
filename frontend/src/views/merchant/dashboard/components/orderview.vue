@@ -2,7 +2,7 @@
   <div class="container">
     <h2 class="homeTitle">
       订单管理<i>{{ days[1] }}</i
-      ><span><router-link to="/order">订单明细</router-link></span>
+      ><span><router-link to="/merchant/orders">订单明细</router-link></span>
     </h2>
     <div class="orderviewBox">
       <ul>

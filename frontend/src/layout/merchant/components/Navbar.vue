@@ -20,6 +20,7 @@
         <el-menu-item index="/merchant/orders">订单管理</el-menu-item>
         <el-menu-item index="/merchant/menu">菜品管理</el-menu-item>
         <el-menu-item index="/merchant/statistics">数据统计</el-menu-item>
+        <el-menu-item index="/merchant/meal">套餐管理</el-menu-item>
       </el-menu>
     </div>
 
