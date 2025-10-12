@@ -202,8 +202,8 @@ function initProp(val: any) {
 }
 
 function addDishtype(st: any) {
-  if (st === 'add') router.push({ path: '/menu/add' })
-  else router.push({ path: '/menu/add', query: { id: st } })
+  if (st === 'add') router.push({ path: '/merchant/menu/add' })
+  else router.push({ path: '/merchant/menu/add', query: { id: st } })
 }
 
 function deleteHandle(type: string, id: any) {

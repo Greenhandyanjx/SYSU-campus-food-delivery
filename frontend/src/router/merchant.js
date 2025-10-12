@@ -29,7 +29,7 @@ const routes = [
       },
       {
         path: "statistics",
-        component: () => import("@/views/merchant/Statistics.vue"),
+        component: () => import("@/views/merchant/statistics/index.vue"),
         meta: {
           title: "数据统计",
           icon: "icon-statistics",
@@ -37,7 +37,7 @@ const routes = [
       },
       {
         path: "orders",
-        component: () => import("@/views/merchant/Orders.vue"),
+        component: () => import("@/views/merchant/orders/index.vue"),
         meta: {
           title: "订单管理",
           icon: "icon-order",
@@ -58,6 +58,14 @@ const routes = [
           title: "套餐管理",
           icon: "icon-setmeal",
         },
+      },
+      {
+        path: "menu/add",
+        component: () => import("@/views/merchant/menu/addDishType.vue"),
+        meta: {
+          title: "添加菜品",
+          icon: "icon-dish",
+        }
       },
     ],
   },

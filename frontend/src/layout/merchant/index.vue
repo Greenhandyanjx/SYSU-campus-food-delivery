@@ -120,11 +120,11 @@ export default {
   top: 0;
 }
 
-.mobile.hideSidebar .sidebar-container {
-  pointer-events: none;
-  transition-duration: 0.3s;
-  transform: translate3d(-190px, 0, 0);
-}
+// .mobile.hideSidebar .sidebar-container {
+//   pointer-events: none;
+//   transition-duration: 0.3s;
+//   transform: translate3d(-190px, 0, 0);
+// }
 
 .withoutAnimation .main-container,
 .withoutAnimation .sidebar-container {

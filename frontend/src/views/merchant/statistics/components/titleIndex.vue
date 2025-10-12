@@ -1,0 +1,72 @@
+<template>
+  <div class="title-index">
+    <div class="month">
+      <ul class="tabs">
+        <li
+          v-for="(item, index) in tabsParam"
+          :key="index"
+          class="li-tab"
+          :class="{ active: index === nowIndex }"
+          @click="toggleTabs(index)"
+        >
+          {{ item }}
+          <span></span>
+        </li>
+      </ul>
+    </div>
+    <div class="get-time">
+      <p>已选时间：{{ tateData[0] }} 至 {{ tateData[tateData.length - 1] }}</p>
+    </div>
+    <el-button  class="right-el-button" @click="handleExport">数据导出</el-button>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { defineProps, defineEmits, watch, ref } from 'vue'
+import { ElMessageBox } from 'element-plus'
+import { exportInfor } from '@/api/merchant/index'
+
+const props = defineProps<{ flag: any; tateData: any; turnoverData?: any }>()
+const emit = defineEmits<{
+  (e: 'sendTitleInd', payload: number): void
+}>()
+
+const nowIndex = ref<number>(1)
+const value = ref<any[]>([])
+const tabsParam = ['昨天', '过去7日', '过去30日', '本周', '本月']
+
+watch(
+  () => props.flag,
+  (val) => {
+    nowIndex.value = val
+  },
+  { immediate: true }
+)
+
+function toggleTabs(index: number) {
+  nowIndex.value = index
+  value.value = []
+  emit('sendTitleInd', index + 1)
+}
+
+async function handleExport() {
+  try {
+    await ElMessageBox.confirm('是否确认导出最近30天运营数据?', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+    const { data } = await exportInfor()
+    const url = window.URL.createObjectURL(data)
+    const a = document.createElement('a')
+    document.body.appendChild(a)
+    a.href = url
+    a.download = '运营数据统计报表.xlsx'
+    a.click()
+    window.URL.revokeObjectURL(url)
+  } catch (e) {
+    // 用户取消或出错，忽略
+  }
+}
+</script>
+

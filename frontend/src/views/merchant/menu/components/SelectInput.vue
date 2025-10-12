@@ -1,7 +1,7 @@
 <template>
   <div class="selectInput">
     <el-input
-      v-model="value"
+      v-model="valueLocal"
       type="text"
       style="width: 100%"
       placeholder="请选择口味"
@@ -31,10 +31,20 @@ const props = defineProps<{
   value?: any
   index?: number
 }>()
-const emit = defineEmits<any>()
+const emit = defineEmits(['select'])
 
 const mak = ref(false)
 const keyValue = ref<any>(NaN)
+const valueLocal = ref<any>(props.value ?? '')
+
+// keep prop -> local sync
+import { watch } from 'vue'
+watch(
+  () => props.value,
+  (v) => {
+    valueLocal.value = v
+  }
+)
 
 function selectFlavor(st: boolean) {
   mak.value = st
