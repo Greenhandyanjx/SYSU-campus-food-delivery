@@ -323,7 +323,7 @@ async function submitForm(formRefName: string, st?: any) {
             const res = await addDish(params)
             if (res.data.code === 1) {
               ElMessage.success('菜品添加成功！')
-                if (!st) router.push({ path: '/menu' })
+              if (!st) router.push({ path: '/menu' })
               else {
                 dishFlavors.value = []
                 imageUrl.value = ''

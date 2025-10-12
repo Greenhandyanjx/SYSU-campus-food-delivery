@@ -35,7 +35,7 @@
 </template>
 <script setup lang="ts">
 import { computed } from 'vue'
-import { getday } from '@/utils/fromValidate'
+import { getday } from '@/utils/formValidate'
 
 const props = defineProps<{ overviewData?: any }>()
 

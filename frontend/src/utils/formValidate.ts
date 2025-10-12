@@ -1,3 +1,4 @@
+//文件名应该是 formValidate.ts，作为表单验证工具，不影响所以懒得改了
 export const formatDate = () => {
   const now = new Date();
   let hour: string | number = now.getHours();
