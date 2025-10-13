@@ -1,8 +1,8 @@
-@import './variables.scss'; // Already imported in style-resources-loader
-@import './mixins.scss'; // Already imported in style-resources-loader
-@import './transition.scss';
-@import './svgicon.scss';
-@import './sidebar.scss';
+@use './variables' as *; // migrated from deprecated @import
+@use './mixins' as *; // migrated from deprecated @import
+@use './transition' as *;
+@use './svgicon' as *;
+@use './sidebar' as *;
 /* Global scss */
 
 body {
@@ -16180,4 +16180,37 @@ input[type="number"] {
       margin-left: 20px;
     }
   }
+}
+
+.el-select-dropdown {
+  min-width: 120px !important;
+  max-width: 90vw !important;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+  /* 防止超长不换行文本撑开宽度 */
+}
+
+.el-select-dropdown__wrap,
+.el-select-dropdown__list {
+  min-width: 0 !important;
+  max-width: 90vw !important;
+  word-break: break-word;
+}
+
+/* 限制全局 container 对高度/宽度的冲突（按需调整命名空间） */
+#app,
+html,
+body {
+  min-width: 0;
+}
+
+/* 针对业务页面再加一层命名空间保护（示例：套餐管理页面） */
+.views-merchant-meal,
+.addBrand-container,
+.dashboard-container {
+  box-sizing: border-box;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  overflow: auto;
 }
