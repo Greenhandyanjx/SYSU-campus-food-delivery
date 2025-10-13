@@ -1,0 +1,12 @@
+package models
+
+import (
+	"gorm.io/gorm"
+)
+
+type Rider struct {
+	gorm.Model
+	Username string `gorm:"not null;unique"`
+	Password string `gorm:"not null"`
+	Phone string `gorm:"not null;unique"`
+}
