@@ -40,6 +40,15 @@ export function getCategoryList(params: any) {
   })
 }
 
+export function queryDishList(params: any) {
+  // 支持按 categoryId 或 name 搜索
+  return request({
+    url: '/merchant/dish/list',
+    method: 'get',
+    params,
+  })
+}
+
 export function queryDishById(id: any) {
   return request({
     url: '/merchant/dish/query',

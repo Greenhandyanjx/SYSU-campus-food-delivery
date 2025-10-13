@@ -53,7 +53,7 @@ const routes = [
       },
       {
         path: "meal",
-        component: () => import("@/views/merchant/SetMeal.vue"),
+        component: () => import("@/views/merchant/meal/index.vue"),
         meta: {
           title: "套餐管理",
           icon: "icon-setmeal",
@@ -67,6 +67,15 @@ const routes = [
           icon: "icon-dish",
         }
       },
+      {
+        path: "meal/add",
+        component: () => import("@/views/merchant/meal/addSetmeal.vue"),
+        meta: {
+          title: "添加套餐",
+          icon: "icon-setmeal",
+        }
+      },
+
     ],
   },
   {

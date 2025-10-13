@@ -19,7 +19,7 @@
           <span class="num">{{ setMealData?.discontinued??0 }}</span>
         </li>
         <li class="add">
-          <router-link to="setmeal/add">
+          <router-link to="meal/add">
             <i class="iconfont icon-plus"></i>
             <p>新增套餐</p>
           </router-link>
