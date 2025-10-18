@@ -258,3 +258,67 @@ if user.Role != input.Role {  // 假设 BaseUser 有 Role 字段
 		"role":  input.Role, // 返回角色供前端使用
 	})
 }
+
+func ChangePassword(c *gin.Context) {
+		tokenUsername := c.MustGet("username").(string)
+	// 解析请求体
+	var request struct {
+		Username    string `json:"username"`
+		OldPassword string `json:"oldpassword"`
+		NewPassword string `json:"newpassword"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"code":"400",
+			"msg": "Invalid request body",
+		})
+		return
+	}
+	// 检查请求体中的 username 是否与解析出的用户名一致
+	if request.Username != "" && request.Username != tokenUsername {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+			"code":"401",
+			"msg": "Username mismatch",
+			})
+		return
+	}
+	// 获取用户的真实用户名
+	//获取用户的密码哈希
+	hash, err := utils.GetUserHashByUsernameuser(tokenUsername)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"code":"500",
+			"msg": "Failed to get user hash",
+		})
+		return
+	}
+	// 验证旧密码
+	if !utils.CheckPassword(request.OldPassword, hash) {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+			"cdoe":"401",
+			"msg": "Old password is incorrect",
+		})
+		return
+	}
+	// 更新新密码
+	newHash, err := utils.Hpwd(request.NewPassword)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"code":"500",
+			"msg": "Failed to hash new password",
+		})
+		return
+	}
+	// 假设这里有一个函数 `updateUserPasswordHash` 来更新用户的密码哈希
+	if err := utils.UpdateUserPasswordHash(tokenUsername, newHash); err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"code":"500",
+			"msg": "Failed to update password",
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"code":"0",
+		"msg": "Password updated successfully",
+	})
+}

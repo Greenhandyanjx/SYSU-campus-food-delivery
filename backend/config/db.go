@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-var db *gorm.DB
+
 
 func InitDB() {
 	dsn := AppConfig.Database.DSN
