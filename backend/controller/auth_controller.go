@@ -4,6 +4,9 @@ import (
 	"backend/global"
 	"backend/models"
 	"backend/utils"
+	"bytes"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -11,40 +14,46 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func Register(ctx *gin.Context) {
-	var user models.BaseUser
-	if err := ctx.ShouldBind(&user); err != nil {
+func Register_Base_User(ctx *gin.Context)(uint, string,string, error) {
+	var base_user models.BaseUser
+	body, _ := io.ReadAll(ctx.Request.Body)
+    fmt.Println("Request Body:", string(body)) // 打印请求体内容
+    ctx.Request.Body = io.NopCloser(bytes.NewBuffer(body)) // 重置请求体
+	if err := ctx.ShouldBind(&base_user); err != nil {
 		ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 			"error": "bind error",
 		})
-		return
+		return 0, "", "",err
 	}
-	hspd, err := utils.Hpwd(user.Password)
+	//重置请求体
+	ctx.Request.Body = io.NopCloser(bytes.NewBuffer(body))
+
+	hspd, err := utils.Hpwd(base_user.Password)
 	if err != nil {
 		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": "HSPD ERROR",
 		})
-		return
+		return 0, "", "",err
 	}
 	// 使用 utils 包中的 Hpwd 函数对用户密码进行哈希处理，并将结果存储在 hspd 变量中，同时捕获可能的错误信息存储在 err 变量中
 
-	user.Password = hspd
-	token, err := utils.GenerateJWT(user.Username)
+	base_user.Password = hspd
+	token, err := utils.GenerateJWT(base_user.Username)
 
 	if err != nil {
 		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"error": "token generate error",
 		})
-		return
+		return 0, "", "",err
 	}
-	if err := global.Db.Table("base_users").AutoMigrate(&user); err != nil {
+	if err := global.Db.Table("base_users").AutoMigrate(&base_user); err != nil {
 		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"code": "500",
 			"msg": "table create error",
 		})
-		return
+		return 0, "","",err
 	}
-	if err := global.Db.Create(&user).Error; err != nil {
+	if err := global.Db.Create(&base_user).Error; err != nil {
     // 检查是否为MySQL唯一键冲突错误
     if strings.Contains(err.Error(), "Error 1062") || 
        strings.Contains(err.Error(), "Duplicate entry") {
@@ -60,12 +69,137 @@ func Register(ctx *gin.Context) {
             "msg":  "服务器内部错误，请稍后再试",
         })
     }
-    return
+    return 0, "", "",err
     }
     // 以下为正常情况
+	fmt.Println("baseuser successs")
+	return base_user.ID, token, base_user.Password,nil
+}
 
+func Register_User(ctx *gin.Context) {
+	// 调用基础用户注册函数获取基础用户信息和JWT
+	baseid, token,password, err := Register_Base_User(ctx)
+	if err != nil {
+		return
+	}
+	// 再次绑定 user 特定的属性，不包括 role 字段
+	var user models.User
+	if err := ctx.ShouldBindJSON(&user); err != nil {
+		log.Printf("绑定错误: %v", err) // 打印具体的绑定错误
+		
+		ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"code": "400",
+			"msg": "绑定错误",
+		})
+		return
+	}
+	// 设置基础用户信息，忽略 role 字段
+	// 设置 base_id 字段
+	user.BaseID = baseid
+	user.Password=password
+	// 创
+	// 创建 user 记录
+	if err := global.Db.Table("users").AutoMigrate(&user); err != nil {
+		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"code": "500",
+			"msg": "table create error",
+		})
+		return
+	}
+	if err := global.Db.Create(&user).Error; err != nil {
+		log.Printf("数据库创建错误: %v", err) // 记录详细错误日志
+		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"code": "500",
+			"msg":  "服务器内部错误，请稍后再试",
+		})
+		return
+	}
 	ctx.JSON(http.StatusOK, gin.H{
-		"msg":   "register success",
+		"code": "200",
+		"msg":  "注册成功",
+		"token": token,
+	})
+}
+
+
+func Register_Rider(ctx *gin.Context) {
+	// 调用基础用户注册函数获取基础用户信息和JWT
+	baseid, token, password,err := Register_Base_User(ctx)
+	if err != nil {
+		return
+	}
+	// 再次绑定 rider 特定的属性，不包括 role 字段
+	var rider models.Rider
+	if err := ctx.ShouldBindJSON(&rider); err != nil {
+		ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"code": "400",
+			"msg": "绑定错误",
+		})
+		return
+	}
+	// 设置 base_id 字段
+	rider.BaseID = baseid
+	rider.Password=password
+	// 创建 rider 记录
+	if err := global.Db.Table("riders").AutoMigrate(&rider); err != nil {
+		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"code": "500",
+			"msg": "table user create error",
+		})
+		return
+	}
+	if err := global.Db.Create(&rider).Error; err != nil {
+		log.Printf("数据库创建错误: %v", err) // 记录详细错误日志
+		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"code": "500",
+			"msg":  "服务器内部错误，请稍后再试",
+		})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{
+		"code": "200",
+		"msg":  "注册成功",
+		"token": token,
+	})
+}
+
+func Register_Merchant(ctx *gin.Context) {
+	// 调用基础用户注册函数获取基础用户信息和JWT
+	baseid, token, password,err := Register_Base_User(ctx)
+	if err != nil {
+		return
+	}
+	// 再次绑定 merchant 特定的属性，不包括 role 字段
+	var merchant models.Merchant
+	if err := ctx.ShouldBindJSON(&merchant); err != nil {
+		ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"code": "400",
+			"msg": "绑定错误",
+		})
+		return
+	}
+	// 设置 base_id 字段
+	merchant.BaseID = baseid
+	merchant.Password = password
+	// 创建 merchant 记录
+	if err := global.Db.Table("merchants").AutoMigrate(&merchant); err != nil {
+		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"code": "500",
+			"msg": "table create error",
+		})
+		return
+	}
+	if err := global.Db.Create(&merchant).Error; err != nil {
+		log.Printf("数据库创建错误: %v", err) // 记录详细错误日志
+		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"code": "500",
+			"msg":  "服务器内部错误，请稍后再试",
+		})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{
+		"code": "200",
+		"msg":  "注册成功",
 		"token": token,
 	})
 }

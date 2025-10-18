@@ -13,7 +13,9 @@ func SetRouter() *gin.Engine {
 	auth := fe.Group("/api")
 	{
 		auth.POST("/login", controller.Login)
-		auth.POST("/register", controller.Register)
+		auth.POST("user/register", controller.Register_User)
+		auth.POST("rider/register", controller.Register_Rider)
+		auth.POST("merchant/register", controller.Register_Merchant)
 	}
 	return fe
 }
