@@ -13,8 +13,8 @@
             <el-badge
               class="item"
               :class="item.num >= 10 ? 'badgeW' : ''"
-              :value="item.num > 99 ? '99+' : item.num"
-              :hidden="!([2, 3].includes(item.value) && item.num)"
+              :value="(Number.isFinite(Number(item.num)) ? item.num : 0) > 99 ? '99+' : (Number.isFinite(Number(item.num)) ? item.num : 0)"
+              :hidden="!([2, 3].includes(item.value) && (Number.isFinite(Number(item.num)) ? item.num : 0))"
               >{{ item.label }}</el-badge
             >
           </li>

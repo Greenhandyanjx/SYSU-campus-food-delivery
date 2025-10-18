@@ -59,6 +59,9 @@
               <span v-else>登录中...</span>
             </el-button>
           </el-form-item>
+          <el-form-item>
+            <el-button type="text" style="width: 100%;" @click="() => router.push('/register')">注册新账号</el-button>
+          </el-form-item>
         </el-form>
       </div>
     </div>
@@ -77,7 +80,7 @@ const router = useRouter();
 const loginFormRef = ref<FormInstance>();
 const loginForm = ref({
   username: "aaaaaa",
-  password: "121341",
+  password: "111111",
   role: "user", // 默认
   code: "0", // 默认
 });
@@ -113,6 +116,8 @@ const handleLogin = async () => {
 
         if (String(res.data.code) === "1") {
           ElMessage.success("登录成功");
+          // 保存用户名，供 Navbar 显示
+          try { localStorage.setItem('username', loginForm.value.username) } catch (e) {}
           switch (loginForm.value.role) {
             case "user":
               router.push("/user/home");
@@ -196,7 +201,8 @@ const handleLogin = async () => {
 .login-form {
   background: #ffffff;
   opacity: 0.9;
-  width: 40%;
+  width: 30%;
+  padding: 32px;
   border-radius: 8px 8px 8px 8px;
   display: flex;
   justify-content: center;

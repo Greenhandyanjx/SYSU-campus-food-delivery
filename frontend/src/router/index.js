@@ -8,6 +8,7 @@ const router = createRouter({
   routes: [
     { path: '/', redirect: '/login' },
     { path: '/login', component: () => import('@/views/login/Login.vue') },
+    { path: '/register', component: () => import('@/views/login/register.vue') },
     // ...userRoutes,
     // ...riderRoutes,
     ...merchantRoutes,

@@ -26,7 +26,18 @@
 
     <!-- 右侧操作区 -->
     <div class="navbar-right">
-      <el-button type="text" @click="logout">退出</el-button>
+      <el-dropdown trigger="click" @command="handleCommand">
+        <span class="el-dropdown-link" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <el-avatar size="32" icon="User" />
+          <span class="username">{{ username || '用户' }}</span>
+        </span>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="profile">个人信息</el-dropdown-item>
+            <el-dropdown-item command="logout">退出登录</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
     </div>
   </header>
 </template>
@@ -51,7 +62,21 @@ const handleSelect = (path: string) => {
   router.push(path)
 }
 
+const username = ref(localStorage.getItem('username') || '')
+
+const handleCommand = (command: string) => {
+  if (command === 'logout') {
+    localStorage.removeItem('token')
+    localStorage.removeItem('username')
+    router.push('/login')
+  } else if (command === 'profile') {
+    router.push('/merchant/profile')
+  }
+}
+
 const logout = () => {
+  localStorage.removeItem('token')
+  localStorage.removeItem('username')
   router.push('/login')
 }
 </script>

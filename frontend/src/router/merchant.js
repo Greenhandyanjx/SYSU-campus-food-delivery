@@ -60,6 +60,14 @@ const routes = [
         },
       },
       {
+        path: "profile",
+        component: () => import("@/views/profile.vue"),
+        meta: {
+          title: "个人信息",
+          icon: "icon-user",
+        },
+      },
+      {
         path: "menu/add",
         component: () => import("@/views/merchant/menu/addDishType.vue"),
         meta: {

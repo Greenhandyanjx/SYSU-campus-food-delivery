@@ -13,13 +13,13 @@
           <span class="status">
             <i class="iconfont icon-open"></i> 已启售
           </span>
-          <span class="num">{{ dishesData?.sold ?? 0 }}</span>
+          <span class="num">{{ Number.isFinite(Number(dishesData?.sold)) ? dishesData.sold : 0 }}</span>
         </li>
         <li>
           <span class="status">
             <i class="iconfont icon-stop"></i> 已停售
           </span>
-          <span class="num">{{ dishesData?.discontinued ?? 0 }}</span>
+          <span class="num">{{ Number.isFinite(Number(dishesData?.discontinued)) ? dishesData.discontinued : 0 }}</span>
         </li>
         <li class="add">
           <router-link to="/merchant/menu/add">
