@@ -10,13 +10,13 @@
       <ul>
         <li>
           <span class="status">
-            <i class="iconfont icon-open"></i>已启售
+            <i class="iconfont icon-open"></i>已开售
           </span>
-          <span class="num">{{ setMealData?.sold ??0}}</span>
+          <span class="num">{{ Number.isFinite(Number(setMealData?.sold)) ? setMealData.sold : 0 }}</span>
         </li>
         <li>
           <span class="status"><i class="iconfont icon-stop"></i>已停售</span>
-          <span class="num">{{ setMealData?.discontinued??0 }}</span>
+          <span class="num">{{ Number.isFinite(Number(setMealData?.discontinued)) ? setMealData.discontinued : 0 }}</span>
         </li>
         <li class="add">
           <router-link to="meal/add">
