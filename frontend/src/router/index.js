@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-// import userRoutes from './user'
+import userRoutes from './user'
 // import riderRoutes from './rider'
 import merchantRoutes from './merchant'
 
@@ -9,9 +9,9 @@ const router = createRouter({
     { path: '/', redirect: '/login' },
     { path: '/login', component: () => import('@/views/login/Login.vue') },
     { path: '/register', component: () => import('@/views/login/register.vue') },
-    // ...userRoutes,
     // ...riderRoutes,
     ...merchantRoutes,
+    ...userRoutes,
   ],
 })
 
