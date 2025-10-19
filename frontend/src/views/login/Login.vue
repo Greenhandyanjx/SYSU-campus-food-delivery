@@ -79,9 +79,9 @@ import { loginApi } from "@/api/auth";
 const router = useRouter();
 const loginFormRef = ref<FormInstance>();
 const loginForm = ref({
-  username: "aaaaaa",
-  password: "111111",
-  role: "user", // 默认
+  username: "yjx",
+  password: "123456",
+  role: "merchant", // 默认
   code: "0", // 默认
 });
 
@@ -133,7 +133,7 @@ const handleLogin = async () => {
           ElMessage.error(res.data.msg || "用户名或密码错误");
         }
       } catch (error) {
-        ElMessage.error("登录失败，请检查网络");
+        ElMessage.error("用户名或密码错误");
       } finally {
         loading.value = false;
       }
