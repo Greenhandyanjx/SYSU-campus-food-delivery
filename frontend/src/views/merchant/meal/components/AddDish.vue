@@ -46,11 +46,11 @@
              class="item">
           <span>{{ item.dishName || item.name }}</span>
           <span class="price">￥ {{ Number(Number(item.price).toFixed(2)) }} </span>
-          <span class="del"
-                @click="delCheck(item.name)">
-            <img src="./../../../assets/icons/btn_clean@2x.png"
-                 alt="">
-          </span>
+      <span class="del"
+        @click="delCheck(item.name)">
+      <img src="/src/assets/icons/btn_clean@2x.png"
+         alt="">
+      </span>
         </div>
       </div>
     </div>
