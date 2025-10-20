@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400">
+  <rect width="1200" height="400" fill="#fff"/>
+  <text x="60" y="120" font-family="sans-serif" font-size="46" fill="#ff6b00" font-weight="700">甜品下午茶 · 买二送一</text>
+  <g transform="translate(60,150)">
+    <rect x="0" y="0" width="320" height="200" rx="12" fill="#fff3f0" stroke="#ffd1c1"/>
+    <text x="20" y="40" font-size="18" fill="#b84a2a">草莓蛋糕</text>
+  </g>
+  <circle cx="980" cy="200" r="140" fill="#ffd6e0"/>
+  <text x="900" y="210" font-size="40" fill="#b84a2a">甜</text>
+</svg>

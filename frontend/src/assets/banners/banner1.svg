@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400">
+  <defs>
+    <linearGradient id="g1" x1="0" x2="1">
+      <stop offset="0" stop-color="#ffecd2"/>
+      <stop offset="1" stop-color="#fcb69f"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="400" fill="url(#g1)"/>
+  <g transform="translate(60,40)" font-family="sans-serif">
+    <text x="0" y="90" font-size="56" fill="#8b2e00" font-weight="700">中珠外卖 · 今日特惠</text>
+    <text x="0" y="150" font-size="28" fill="#5a2b0b">满30减5 · 30分钟极速送达</text>
+    <rect x="780" y="40" width="340" height="300" rx="20" fill="#fff" opacity="0.9"/>
+    <text x="820" y="140" font-size="22" fill="#ff6b00" font-weight="700">限时抢购</text>
+    <circle cx="980" cy="220" r="70" fill="#ffb66b" opacity="0.95"/>
+    <text x="940" y="230" font-size="26" fill="#8b2e00">热销</text>
+  </g>
+</svg>

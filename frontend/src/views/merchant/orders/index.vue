@@ -1,11 +1,11 @@
 <template>
-  <div class="dashboard-container">
+  <div class="dashboard-container" style="width: 80%; margin:0 auto">
     <TabChange
       :order-statics="orderStatics"
       :default-activity="defaultActivity"
       @tabChange="change"
     />
-    <div class="container" :class="{ hContainer: tableData.length }">
+    <div class="container" :class="{ hContainer: tableData.length }" >
       <!-- 搜索项 -->
       <div class="tableBar">
         <label style="margin-right: 10px">订单号：</label>

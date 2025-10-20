@@ -165,4 +165,3 @@ Content-Type: application/json
 - 修改密码：如果采用 token 鉴权，后端可以允许用户仅传 newPassword（通过 token 确认身份），或同时要求 oldPassword 做二次确认；
 - 分页接口返回统一字段：records（数组） + total（总数），可附加 page/pageSize 等信息。
 
-如需我把该文档打包为 Postman collection 或 Swagger/OpenAPI 模式，我可以基于上述条目生成一个草稿（需要一点时间）。

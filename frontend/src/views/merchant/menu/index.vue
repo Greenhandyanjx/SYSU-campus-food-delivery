@@ -1,7 +1,7 @@
 
 <template>
   <div class="dashboard-container">
-    <div class="container">
+    <div class="container" style="width: 80%; margin:0 auto">
       <div class="tableBar">
         <label style="margin-right: 10px">菜品名称：</label>
   <el-input v-model="input"
@@ -72,7 +72,7 @@
                       :src="row.image">
               <template #error>
                 <div class="image-slot">
-                  <img src="./../../assets/noImg.png"
+                  <img src="/src/assets/noImg.png"
                        style="width: auto; height: 40px; border: none">
                 </div>
               </template>

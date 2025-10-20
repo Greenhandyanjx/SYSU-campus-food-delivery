@@ -1,6 +1,6 @@
 <template>
   <div class="dashboard-container">
-    <div class="container">
+    <div class="container" style="width: 80%; margin:0 auto">
       <div class="tableBar">
         <label style="margin-right: 5px">
           套餐名称: 
