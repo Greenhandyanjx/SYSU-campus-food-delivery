@@ -1,11 +1,14 @@
 package utils
 
 import (
+	"backend/global"
+	"backend/models"
 	"errors"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 func Hpwd(pwd string) (string, error) {
@@ -48,4 +51,22 @@ func ParseJWT(tokenstring string) (string, error) {
 		return username, nil
 	}
 	return "", errors.New("invalid token")
+}
+
+//get hashpassword
+func GetUserHashByUsernameuser(username string )(string,error){
+    var user models.BaseUser
+	result := global.Db.Where("username = ?", username).First(&user)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return "", errors.New("user not found")
+		}
+		return "", result.Error
+	}
+	return user.Password, nil
+}
+
+// updateUserPasswordHash 根据用户名更新密码哈希
+func UpdateUserPasswordHash(username, newHash string) error {
+	return global.Db.Model(&models.BaseUser{}).Where("username = ?", username).Update("password", newHash).Error
 }
