@@ -16214,3 +16214,83 @@ body {
   margin-right: auto;
   overflow: auto;
 }
+
+/* -----------------------------
+   User layout theme overrides
+   (Scoped under .user-layout to avoid touching merchant pages)
+   ----------------------------- */
+
+.user-layout {
+
+  /* Top navbar yellow */
+  .meituan-navbar {
+    background: $mine;
+    color: #1b1b1b;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  }
+
+  /* Search center refinements */
+  .meituan-navbar .search-wrap .el-input__inner {
+    border-radius: 24px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    background: rgba(255, 255, 255, 0.95);
+  }
+
+  /* Buttons and controls: yellow theme */
+  .el-button {
+    border-radius: 6px;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    background: transparent;
+    color: #333;
+  }
+
+  .el-button--primary,
+  .el-button.is-primary {
+    background: $mine !important;
+    border-color: darken($mine, 8%) !important;
+    color: #fff !important;
+    box-shadow: 0 6px 14px rgba(255, 194, 0, 0.14);
+  }
+
+  /* Menu / dropdown accents */
+  ::v-deep(.el-menu-item) {
+    color: #1b1b1b;
+  }
+
+  ::v-deep(.el-menu-item:hover) {
+    background: rgba(0, 0, 0, 0.04) !important;
+  }
+
+  ::v-deep(.el-menu-item.is-active) {
+    color: #fff !important;
+    background: darken($mine, 6%) !important;
+  }
+
+  /* Price / activity numbers: prominent red */
+  .price,
+  .activity-number,
+  .badge-price {
+    color: #E53935;
+    font-weight: 700;
+    font-size: 1.05em;
+    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.03);
+  }
+
+  /* Small badges for discounts / promos */
+  .promo-badge {
+    display: inline-block;
+    background: rgba(229, 57, 53, 0.08);
+    color: #E53935;
+    padding: 2px 6px;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 12px;
+    border: 1px solid rgba(229, 57, 53, 0.12);
+  }
+
+  /* make cards and main content edges slightly more defined */
+  .page-main {
+    border: 1px solid rgba(0, 0, 0, 0.04);
+  }
+}

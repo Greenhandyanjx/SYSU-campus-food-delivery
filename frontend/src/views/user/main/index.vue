@@ -1,5 +1,5 @@
 <template>
-	<div class="user-home" style="width: 80%; margin:0 auto ;box-shadow:10px;" >
+	<div class="user-home" style="width: 60%; margin:0 auto ;box-shadow:10px;" >
 		<!-- 搜索和横幅 -->
 		<header class="hero">
 			<div class="search">
@@ -20,11 +20,16 @@
 		</section>
 
 			<!-- 轮播 banner -->
-  <div class="banner-container">
+	<div class="banner-container">
     <Carousel :images="images" :interval="5000">
-      <template #default="{index}">
-        <!-- 可在这里插入每个轮播图的按钮或文案 -->
-        <div style="color:white; font-weight:700; font-size:18px;">立即下单</div>
+      <template #default="{ index }">
+        <div class="banner-text">
+          <h2>{{ images[index].title }}</h2>
+          <p>{{ images[index].desc }}</p>
+          <a :href="images[index].link" class="banner-btn">
+            {{ images[index].buttonText }}
+          </a>
+        </div>
       </template>
     </Carousel>
   </div>
@@ -80,16 +85,59 @@ import banner3 from '@/assets/banners/banner3.svg'
 import banner4 from '@/assets/banners/banner4.svg'
 import banner5 from '@/assets/banners/banner5.svg'
 
-const images = [banner1, banner2, banner3, banner4, banner5]
+const images = [
+  {
+    src: banner1,
+    title: '立即下单',
+    desc: '外卖下单立减 10 元',
+    link: '/order',
+    buttonText: '去下单'
+  },
+  {
+    src: banner2,
+    title: '限时优惠',
+    desc: '今日饮品买一送一',
+    link: '/drinks',
+    buttonText: '查看优惠'
+  },
+  {
+    src: banner3,
+    title: '新品上线',
+    desc: '尝鲜价仅 9.9 元起',
+    link: '/new',
+    buttonText: '去尝鲜'
+  },
+  {
+    src: banner4,
+    title: '午餐推荐',
+    desc: '精选套餐，工作日立减 8 元',
+    link: '/lunch',
+    buttonText: '立即查看'
+  },
+  {
+    src: banner5,
+    title: '夜宵来袭',
+    desc: '宵夜加码，买二送一',
+    link: '/night',
+    buttonText: '抢购夜宵'
+  }
+];
 const router = useRouter()
 const query = ref('')
 
 const categories = ref([
-	{ label: '午餐', icon: '/src/assets/icons/meal.svg' },
-	{ label: '甜点', icon: '/src/assets/icons/dessert.svg' },
-	{ label: '饮品', icon: '/src/assets/icons/drink.svg' },
-	{ label: '沙拉', icon: '/src/assets/icons/salad.svg' },
+  { label: '招牌套餐', icon: '/src/assets/icons/setmeal.svg' },
+  { label: '现煮粉面', icon: '/src/assets/icons/noodle.svg' },
+  { label: '汉堡炸鸡', icon: '/src/assets/icons/burger.svg' },
+  { label: '奶茶咖啡', icon: '/src/assets/icons/milktea.svg' },
+  { label: '日式便当', icon: '/src/assets/icons/bento.svg' },
+  { label: '烧烤烤肉', icon: '/src/assets/icons/bbq.svg' },
+  { label: '水果拼盘', icon: '/src/assets/icons/fruit.svg' },
+  { label: '精致甜品', icon: '/src/assets/icons/dessert.svg' },
+  { label: '家常快炒', icon: '/src/assets/icons/stirfry.svg' },
+  { label: '粥粉面饭', icon: '/src/assets/icons/rice.svg' },
 ])
+
 
 const stores = ref([
 	{ name: '小张快餐', desc: '30分钟内送达', logo: '/src/assets/noImg.png', img: '/src/assets/noImg.png', sales: 1200, rating: 4.6, minOrder: 20, deliveryFee: 5, tags: ['快餐', '热销'] },
@@ -97,11 +145,11 @@ const stores = ref([
 	{ name: '鲜榨饮品', desc: '现榨果汁', logo: '/src/assets/noImg.png', img: '/src/assets/noImg.png', sales: 430, rating: 4.4, minOrder: 10, deliveryFee: 2, tags: ['饮品', '健康'] },
 ])
 
-const banners = ref([
-	{ src: '/src/assets/noImg.png', title: '限时满减', sub: '全场满30减10' },
-	{ src: '/src/assets/logo.svg', title: '新店开张', sub: '新人立减5元' },
-	{ src: '/src/assets/noImg.png', title: '暑期特惠', sub: '饮品买一送一' },
-])
+// const banners = ref([
+// 	{ src: '/src/assets/noImg.png', title: '限时满减', sub: '全场满30减10' },
+// 	{ src: '/src/assets/logo.svg', title: '新店开张', sub: '新人立减5元' },
+// 	{ src: '/src/assets/noImg.png', title: '暑期特惠', sub: '饮品买一送一' },
+// ])
 
 const activities = ref([
 	{ title: '新客立减', sub: '满20减5', icon: '/src/assets/icons/activity1.svg', gradient: ['#ff9a9e', '#fad0c4'] },
@@ -131,7 +179,7 @@ function goToStore(s: any) {
 .recommend { margin-top: 20px }
 .cards { display:flex; gap:12px; flex-wrap:wrap }
 .store { break-inside: avoid; margin-bottom: 12px }
-.masonry { column-count: 3; column-gap: 12px }
+.masonry { column-count: 1; column-gap: 12px }
 .masonry .store { display:inline-block; width:100% }
 .activities { display:flex; gap:12px; margin:12px 0 }
 .activity { display:flex; gap:8px; align-items:center; background:#fff; padding:8px; border-radius:8px; box-shadow: 0 1px 4px rgba(0,0,0,0.06) }

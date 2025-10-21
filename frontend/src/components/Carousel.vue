@@ -8,7 +8,7 @@
         class="slide"
         v-for="(img, idx) in images"
         :key="idx"
-        :style="{ backgroundImage: `url(${img})` }"
+        :style="{ backgroundImage: `url(${img.src})` }"
       >
         <div class="overlay">
           <slot :index="idx"></slot>
@@ -65,12 +65,14 @@ onBeforeUnmount(() => clearInterval(timer))
   display: flex;
   transition: transform 0.6s ease;
   width: 100%;
+  /* height: auto; */
 }
 
 .slide {
   min-width: 100%;
-  height: 220px;
-  background-size: cover;
+  aspect-ratio: 3 / 1;
+  background-size: contain;
+  background-repeat: no-repeat;
   background-position: center;
   position: relative;
 }
