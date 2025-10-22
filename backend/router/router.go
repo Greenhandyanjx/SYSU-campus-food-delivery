@@ -24,6 +24,8 @@ func SetRouter() *gin.Engine {
 	auth.Use(midware.AuthMiddleware()) 
 	{
 		auth.POST("/change_password", controller.ChangePassword)
+		auth.POST("/merchant/dish/add",controller.Dish_add)
+		auth.POST("/merchant/meal/add",controller.Meal_add)
 		// 其他需要中间件保护的路由可以添加在这里
 	}
 	return fe
