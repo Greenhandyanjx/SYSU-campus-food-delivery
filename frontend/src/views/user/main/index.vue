@@ -1,16 +1,23 @@
 <template>
+	<div class="user-home-bg">
 	<div class="user-home" style="width: 60%; margin:0 auto ;box-shadow:10px;" >
 		<!-- 搜索和横幅 -->
 		<header class="hero">
-			<div class="search">
-				<el-input v-model="query" placeholder="搜索店铺/美食" clearable @keyup.enter="onSearch">
-					<template #append>
-						<el-button type="primary" @click="onSearch">搜索</el-button>
-					</template>
-				</el-input>
-			</div>
+		  <div class="search">
+		    <el-input
+		      v-model="query"
+		      placeholder="搜索店铺 / 美食"
+		      clearable
+		      class="search-input"
+		    >
+		      <template #suffix>
+		        <el-button class="search-btn" type="warning" round @click="onSearch">
+		          <el-icon><Search /></el-icon>
+		        </el-button>
+		      </template>
+		    </el-input>
+		  </div>
 		</header>
-
 		<!-- 分类 -->
 		<section class="categories">
 			<div class="cat" v-for="(c, i) in categories" :key="i">
@@ -49,35 +56,83 @@
 
 			<!-- 推荐店铺（瀑布流） -->
 			<section class="recommend">
-				<h3>为你推荐</h3>
-						<div class="masonry">
-							<div class="store" v-for="(s, idx) in stores" :key="idx" @click="goToStore(s)">
-								<div class="store-banner" :style="{ backgroundImage: `url(${s.img})` }"></div>
-								<div class="store-body">
-									<div class="row">
-										<img class="logo" :src="s.logo" alt="logo" />
-										<div class="info">
-											<div class="name">{{ s.name }}</div>
-											<div class="meta">{{ s.desc }}</div>
-											<div class="tags">
-												<span class="tag" v-for="(t,i) in s.tags" :key="i">{{ t }}</span>
-											</div>
-										</div>
-									</div>
-									<div class="row foot">
-										<div class="rating">⭐ {{ s.rating }} • 月售 {{ s.sales }}</div>
-										<div class="price">起送 ¥{{ s.minOrder }} • 配送 ¥{{ s.deliveryFee }}</div>
-									</div>
-								</div>
-							</div>
-						</div>
+  			<h3>为你推荐</h3>
+  			<div class="masonry">
+  			  <div
+  			    class="store"
+ 			    v-for="(s, idx) in stores"
+  			    :key="idx"
+  			    @click="goToStore(s)"
+  			  >
+  			    <!-- <div class="store-banner" :style="{ backgroundImage: `url(${s.img})` }"></div> -->
+  			    <div class="store-body">
+  			      <div class="row top">
+  			        <!-- 左侧：店铺logo和信息 -->
+  			        <div class="left-info">
+ 			 			          <img class="logo" :src="s.logo" alt="logo" />
+  			          <div class="info">
+  			            <div class="name">{{ s.name }}</div>
+  			            <div class="meta">{{ s.desc }}</div>
+  			            <div class="tags">
+  			 			             <span class="tag" v-for="(t, i) in s.tags" :key="i">{{ t }}</span>
+  			            </div>
+  			          </div>
+  			        </div>
+
+  			        <!-- 右侧：推荐菜 -->
+  			  <div class="right-dishes">
+            <div class="dish" v-for="(d, i) in s.dishes" :key="i" @click.stop>
+              <div class="dish-img-box">
+                <img class="dish-img" src="/src/assets/noImg.png" alt="dish" />
+              </div>
+              <div class="dish-info">
+                <div class="dish-name">{{ d.name }}</div>
+                <div class="dish-bottom">
+                  <span class="dish-price">¥{{ d.price }}</span>
+                  <div class="dish-btns">
+                    <el-button
+                      size="small"
+                      circle
+                      type="warning"
+                      @click.stop="decDish(s, d)"
+                      :disabled="d.count === 0"
+                    >
+                      <el-icon><Minus /></el-icon>
+                    </el-button>
+                    <span class="dish-count">{{ d.count || 0 }}</span>
+                    <el-button
+                      size="small"
+                      circle
+                      type="warning"
+                      @click.stop="addDish(s, d)"
+                    >
+                      <el-icon><Plus /></el-icon>
+                    </el-button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+							<!-- 底部信息 -->
+							<div class="row foot">
+  			        <div class="rating">⭐ {{ s.rating }} • 月售 {{ s.sales }}</div>
+  			        <div class="price">起送 ¥{{ s.minOrder }} • 配送 ¥{{ s.deliveryFee }}</div>
+  			      </div>
+  			    </div>
+  			  </div>
+  			</div>
 			</section>
+
+	</div>
 	</div>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { Search } from '@element-plus/icons-vue'
 import Carousel from '@/components/Carousel.vue'
 import banner1 from '@/assets/banners/banner1.svg'
 import banner2 from '@/assets/banners/banner2.svg'
@@ -140,10 +195,51 @@ const categories = ref([
 
 
 const stores = ref([
-	{ name: '小张快餐', desc: '30分钟内送达', logo: '/src/assets/noImg.png', img: '/src/assets/noImg.png', sales: 1200, rating: 4.6, minOrder: 20, deliveryFee: 5, tags: ['快餐', '热销'] },
-	{ name: '甜甜圈工坊', desc: '甜品畅销', logo: '/src/assets/noImg.png', img: '/src/assets/noImg.png', sales: 800, rating: 4.8, minOrder: 15, deliveryFee: 3, tags: ['甜点', '下午茶'] },
-	{ name: '鲜榨饮品', desc: '现榨果汁', logo: '/src/assets/noImg.png', img: '/src/assets/noImg.png', sales: 430, rating: 4.4, minOrder: 10, deliveryFee: 2, tags: ['饮品', '健康'] },
+  {
+    name: '黄焖鸡米饭',
+    desc: '经典家常菜，味道鲜香',
+    img: '/src/assets/noImg.png',
+    logo: '/src/assets/noImg.png',
+    tags: ['家常菜', '下饭王'],
+    rating: 4.8,
+    sales: 320,
+    minOrder: 15,
+    deliveryFee: 2,
+    dishes: [
+      { name: '黄焖鸡套餐', price: 18, count: 0 },
+      { name: '香菇滑鸡饭', price: 16, count: 0 },
+      { name: '青椒土豆丝', price: 10, count: 0 }
+    ]
+  },
+  {
+    name: '茶百道',
+    desc: '奶香浓郁，果茶清爽',
+    img: '/src/assets/noImg.png',
+    logo: '/src/assets/noImg.png',
+    tags: ['奶茶', '饮品', '水果茶'],
+    rating: 4.9,
+    sales: 520,
+    minOrder: 12,
+    deliveryFee: 1,
+    dishes: [
+      { name: '乌龙奶茶', price: 12, count: 0 },
+      { name: '杨枝甘露', price: 15, count: 0 },
+      { name: '百香果绿茶', price: 11, count: 0 }
+    ]
+  }
 ])
+
+const addDish = (store, dish) => {
+  dish.count = (dish.count || 0) + 1
+}
+
+const decDish = (store, dish) => {
+  if (dish.count > 0) dish.count--
+}
+
+// const goToStore = (store) => {
+//   console.log('进入店铺：', store.name)
+// }
 
 // const banners = ref([
 // 	{ src: '/src/assets/noImg.png', title: '限时满减', sub: '全场满30减10' },
@@ -170,9 +266,94 @@ function goToStore(s: any) {
 </script>
 
 <style scoped>
-.user-home { padding: 12px; }
-.hero { margin-bottom: 12px; }
-.search { max-width: 900px; margin: 0 auto; }
+.user-home-bg {
+  width: 100%;
+  min-height: 100vh;
+  background-color: #fffbe6; /* 主色调：柔和黄 */
+  background-image: url('/src/assets/login/img_denglu_bj.jpg');
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  /* Keep a small gap so search is visible initially but can scroll under sticky navbar */
+  padding-top: 16px;
+  padding-bottom: 60px;
+  background-attachment: fixed;
+}
+
+/* 中间内容卡片 */
+.user-home {
+  width: 60%;
+  background: rgba(255, 248, 225, 0.95); /* 半透明浅黄 */
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(255, 193, 7, 0.35);
+  padding: 24px;
+  backdrop-filter: blur(6px);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* 鼠标悬浮时略微浮起 */
+.user-home:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 28px rgba(255, 193, 7, 0.45);
+}
+.hero {
+	max-width: 900px; margin: 0 auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 20px 0;
+}
+.search {
+  width: 80%;
+}
+
+/* 调整 el-input 外观 */
+.search-input :deep(.el-input__wrapper) {
+  background-color: #fffef4;
+  border-radius: 30px;
+  border: 2px solid #faad14;
+  box-shadow: 0 2px 6px rgba(250, 173, 20, 0.25);
+  padding-right: 0px; /* 给按钮留出空间 */
+  height: 46px;
+  transition: 0.2s;
+}
+
+/* 聚焦效果 */
+.search-input :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 3px rgba(255, 213, 79, 0.3);
+}
+/* 内部文字 */
+.search-input :deep(.el-input__inner) {
+  font-size: 15px;
+  color: #8c6d1f;
+}
+/* 搜索按钮样式（嵌入输入框内部） */
+.search-btn {
+  position: absolute;
+  right: 5px;
+  top: 1px;
+  height: 38px;
+  width: 38px;
+  border-radius: 50%;
+  background-color: #faad14;
+  color: white;
+  border: none;
+  box-shadow: 0 2px 4px rgba(250, 173, 20, 0.4);
+  cursor: pointer;
+  transition: 0.2s;
+}
+.search-btn:hover {
+  background-color: #ffd666;
+  color: #ad8b00;
+}
+/* 让 suffix 区域不撑开输入框 */
+.search-input :deep(.el-input__suffix) {
+  position: relative;
+  width: 0;
+}
 .categories { display:flex; gap:16px; padding: 12px 0; overflow:auto }
 .cat { width:72px; text-align:center }
 .cat img { width:48px; height:48px }
@@ -191,4 +372,190 @@ function goToStore(s: any) {
 .info .name { font-weight:600 }
 .store-bottom { display:flex; justify-content:space-between; align-items:center; margin-top:8px }
 @media(max-width:800px){ .store { width: calc(50% - 8px) } }
+.recommend {
+  padding: 20px;
+  background: #fffbe6;
+}
+.hero .search {
+  margin-top: 8px;
+  background: #fffef4;
+  padding: 8px;
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(255, 193, 7, 0.25);
+}
+
+/* 分类部分的底色和圆角 */
+.categories {
+  display: flex;
+  justify-content: space-around;
+  flex-wrap: wrap;
+  background: #fffdf2;
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: inset 0 1px 4px rgba(255, 193, 7, 0.2);
+}
+
+/* 推荐模块标题 */
+.recommend h3 {
+  color: #d48806;
+  font-weight: bold;
+  border-left: 5px solid #faad14;
+  padding-left: 10px;
+  margin-bottom: 14px;
+}
+.recommend h3 {
+  color: #d48806;
+  font-weight: bold;
+  margin-bottom: 16px;
+}
+
+.masonry {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.store {
+  background: #fff8e1;
+  border-radius: 16px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.store:hover {
+  box-shadow: 0 4px 12px rgba(255,193,7,0.4);
+  transform: translateY(-2px);
+}
+
+.store-banner {
+  height: 160px;
+  background-size: cover;
+  background-position: center;
+}
+
+.store-body {
+  padding: 16px;
+}
+
+.row.top {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+/* 左侧店铺信息 */
+.left-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 45%;
+}
+
+.logo {
+  width: 70px;
+  height: 70px;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+.info .name {
+  font-weight: bold;
+  font-size: 16px;
+  color: #b8860b;
+}
+
+.info .meta {
+  font-size: 13px;
+  color: #666;
+  margin-top: 4px;
+}
+
+.tags .tag {
+  background-color: #ffe58f;
+  color: #ad6800;
+  border-radius: 8px;
+  padding: 2px 8px;
+  margin-right: 4px;
+  font-size: 12px;
+}
+
+/* 右侧推荐菜品 */
+.right-dishes {
+  display: flex;
+  gap: 12px;
+  width: 60%;
+  flex-wrap: wrap;
+}
+
+.dish {
+  background: #fffdf0;
+  border-radius: 8px;
+  padding: 6px;	
+  width: 27%;
+  text-align: center;
+  transition: background 0.2s;
+}
+
+.dish:hover {
+  background: #fff4cc;
+}
+
+.dish-img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.dish-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #ad8b00;
+  margin-top: 6px;
+}
+
+.dish-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.dish-price {
+  color: #E53935;
+  font-weight: bold;
+  font-size: 13px;
+}
+
+.dish-btns {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.icon-plus,
+.icon-minus {
+  font-size: 18px;
+  color: #d4b106;
+  cursor: pointer;
+}
+
+.dish-count {
+  width: 18%;
+  text-align: center;
+  font-size: 13px;
+  color: #874d00;
+}
+
+/* 底部信息 */
+.row.foot {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  border-top: 1px solid #fae09a;
+  padding-top: 8px;
+  color: #8c6d1f;
+  font-size: 13px;
+}
 </style>
