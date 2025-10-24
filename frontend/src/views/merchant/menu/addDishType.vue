@@ -126,7 +126,7 @@ import { ref, reactive, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import SelectInput from './components/SelectInput.vue'
-import ImageUpload from '@/components/ImgUpload/index.vue'
+import ImageUpload from '@/components/ImgUpLoad/index.vue'
 import {
   queryDishById,
   addDish,
