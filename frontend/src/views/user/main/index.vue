@@ -132,6 +132,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { addToCart, removeFromCart } from '@/api/user/store'
 import { Search } from '@element-plus/icons-vue'
 import Carousel from '@/components/Carousel.vue'
 import banner1 from '@/assets/banners/banner1.svg'
@@ -229,12 +231,29 @@ const stores = ref([
   }
 ])
 
-const addDish = (store, dish) => {
-  dish.count = (dish.count || 0) + 1
+const addDish = async (store: any, dish: any) => {
+  try {
+    // first navigate to store page
+    await router.push('/user/store/' + encodeURIComponent(store.name))
+    // then call addToCart API
+    await addToCart({ storeId: store.id, dishId: dish.id, name: dish.name, price: dish.price, qty: 1 })
+    dish.count = (dish.count || 0) + 1
+    ElMessage.success('已加入购物车')
+  } catch (e: any) {
+    ElMessage.error('加入购物车失败：' + (e.message || ''))
+  }
 }
 
-const decDish = (store, dish) => {
-  if (dish.count > 0) dish.count--
+const decDish = async (store: any, dish: any) => {
+  if (!dish.count || dish.count <= 0) return
+  try {
+    await router.push('/user/store/' + encodeURIComponent(store.name))
+    await removeFromCart({ storeId: store.id, dishId: dish.id, qty: 1 })
+    dish.count--
+    ElMessage.success('已从购物车移除')
+  } catch (e: any) {
+    ElMessage.error('移除失败：' + (e.message || ''))
+  }
 }
 
 // const goToStore = (store) => {
@@ -300,7 +319,7 @@ function goToStore(s: any) {
   box-shadow: 0 10px 28px rgba(255, 193, 7, 0.45);
 }
 .hero {
-	max-width: 900px; margin: 0 auto;
+	max-width: 1000px; margin: 0 auto;
   display: flex;
   justify-content: center;
   align-items: center;

@@ -1,17 +1,17 @@
 <!--  -->
 <template>
   <div class="upload-item">
-    <el-upload ref="uploadfiles"
-               :accept="type"
-               :class="{ borderNone: imageUrl }"
-               class="avatar-uploader"
-               action="/api/common/upload"
-               :show-file-list="false"
-               :on-success="handleAvatarSuccess"
-               :on-remove="handleRemove"
-               :on-error="handleError"
-               :before-upload="beforeAvatarUpload"
-               :headers="headers">
+  <el-upload ref="uploadfiles"
+         :accept="type"
+         :class="{ borderNone: imageUrl }"
+         class="avatar-uploader"
+         :show-file-list="false"
+         :http-request="httpRequest"
+         :on-success="handleAvatarSuccess"
+         :on-remove="handleRemove"
+         :on-error="handleError"
+         :before-upload="beforeAvatarUpload"
+         :headers="headers">
       <img v-if="imageUrl"
            :src="imageUrl"
            class="avatar">
@@ -37,6 +37,7 @@
 import { ref, watch, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getToken } from '@/utils/cookies'
+import request from '@/api/merchant/request'
 
 const props = withDefaults(
   defineProps<{
@@ -77,8 +78,41 @@ function handleError(err: any, file: any, fileList: any) {
 }
 
 function handleAvatarSuccess(response: any, file: any, fileList: any) {
-  // backend returns the file identifier or full url in response.data
-  imageUrl.value = `${response.data}`
+  // Normalize response from different backend shapes into a URL string
+  // Accepts:
+  // - raw string: '/uploads/xxx.jpg'
+  // - AxiosResponse: { data: ... }
+  // - { code:1, data: '/uploads/xxx.jpg' }
+  // - { code:1, data: { url: '/uploads/xxx.jpg' } }
+  // - { url: '/uploads/xxx.jpg' }
+  let url = ''
+  try {
+    const body = response && response.data !== undefined ? response.data : response
+
+    if (!body) {
+      url = ''
+    } else if (typeof body === 'string') {
+      url = body
+    } else if (body.url && typeof body.url === 'string') {
+      url = body.url
+    } else if (body.data && typeof body.data === 'string') {
+      url = body.data
+    } else if (body.data && body.data.url && typeof body.data.url === 'string') {
+      url = body.data.url
+    } else if (body.code && body.data && typeof body.data === 'object') {
+      // e.g. { code: 1, data: { url: '...' } } or { code:1, data: '/...'}
+      if (typeof body.data === 'string') url = body.data
+      else if (body.data.url) url = body.data.url
+      else if (body.data.path) url = body.data.path
+    } else {
+      // fallback: try common keys
+      url = (body.url || body.path || '') as string
+    }
+  } catch (e) {
+    url = ''
+  }
+
+  imageUrl.value = url
   emit('imageChange', imageUrl.value)
 }
 
@@ -95,6 +129,33 @@ function beforeAvatarUpload(file: File) {
     return false
   }
   return true
+}
+
+// custom http request handler so we use the project's axios instance (request)
+async function httpRequest({ file, onProgress, onSuccess, onError }: any) {
+  try {
+    const form = new FormData()
+    form.append('file', file)
+    const resp = await request.post('/common/upload', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (e: any) => {
+        try {
+          const loaded = e.loaded || (e.detail && e.detail.loaded) || 0
+          const total = e.total || (e.detail && e.detail.total) || 0
+          if (total && typeof onProgress === 'function') {
+            onProgress({ percent: Math.round((loaded / total) * 100) })
+          }
+        } catch (e) {
+          // ignore progress calc errors
+        }
+      }
+    })
+    // call element-plus success handler
+    if (typeof onSuccess === 'function') onSuccess(resp)
+  } catch (err: any) {
+    if (typeof onError === 'function') onError(err)
+    ElMessage.error('图片上传失败：' + (err.message || ''))
+  }
 }
 </script>
 <style lang='scss'>

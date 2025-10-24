@@ -25,6 +25,7 @@ const routes = [
           affix: true,
         },
       },
+      { path: 'store/:name', component: () => import('@/views/user/store/index.vue'), name: 'userStore' },
       { path: 'orderlist', component: () => import('@/views/user/orderlist/index.vue') },
       { path: 'cart', component: () => import('@/views/user/cart/index.vue') },
       { path: 'my', component: () => import('@/views/user/my/index.vue') },
