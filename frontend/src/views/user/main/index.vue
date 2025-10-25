@@ -27,18 +27,8 @@
 		</section>
 
 			<!-- 轮播 banner -->
-	<div class="banner-container">
-    <Carousel :images="images" :interval="5000">
-      <template #default="{ index }">
-        <div class="banner-text">
-          <h2>{{ images[index].title }}</h2>
-          <p>{{ images[index].desc }}</p>
-          <a :href="images[index].link" class="banner-btn">
-            {{ images[index].buttonText }}
-          </a>
-        </div>
-      </template>
-    </Carousel>
+<div class="banner-container">
+    <Carousel :images="images" :interval="4000" />
   </div>
 
 			<!-- 活动卡片 -->
@@ -576,5 +566,8 @@ function goToStore(s: any) {
   padding-top: 8px;
   color: #8c6d1f;
   font-size: 13px;
+}
+.banner-container{
+  margin: 20px 0;
 }
 </style>

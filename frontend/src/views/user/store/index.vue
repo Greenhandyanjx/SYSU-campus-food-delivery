@@ -655,9 +655,11 @@ function decFromPopup(c: any) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 14px;
-  width: 280px;
+  padding: 5px 10px;
+  width: 17%;
+  height: 50px;
   z-index: 1000;
+  cursor: pointer;
   transition: all 0.25s;
 }
 .floating-cart:hover {
