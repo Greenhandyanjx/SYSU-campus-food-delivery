@@ -42,25 +42,31 @@ const offset = ref(0)
 const isTransitioning = ref(false)
 
 // pos is the index in displayedSlides (0..n+1). starts at 1 (first real)
-const pos = ref(1)
+const pos = ref(2)
 const currentPos = computed(() => pos.value)
 
 const displayedSlides = computed(() => {
   const imgs = props.images || []
   const n = imgs.length
   if (n === 0) return []
-  
+
   // 创建循环数组：[last, ...all, first]
   const arr = []
-  const last = imgs[n - 1]
-  const first = imgs[0]
+  const last1 = imgs[n - 1]
+  const last2 = imgs[n - 2]
+  const first1 = imgs[0]
+  const first2 = imgs[1]
   
-  arr.push({ ...(last || {}), originalIndex: n - 1 })
+  arr.push({ ...(last2 || {}), originalIndex: n - 2 })
+  arr.push({ ...(last1 || {}), originalIndex: n - 1 })
   for (let i = 0; i < n; i++) arr.push({ ...(imgs[i] || {}), originalIndex: i })
-  arr.push({ ...(first || {}), originalIndex: 0 })
+  arr.push({ ...(first1 || {}), originalIndex: 0 })
+  arr.push({ ...(first2 || {}), originalIndex: 1 })
   
   return arr
 })
+
+
 
 const wrap = ref(null)
 const track = ref(null)
@@ -71,8 +77,11 @@ function getSlideClass(idx) {
   if (posDiff === 0) return 'active'
   if (posDiff === -1) return 'left'
   if (posDiff === 1) return 'right'
+  // 👇 新出现的那张，给个 entering 类用于渐入动画
+  if (posDiff === 2 || posDiff === -2) return 'entering'
   return 'hidden'
 }
+
 
 function go(i) {
   const n = (props.images || []).length
@@ -81,43 +90,52 @@ function go(i) {
   const oldIndex = currentIndex.value
   const newIndex = (i + n) % n
 
-  // detect wrapping
+  const t = track.value
+  if (!t) return
+
+  // 清理旧的 transitionend 监听器
+  t.removeEventListener('transitionend', handleTransitionEnd)
+  t.addEventListener('transitionend', handleTransitionEnd)
+
+  function handleTransitionEnd() {
+    t.removeEventListener('transitionend', handleTransitionEnd)
+    if (pos.value === n + 2) {
+      // 从伪首跳回真实首
+      t.style.transition = 'none'
+      pos.value = 2
+      updateOffset(false)
+    } else if (pos.value === 1) {
+      // 从伪尾跳回真实尾
+      t.style.transition = 'none'
+      pos.value = n+1
+      updateOffset(false)
+    }
+    // 动画完成后允许下一次切换
+    isTransitioning.value = false
+  }
+
   const wrapForward = oldIndex === n - 1 && newIndex === 0
   const wrapBackward = oldIndex === 0 && newIndex === n - 1
 
   if (wrapForward) {
-    // animate to duplicate first at pos = n+1
-    pos.value = n + 1
-    // keep currentIndex as newIndex for state
+    // 动画到伪首 (first duplicate at index n+2)，transitionend 会把它瞬移回真实首 (index 2)
+    pos.value = n + 2
     currentIndex.value = newIndex
     updateOffset(true)
-    // after animation, jump to real first
-    setTimeout(() => {
-      // jump without transition
-      pos.value = 1
-      updateOffset(false)
-      isTransitioning.value = false
-    }, 620)
   } else if (wrapBackward) {
-    // animate to duplicate last at pos = 0
-    pos.value = 0
+    // 动画到伪尾 (last duplicate at index 1)，transitionend 会把它瞬移回真实尾 (index n+1)
+    // console.warn('Wrapping backward')
+    pos.value = 1
     currentIndex.value = newIndex
     updateOffset(true)
-    setTimeout(() => {
-      pos.value = n
-      updateOffset(false)
-      isTransitioning.value = false
-    }, 620)
   } else {
-    // normal move
+    // 普通切换：映射到 displayedSlides 的索引需要 +2 偏移
     currentIndex.value = newIndex
-    pos.value = newIndex + 1
+    pos.value = newIndex + 2
     updateOffset(true)
-    setTimeout(() => {
-      isTransitioning.value = false
-    }, 620)
   }
 }
+
 
 function next() {
   go(currentIndex.value + 1)
@@ -154,7 +172,7 @@ function updateOffset(withTransition = true) {
     if (!w || !t) return
     
     // 添加防抖，避免频繁调用
-    if (isTransitioning.value) return
+    // if (isTransitioning.value) return
     
     const slides = Array.from(t.querySelectorAll('.slide'))
     if (slides.length === 0) return
@@ -179,13 +197,15 @@ function updateOffset(withTransition = true) {
       
       const targetOffset = activeSlide.offsetLeft - (wrapWidth - slideWidth) / 2
       const maxOffset = Math.max(0, t.scrollWidth - wrapWidth)
-      const clampedOffset = Math.max(0, Math.min(targetOffset, maxOffset))
+// 允许略超一点点范围，避免出现闪现
+      const clampedOffset = Math.max(0, Math.min(targetOffset + 1, maxOffset + 1))
       
       if (t) {
         t.style.transition = withTransition 
           ? 'transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)'
           : 'none'
         offset.value = clampedOffset
+        t.style.transform = `translateX(-${offset.value}px)`
       }
     })
   })
@@ -273,7 +293,24 @@ watch(() => props.images.length, () => {
   z-index: 1;
   filter: brightness(0.7);
 }
+.slide.entering {
+  z-index: 1;
+  opacity: 0;
+  scale: 0.5;
+  animation: enterZoom 0.6s forwards;
+}
 
+/* 新出现图的放大渐入关键帧 */
+@keyframes enterZoom {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  100% {
+    opacity: 0.9;
+    transform: scale(0.95);
+  }
+}
 /* 隐藏的图片 */
 .slide.hidden {
   display: none;
