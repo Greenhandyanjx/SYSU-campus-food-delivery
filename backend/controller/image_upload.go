@@ -13,7 +13,7 @@ import (
 
 func UploadImage(ctx *gin.Context){
     // 处理图片上传
-    file, err := ctx.FormFile("image")
+    file, err := ctx.FormFile("file")
     if err != nil {
        ctx.JSON(http.StatusInternalServerError, gin.H{
 		"code":"500",
