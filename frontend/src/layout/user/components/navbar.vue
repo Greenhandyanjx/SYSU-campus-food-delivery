@@ -8,26 +8,45 @@
 			</el-button>
 		</div>
 
-		<div class="center">
-			<div v-if="isOverlapping" class="notice notice-search">
-		    <el-input
-		      v-model="query"
-		      placeholder="搜索店铺 / 美食"
-		      clearable
-		      class="search-input"
-		    >
-		      <template #suffix>
-		        <el-button class="search-btn" type="warning" round @click="onSearch">
-		          <el-icon><Search /></el-icon>
-		        </el-button>
-		      </template>
-		    </el-input>
-			</div>
-			<div v-else class="notice">
-				<i class="iconfont icon-bell"></i>
-				今日满30减5元，骑手配送更快！
-			</div>
-		</div>
+    <div class="center">
+      <!-- 在订单页显示订单搜索框 -->
+      <div v-if="isOrderRoute" class="notice notice-search">
+        <el-input
+          v-model="orderQuery"
+          placeholder="搜索订单号/店铺/商品"
+          clearable
+          class="search-input"
+          @keyup.enter="onOrderSearch"
+        >
+          <template #suffix>
+            <el-button class="search-btn" type="warning" round @click="onOrderSearch">
+              <el-icon><Search /></el-icon>
+            </el-button>
+          </template>
+        </el-input>
+      </div>
+      <!-- 非订单页仍维持原有的公告/搜索逻辑 -->
+      <div v-else style="width: 100%;">
+        <div v-if="isOverlapping" class="notice notice-search" style="margin: 0 auto;">
+          <el-input
+            v-model="query"
+            placeholder="搜索店铺 / 美食"
+            clearable
+            class="search-input"
+          >
+            <template #suffix>
+              <el-button class="search-btn" type="warning" round @click="onSearch">
+                <el-icon><Search /></el-icon>
+              </el-button>
+            </template>
+          </el-input>
+        </div>
+        <div v-else class="notice">
+          <i class="iconfont icon-bell"></i>
+          今日满30减5元，骑手配送更快！
+        </div>
+      </div>
+    </div>
 
 		<div class="right">
 			<el-dropdown trigger="click" @command="handleCommand">
@@ -47,51 +66,73 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+
 const query = ref('')
+const orderQuery = ref('')
 const router = useRouter()
+const route = useRoute()
 const q = ref('')
 const city = ref(localStorage.getItem('city') || '校园')
 const username = ref(localStorage.getItem('username') || '')
 const avatar = ref('/src/assets/login/mini-logo.png')
 
+// 仅当路由是订单列表或订单详情时，显示订单搜索框
+const isOrderRoute = computed(() => {
+  try { return route.path.startsWith('/user/orderlist') || route.path.startsWith('/user/order') } catch (e) { return false }
+})
+
 const isOverlapping = ref(false)
 const navRef = ref<HTMLElement | null>(null)
 
 function onSearch() {
-	if (!q.value) return
-	router.push({ path: '/user/home', query: { q: q.value } })
+  // 使用 navbar 的 query 输入进行搜索
+  // 如果为空则直接跳到首页（显示全部）；否则将查询字符串作为 q 传给首页
+  if (!query.value) {
+    router.push({ path: '/user/home' })
+    return
+  }
+  router.push({ path: '/user/home', query: { q: query.value } })
 }
+
+function onOrderSearch() {
+  if (!orderQuery.value) {
+    router.push({ path: '/user/orderlist' })
+    return
+  }
+  router.push({ path: '/user/orderlist', query: { oq: orderQuery.value } })
+}
+
 function onLocation() { console.log('定位') }
 
 function handleCommand(command: string) {
-	if (command === 'logout') {
-		localStorage.removeItem('token')
-		localStorage.removeItem('username')
-		router.push('/login')
-	} else if (command === 'profile') {
-		router.push('/user/my')
-	}
+  if (command === 'logout') {
+    localStorage.removeItem('token')
+    localStorage.removeItem('username')
+    router.push('/login')
+  } else if (command === 'profile') {
+    router.push('/user/my')
+  }
 }
 
 function checkOverlap() {
-	try {
-		const searchEl = document.querySelector('.user-home .search') as HTMLElement | null
-		const navEl = navRef.value
-		if (!searchEl || !navEl) { isOverlapping.value = false; return }
-		const searchRect = searchEl.getBoundingClientRect()
-		const navRect = navEl.getBoundingClientRect()
-		isOverlapping.value = searchRect.bottom < navRect.bottom
-	} catch (e) {
-		isOverlapping.value = false
-	}
+  try {
+    const searchEl = document.querySelector('.user-home .search') as HTMLElement | null
+    const navEl = navRef.value
+    if (!searchEl || !navEl) { isOverlapping.value = false; return }
+    const searchRect = searchEl.getBoundingClientRect()
+    const navRect = navEl.getBoundingClientRect()
+    isOverlapping.value = searchRect.bottom < navRect.bottom
+  } catch (e) {
+    isOverlapping.value = false
+  }
 }
 
 let rafId: number | null = null
 function onScroll() {
-	if (rafId != null) cancelAnimationFrame(rafId)
-	rafId = requestAnimationFrame(() => { checkOverlap(); rafId = null })
+  if (rafId != null) cancelAnimationFrame(rafId)
+  rafId = requestAnimationFrame(() => { checkOverlap(); rafId = null })
 }
 
 onMounted(() => { checkOverlap(); window.addEventListener('scroll', onScroll, { passive: true }); window.addEventListener('resize', onScroll) })

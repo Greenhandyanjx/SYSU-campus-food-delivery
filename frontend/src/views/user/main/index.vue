@@ -18,27 +18,23 @@
 		    </el-input>
 		  </div>
 		</header>
-		<!-- 分类 -->
-		<section class="categories">
-			<div class="cat" v-for="(c, i) in categories" :key="i">
-				<img :src="c.icon" alt="" />
-				<div class="label">{{ c.label }}</div>
-			</div>
-		</section>
+    <!-- 分类 -->
+    <section class="categories">
+      <div
+        class="cat"
+        v-for="(c, i) in categories"
+        :key="i"
+        :class="{ active: activeCategory === c.label }"
+        @click.stop.prevent="() => router.push({ path: '/user/home', query: { cat: c.label } })"
+      >
+        <img :src="c.icon" alt="" />
+        <div class="label">{{ c.label }}</div>
+      </div>
+    </section>
 
 			<!-- 轮播 banner -->
-	<div class="banner-container">
-    <Carousel :images="images" :interval="5000">
-      <template #default="{ index }">
-        <div class="banner-text">
-          <h2>{{ images[index].title }}</h2>
-          <p>{{ images[index].desc }}</p>
-          <a :href="images[index].link" class="banner-btn">
-            {{ images[index].buttonText }}
-          </a>
-        </div>
-      </template>
-    </Carousel>
+<div class="banner-container">
+    <Carousel :images="images" :interval="4000" />
   </div>
 
 			<!-- 活动卡片 -->
@@ -57,13 +53,13 @@
 			<!-- 推荐店铺（瀑布流） -->
 			<section class="recommend">
   			<h3>为你推荐</h3>
-  			<div class="masonry">
-  			  <div
-  			    class="store"
- 			    v-for="(s, idx) in stores"
-  			    :key="idx"
-  			    @click="goToStore(s)"
-  			  >
+        <div class="masonry">
+        <div
+          class="store"
+          v-for="(s, idx) in filteredStores"
+          :key="idx"
+          @click="goToStore(s)"
+        >
   			    <!-- <div class="store-banner" :style="{ backgroundImage: `url(${s.img})` }"></div> -->
   			    <div class="store-body">
   			      <div class="row top">
@@ -130,8 +126,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { addToCart, removeFromCart } from '@/api/user/store'
 import { Search } from '@element-plus/icons-vue'
@@ -180,6 +176,7 @@ const images = [
   }
 ];
 const router = useRouter()
+const route = useRoute()
 const query = ref('')
 
 const categories = ref([
@@ -195,6 +192,18 @@ const categories = ref([
   { label: '粥粉面饭', icon: '/src/assets/icons/rice.svg' },
 ])
 
+// 计算当前激活的分类：优先使用 route.query.cat，其次如果 q 与某个分类 label 相同也视作激活
+const activeCategory = computed(() => {
+  const q = (route.query.q || '').toString()
+  const cat = (route.query.cat || '').toString()
+  if (cat) return cat
+  if (q) {
+    const matched = categories.value.find((c: any) => c.label === q)
+    if (matched) return matched.label
+  }
+  return ''
+})
+
 
 const stores = ref([
   {
@@ -208,9 +217,9 @@ const stores = ref([
     minOrder: 15,
     deliveryFee: 2,
     dishes: [
-      { name: '黄焖鸡套餐', price: 18, count: 0 },
-      { name: '香菇滑鸡饭', price: 16, count: 0 },
-      { name: '青椒土豆丝', price: 10, count: 0 }
+      { name: '黄焖鸡套餐', price: 18, count: 0, category: '招牌套餐' },
+      { name: '香菇滑鸡饭', price: 16, count: 0, category: '家常快炒' },
+      { name: '青椒土豆丝', price: 10, count: 0, category: '家常快炒' }
     ]
   },
   {
@@ -224,12 +233,25 @@ const stores = ref([
     minOrder: 12,
     deliveryFee: 1,
     dishes: [
-      { name: '乌龙奶茶', price: 12, count: 0 },
-      { name: '杨枝甘露', price: 15, count: 0 },
-      { name: '百香果绿茶', price: 11, count: 0 }
+      { name: '乌龙奶茶', price: 12, count: 0, category: '奶茶咖啡' },
+      { name: '杨枝甘露', price: 15, count: 0, category: '奶茶咖啡' },
+      { name: '百香果绿茶', price: 11, count: 0, category: '奶茶咖啡' }
     ]
   }
 ])
+
+// 根据路由 query 进行过滤
+const filteredStores = computed(() => {
+  const qv = (route.query.q || '').toString().trim().toLowerCase()
+  const cat = (route.query.cat || '').toString()
+  if (!qv && !cat) return stores.value
+  return stores.value.filter((s: any) => {
+    if (cat) {
+      return s.dishes.some((d: any) => d.category === cat)
+    }
+    return s.name.toLowerCase().includes(qv) || s.dishes.some((d: any) => d.name.toLowerCase().includes(qv))
+  })
+})
 
 const addDish = async (store: any, dish: any) => {
   try {
@@ -576,5 +598,8 @@ function goToStore(s: any) {
   padding-top: 8px;
   color: #8c6d1f;
   font-size: 13px;
+}
+.banner-container{
+  margin: 20px 0;
 }
 </style>
