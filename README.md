@@ -1,5 +1,5 @@
 # SYSU-campus-food-delivery
-中珠外卖校园送优化系统（后端开发请记得阅读frontend/docx中的接口文档）
+中珠外卖校园送优化系统（后端开发请记得阅读在对应的ts文件中的注释（接口解释））
 
 每个人在 dev 上再新建自己负责模块的分支，main我设置了权限，大家在dev上PR后，组长再进行merge整合到main上面，main维持一个稳定运行的版本。
 
