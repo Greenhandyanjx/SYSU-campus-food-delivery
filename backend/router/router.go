@@ -18,6 +18,7 @@ func SetRouter() *gin.Engine {
 		noAuth.POST("user/register", controller.Register_User)
 		noAuth.POST("rider/register", controller.Register_Rider)
 		noAuth.POST("merchant/register", controller.Register_Merchant)
+		noAuth.GET("/merchant/category/list", controller.Get_category)
 	}
 	// 创建一个需要中间件的组
 	auth:=fe.Group("/api")
@@ -26,6 +27,7 @@ func SetRouter() *gin.Engine {
 		auth.POST("/change_password", controller.ChangePassword)
 		auth.POST("/merchant/dish/add",controller.Dish_add)
 		auth.POST("/merchant/meal/add",controller.Meal_add)
+		auth.POST("/common/upload",controller.UploadImage)
 		// 其他需要中间件保护的路由可以添加在这里
 	}
 	return fe
