@@ -86,6 +86,7 @@
           <el-form-item label="菜品图片:"
                         prop="image">
             <image-upload :prop-image-url="imageUrl"
+                          :headers="uploadHeaders"
                           @imageChange="imageChange">
               图片大小不超过2M<br>仅能上传 PNG JPEG JPG类型图片<br>建议上传200*200或300*300尺寸的图片
             </image-upload>
@@ -135,7 +136,9 @@ import {
   commonDownload
 } from '@/api/merchant/dish'
 // token handled by request interceptor; getToken import removed
-
+const uploadHeaders = {
+  Authorization: `Bearer ${localStorage.getItem('token')}`
+}
 const route = useRoute()
 const router = useRouter()
 
