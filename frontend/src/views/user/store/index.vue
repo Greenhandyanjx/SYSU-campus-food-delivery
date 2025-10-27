@@ -110,7 +110,7 @@
             <el-button size="small" type="primary" @click="openShop">进入店铺</el-button>
           </div>
 
-          <div class="cart-preview">
+          <!-- <div class="cart-preview">
             <h4>已选商品</h4>
             <div v-if="cart.length === 0" class="empty-cart">购物车为空</div>
             <ul v-else>
@@ -123,7 +123,7 @@
               <div>合计：<strong>¥{{ cartTotal.toFixed(2) }}</strong></div>
               <el-button size="small" type="warning" @click="checkout" :disabled="cart.length===0">去结算</el-button>
             </div>
-          </div>
+          </div> -->
         </div>
       </aside>
     </div>
