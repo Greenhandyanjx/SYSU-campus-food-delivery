@@ -2,7 +2,9 @@ package router
 
 import (
 	"backend/controller"
+	"backend/global"
 	"backend/midware"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -10,7 +12,14 @@ import (
 
 func SetRouter() *gin.Engine {
 		fe := gin.Default()
-	fe.Use(cors.Default())
+		fe.Static("/images", global.Meal_image_path) // 静态文件服务，用于访问上传的图片
+	fe.Use(cors.New(cors.Config{
+        AllowOrigins:     []string{"http://localhost:5173"}, // 前端地址
+        AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+        AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+        AllowCredentials: true,
+        MaxAge:           12 * time.Hour,
+    }))
 	// 创建一个不需要中间件的组
 	noAuth := fe.Group("/api")
 	{

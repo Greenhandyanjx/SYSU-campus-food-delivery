@@ -63,12 +63,10 @@ func Get_category(ctx *gin.Context){
     }
     // 返回查询结果
     ctx.JSON(http.StatusOK, gin.H{
-        "code": "200",
-        "msg":  "查询成功",
-        "data": gin.H{
-            "items": categories,
+            "code":  1,
+            "msg":   "success",
+            "data":  categories,
             "total": total,
-        },
     })
 }
 

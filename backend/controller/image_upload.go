@@ -3,6 +3,7 @@ package controller
 import (
 	"backend/global"
 	"backend/utils"
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -26,8 +27,9 @@ func UploadImage(ctx *gin.Context){
     timestamp := time.Now().Unix()
     filename := "meal_" + strconv.FormatInt(timestamp, 10) + ext
     baseUploadPath := global.Meal_image_path // 绝对路径
-    relativePath := filepath.Join(baseUploadPath, filename)
-    fullPath := relativePath // 直接使用相对路径作为完整路径
+    relativePath := "http://localhost:3000/images/" +filename
+    fmt.Println(relativePath)
+    fullPath := filepath.Join(baseUploadPath, filename) // 直接使用相对路径作为完整路径
 
     // 确保上传目录存在
     if err := utils.EnsureDir(fullPath); err != nil {
@@ -46,7 +48,7 @@ func UploadImage(ctx *gin.Context){
     }
 
     ctx.JSON(http.StatusOK, gin.H{
-		"code": "200",
+		"code": 1,
         "msg":  "图片上传成功",
         "data": gin.H{
             "url": relativePath, // 或者返回完整的 URL，例如 base URL + relativePath
