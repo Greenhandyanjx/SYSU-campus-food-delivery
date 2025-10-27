@@ -15,10 +15,13 @@ func SetRouter() *gin.Engine {
 	noAuth := fe.Group("/api")
 	{
 		noAuth.POST("/login", controller.Login)
-		noAuth.POST("user/register", controller.Register_User)
-		noAuth.POST("rider/register", controller.Register_Rider)
-		noAuth.POST("merchant/register", controller.Register_Merchant)
+		noAuth.POST("/register", controller.Register_Base_User_temp)
+		noAuth.POST("/user/register", controller.Register_User)
+		noAuth.POST("/rider/register", controller.Register_Rider)
+		noAuth.POST("/merchant/register", controller.Register_Merchant)
 		noAuth.GET("/merchant/category/list", controller.Get_category)
+		noAuth.GET("/merchant/dish/categories", controller.Get_category)
+
 	}
 	// 创建一个需要中间件的组
 	auth:=fe.Group("/api")

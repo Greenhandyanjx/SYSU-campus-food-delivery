@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 func Get_category(ctx *gin.Context){
@@ -69,4 +70,28 @@ func Get_category(ctx *gin.Context){
             "total": total,
         },
     })
+}
+
+func Get_category_by_merchantid(ctx* gin.Context){
+    	merchantId := ctx.Query("merchantId")
+		var resultCategories []models.Category
+		// 构建查询条件
+		var query *gorm.DB
+		if merchantId == "" {
+			// 如果没有提供merchantId，则返回所有分类
+			query = global.Db.Find(&resultCategories)
+		} else {
+			// 如果提供了merchantId，则根据merchantId筛选分类
+			query = global.Db.Where("id = ?", merchantId).Find(&resultCategories)
+		}
+		// 检查查询是否成功
+		if query.Error != nil {
+			ctx.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "查询分类列表失败", "data": nil})
+			return
+		}
+		// 返回结果
+		ctx.JSON(http.StatusOK, gin.H{
+			"code": 1,
+			"data": resultCategories,
+		})
 }

@@ -14,6 +14,73 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func Register_Base_User_temp(ctx *gin.Context){
+	var base_user models.BaseUser
+	body, _ := io.ReadAll(ctx.Request.Body)
+    fmt.Println("Request Body:", string(body)) // 打印请求体内容
+    ctx.Request.Body = io.NopCloser(bytes.NewBuffer(body)) // 重置请求体
+	if err := ctx.ShouldBind(&base_user); err != nil {
+		ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": "bind error",
+		})
+		return	
+	}
+
+	//重置请求体
+	ctx.Request.Body = io.NopCloser(bytes.NewBuffer(body))
+
+	hspd, err := utils.Hpwd(base_user.Password)
+	if err != nil {
+		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": "HSPD ERROR",
+		})
+		return 
+	}
+	// 使用 utils 包中的 Hpwd 函数对用户密码进行哈希处理，并将结果存储在 hspd 变量中，同时捕获可能的错误信息存储在 err 变量中
+
+	base_user.Password = hspd
+	token, err := utils.GenerateJWT(base_user.Username)
+
+	if err != nil {
+		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": "token generate error",
+		})
+		return 
+	}
+	if err := global.Db.Table("base_users").AutoMigrate(&base_user); err != nil {
+		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"code": "500",
+			"msg": "table create error",
+		})
+		return 
+	}
+	if err := global.Db.Create(&base_user).Error; err != nil {
+    // 检查是否为MySQL唯一键冲突错误
+    if strings.Contains(err.Error(), "Error 1062") || 
+       strings.Contains(err.Error(), "Duplicate entry") {
+        ctx.AbortWithStatusJSON(http.StatusConflict, gin.H{ // 409 Conflict
+            "code": "409",
+            "msg":  "用户名已被注册",
+        })
+    } else {
+        // 其他数据库错误
+        log.Printf("数据库创建错误: %v", err) // 记录详细错误日志
+        ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+            "code": "500",
+            "msg":  "服务器内部错误，请稍后再试",
+        })
+    }
+    return 
+    }
+    // 以下为正常情况
+	fmt.Println("baseuser successs")
+	ctx.JSON(http.StatusOK,gin.H{
+           "code":"1",
+		   "msg":"success",
+		   "token":token,
+	})
+}
+
 func Register_Base_User(ctx *gin.Context)(uint, string,string, error) {
 	var base_user models.BaseUser
 	body, _ := io.ReadAll(ctx.Request.Body)
