@@ -59,7 +59,14 @@ const emit = defineEmits<{
 const uploadfiles = ref<any>(null)
 const imageUrl = ref<string>(props.propImageUrl || '')
 
-const headers = computed(() => ({ token: getToken() }))
+const headers = computed(() => {
+  console.log('上传token：', getToken())  // ✅ 在 return 之前打印
+  return {
+    Authorization: `Bearer ${getToken()}`
+  }
+})
+
+
 
 watch(
   () => props.propImageUrl,
