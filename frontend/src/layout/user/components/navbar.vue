@@ -2,7 +2,7 @@
 	<header ref="navRef" class="meituan-navbar">
 		<div class="left">
 			<el-button type="text" class="loc-btn" @click="onLocation">
-				<i class="el-icon-location"></i>
+				<img src="@\assets\icons\location.svg" alt="定位" />
 				<span class="loc-text">当前定位</span>
 				<span class="city">{{ city }}</span>
 			</el-button>
@@ -175,6 +175,10 @@ onUnmounted(() => { window.removeEventListener('scroll', onScroll); window.remov
   font-weight: 600;
   cursor: pointer;
   transition: 0.2s;
+}
+.loc-btn img{
+  width: 20px;
+  height: 20px;
 }
 .loc-btn:hover {
   opacity: 0.8;

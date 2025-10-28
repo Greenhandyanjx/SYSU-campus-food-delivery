@@ -132,7 +132,7 @@
 <div class="floating-cart" @click.self="toggleCartPopup">
   <div class="cart-left" @click="toggleCartPopup">
     <div class="cart-icon">
-      <i class="el-icon-shopping-cart-2"></i>
+      <img src="@/assets/icons/cart.svg" alt="购物车" />
       <span v-if="cartCount > 0" class="badge">{{ cartCount }}</span>
     </div>
     <div class="cart-info">
@@ -672,6 +672,11 @@ function decFromPopup(c: any) {
   cursor: pointer;
   flex: 1;
 }
+.cart-icon img {
+  width: 24px;   /* 控制宽度 */
+  height: 24px;  /* 控制高度 */
+}
+
 .cart-icon {
   position: relative;
   font-size: 22px;

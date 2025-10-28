@@ -20,16 +20,14 @@
 		</header>
     <!-- 分类 -->
     <section class="categories">
-      <div
-        class="cat"
+      <CategoryItem
         v-for="(c, i) in categories"
         :key="i"
-        :class="{ active: activeCategory === c.label }"
-        @click.stop.prevent="() => router.push({ path: '/user/home', query: { cat: c.label } })"
-      >
-        <img :src="c.icon" alt="" />
-        <div class="label">{{ c.label }}</div>
-      </div>
+        :label="c.label"
+        :icon="c.icon"
+        :active="activeCategory === c.label"
+        @select="() => onCategoryClick(c)"
+      />
     </section>
 
 			<!-- 轮播 banner -->
@@ -132,6 +130,7 @@ import { ElMessage } from 'element-plus'
 import { addToCart, removeFromCart } from '@/api/user/store'
 import { Search } from '@element-plus/icons-vue'
 import Carousel from '@/components/Carousel.vue'
+import CategoryItem from '@/components/CategoryItem.vue'
 import banner1 from '@/assets/banners/banner1.svg'
 import banner2 from '@/assets/banners/banner2.svg'
 import banner3 from '@/assets/banners/banner3.svg'
@@ -180,6 +179,7 @@ const route = useRoute()
 const query = ref('')
 
 const categories = ref([
+  { label: '全部', icon: '/src/assets/icons/all.svg' },
   { label: '招牌套餐', icon: '/src/assets/icons/setmeal.svg' },
   { label: '现煮粉面', icon: '/src/assets/icons/noodle.svg' },
   { label: '汉堡炸鸡', icon: '/src/assets/icons/burger.svg' },
@@ -196,12 +196,13 @@ const categories = ref([
 const activeCategory = computed(() => {
   const q = (route.query.q || '').toString()
   const cat = (route.query.cat || '').toString()
-  if (cat) return cat
+  if (cat) return cat || '全部'
   if (q) {
     const matched = categories.value.find((c: any) => c.label === q)
     if (matched) return matched.label
   }
-  return ''
+  // 默认激活 '全部'
+  return '全部'
 })
 
 
@@ -244,9 +245,10 @@ const stores = ref([
 const filteredStores = computed(() => {
   const qv = (route.query.q || '').toString().trim().toLowerCase()
   const cat = (route.query.cat || '').toString()
-  if (!qv && !cat) return stores.value
+  if (!qv && (!cat || cat === '全部')) return stores.value
   return stores.value.filter((s: any) => {
     if (cat) {
+      if (cat === '全部') return true
       return s.dishes.some((d: any) => d.category === cat)
     }
     return s.name.toLowerCase().includes(qv) || s.dishes.some((d: any) => d.name.toLowerCase().includes(qv))
@@ -303,6 +305,17 @@ function onSearch() {
 function goToStore(s: any) {
 	// 进入店铺详情页（占位）
 	router.push('/user/store/' + encodeURIComponent(s.name))
+}
+
+function onCategoryClick(c: any) {
+  // 点击分类时：如果搜索框有内容则保留 q，否则清除 q（以便回到全部或单独按分类的视图）
+  const qv = (query.value || '').toString().trim()
+  const newQuery: any = {}
+  if (qv) newQuery.q = qv
+  // 如果选择的是 "全部"，不要传 cat（保持无筛选），否则传 cat
+  if (c.label && c.label !== '全部') newQuery.cat = c.label
+
+  router.push({ path: '/user/home', query: newQuery })
 }
 </script>
 
