@@ -19,7 +19,7 @@ func Dish_add(ctx*gin.Context){
 		})
 		return
 	}
-	if err := global.Db.Table("dishes").AutoMigrate(&dish); err != nil {
+	if err := global.Db.AutoMigrate(&dish,&models.Flavor{}); err != nil {
 		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"code": "500",
 			"msg": "table create error",

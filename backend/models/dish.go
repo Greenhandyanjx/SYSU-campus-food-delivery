@@ -17,9 +17,18 @@ type Dish struct {
 	gorm.Model
 }
 
+func (Dish) TableName() string {
+    return "dishes"
+}
+
+
 type Flavor struct {
 	ID     uint   `gorm:"primaryKey" json:"id"`
 	Name   string `json:"name" gorm:"column:flavor_name"`
 	Value  string `json:"value" gorm:"column:flavor_value"`
 	DishID int    `gorm:"foreignKey:DishID" json:"dishId"` // 外键字段
+}
+
+func (Flavor) TableName() string {
+    return "flavors"
 }
