@@ -176,7 +176,7 @@ const ruleForm = reactive<any>({
   id: '',
   price: '',
   code: '',
-  image: '',
+  image: 'http://localhost:3000/images/meal_1761722574.png',
   description: '',
   dishFlavors: [],
   status: true,
@@ -203,7 +203,7 @@ const rules = reactive({
     }
   ],
   categoryId: [{ required: true, message: '请选择菜品分类', trigger: 'change' }],
-  image: { required: true, message: '菜品图片不能为空' },
+  image: { required: false, message: '菜品图片不能为空' },
   price: [
     {
       required: true,
