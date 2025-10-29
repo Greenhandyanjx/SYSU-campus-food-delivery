@@ -174,21 +174,23 @@ const saleStatus = ref([
 
 async function init(isSearchFlag?: boolean) {
   isSearch.value = !!isSearchFlag
-  try {
-    const res = await getDishPage({
-      page: page.value,
-      pageSize: pageSize.value,
-      name: input.value || undefined,
-      categoryId: categoryId.value || undefined,
-      status: dishStatus.value
-    })
-    if (res.data.code === 1) {
-      tableData.value = res.data?.data?.records || []
-      counts.value = Number(res.data?.data?.total || 0)
+    try {
+      const res = await getDishPage({
+        page: page.value,
+        pageSize: pageSize.value,
+        name: input.value || undefined,
+        categoryId: categoryId.value || undefined,
+        status: dishStatus.value
+      })
+      if (res && res.data && res.data.code === 1) {
+        // Support multiple backend shapes: { data: { records, total } } or { data: { items, total } } or { data: { list, totalCount } }
+        const d = res.data.data || {}
+        tableData.value = d.records || d.items || d.list || []
+        counts.value = Number(d.total || d.totalCount || d.total || 0)
+      }
+    } catch (err: any) {
+      ElMessage.error('请求出错了：' + err.message)
     }
-  } catch (err: any) {
-    ElMessage.error('请求出错了：' + err.message)
-  }
 }
 
 function initFun() {

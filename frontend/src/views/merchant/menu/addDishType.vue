@@ -53,10 +53,12 @@
                        class="items">
                     <div class="itTit">
                       <!-- :dish-flavors-data="filterDishFlavorsData()" -->
-                      <SelectInput :dish-flavors-data="leftDishFlavors"
-                                   :index="index"
-                                   :value="item.name"
-                                   @select="selectHandle" />
+<SelectInput
+  v-model:value="selectedFlavors"
+  :dishFlavorsData="leftDishFlavors"
+  @select="selectHandle"
+/>
+
                     </div>
                     <div class="labItems"
                          style="display: flex">
@@ -141,7 +143,7 @@ const uploadHeaders = {
 }
 const route = useRoute()
 const router = useRouter()
-
+const mak = ref(false)
 const restKey = ref(0)
 const textarea = ref('')
 const value = ref('')
@@ -150,12 +152,24 @@ const actionType = ref('')
 const dishList = ref<any[]>([])
 const dishFlavorsData = ref<any[]>([])
 const dishFlavors = ref<any[]>([])
-const leftDishFlavors = ref<any[]>([])
+// const leftDishFlavors = ref<any[]>([])
+const leftDishFlavors = ref<any[]>([
+  { name: '甜味', value: ['无糖', '少糖', '半糖', '多糖', '全糖'] },
+  { name: '温度', value: ['热饮', '常温', '去冰', '少冰', '多冰'] },
+  { name: '忌口', value: ['不要葱', '不要蒜', '不要香菜', '不要辣'] },
+  { name: '辣度', value: ['不辣', '微辣', '中辣', '重辣'] }
+])
 const vueRest = ref('1')
 const index = ref(0)
 const inputStyle = { flex: 1 }
 // headers removed
 const ruleFormRef = ref<any>(null)
+
+const selectedFlavors = ref([])
+
+// function selectHandle(type, index, val) {
+//   console.log('选中口味:', type, val)
+// }
 
 const ruleForm = reactive<any>({
   name: '',
@@ -303,6 +317,7 @@ function getFlavorListHand() {
     { name: '忌口', value: ['不要葱', '不要蒜', '不要香菜', '不要辣'] },
     { name: '辣度', value: ['不辣', '微辣', '中辣', '重辣'] }
   ]
+  console.log('口味数据:', dishFlavorsData.value)
 }
 
 function imageChange(value: any) {
