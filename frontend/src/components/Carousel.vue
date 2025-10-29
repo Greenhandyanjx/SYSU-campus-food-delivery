@@ -71,6 +71,7 @@ const displayedSlides = computed(() => {
 const wrap = ref(null)
 const track = ref(null)
 let timer = null
+let lastTransitionHandler = null
 
 function getSlideClass(idx) {
   const posDiff = idx - currentPos.value
@@ -85,55 +86,70 @@ function getSlideClass(idx) {
 
 function go(i) {
   const n = (props.images || []).length
-  if (n === 0 || isTransitioning.value) return
-  isTransitioning.value = true
+  if (n === 0) return
   const oldIndex = currentIndex.value
-  const newIndex = (i + n) % n
+  const newIndex = ((i % n) + n) % n
+  if (newIndex === oldIndex) return
 
   const t = track.value
-  if (!t) return
-
-  // 清理旧的 transitionend 监听器
-  t.removeEventListener('transitionend', handleTransitionEnd)
-  t.addEventListener('transitionend', handleTransitionEnd)
-
-  function handleTransitionEnd() {
-    t.removeEventListener('transitionend', handleTransitionEnd)
-    if (pos.value === n + 2) {
-      // 从伪首跳回真实首
-      t.style.transition = 'none'
-      pos.value = 2
-      updateOffset(false)
-    } else if (pos.value === 1) {
-      // 从伪尾跳回真实尾
-      t.style.transition = 'none'
-      pos.value = n+1
-      updateOffset(false)
-    }
-    // 动画完成后允许下一次切换
+  // 如果 track 元素不存在，直接更新状态并退出（避免 isTransitioning 被误置）
+  if (!t) {
+    currentIndex.value = newIndex
+    pos.value = newIndex + 2
+    updateOffset(false)
     isTransitioning.value = false
+    resume()
+    return
   }
+  // 准备 transitionend 处理器（保证每次只有一个监听器）
+  if (t) {
+    if (lastTransitionHandler && typeof lastTransitionHandler === 'function') {
+      t.removeEventListener('transitionend', lastTransitionHandler)
+      lastTransitionHandler = null
+    }
+
+    lastTransitionHandler = function handleTransitionEnd() {
+      try { t.removeEventListener('transitionend', handleTransitionEnd) } catch (e) {}
+      // 如果滑动到了虚拟首/尾，瞬移回真实位置
+      if (pos.value === n + 2) {
+        t.style.transition = 'none'
+        pos.value = 2
+        updateOffset(false)
+      } else if (pos.value === 1) {
+        t.style.transition = 'none'
+        pos.value = n + 1
+        updateOffset(false)
+      }
+      isTransitioning.value = false
+      lastTransitionHandler = null
+    }
+
+    t.addEventListener('transitionend', lastTransitionHandler)
+  }
+
+  // 标记为动画中，避免并发修改状态
+  isTransitioning.value = true
 
   const wrapForward = oldIndex === n - 1 && newIndex === 0
   const wrapBackward = oldIndex === 0 && newIndex === n - 1
 
   if (wrapForward) {
-    // 动画到伪首 (first duplicate at index n+2)，transitionend 会把它瞬移回真实首 (index 2)
     pos.value = n + 2
     currentIndex.value = newIndex
     updateOffset(true)
   } else if (wrapBackward) {
-    // 动画到伪尾 (last duplicate at index 1)，transitionend 会把它瞬移回真实尾 (index n+1)
-    // console.warn('Wrapping backward')
     pos.value = 1
     currentIndex.value = newIndex
     updateOffset(true)
   } else {
-    // 普通切换：映射到 displayedSlides 的索引需要 +2 偏移
+    // 直接跳转到目标 slide（支持非左右邻居）
     currentIndex.value = newIndex
     pos.value = newIndex + 2
     updateOffset(true)
   }
+
+  // 手动切换后重启自动播放计时器
+  resume()
 }
 
 
@@ -146,7 +162,10 @@ function prev() {
 }
 
 function pause() {
-  if (timer) clearInterval(timer)
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
 }
 
 function resume() {
@@ -211,15 +230,24 @@ function updateOffset(withTransition = true) {
   })
 }
 
+// 使用命名的 resize 处理函数，保证 add/remove 使用相同引用
+const onResize = () => updateOffset(false)
+
 onMounted(() => {
   updateOffset(false)
   if (props.autoplay) timer = setInterval(next, props.interval)
-  window.addEventListener('resize', () => updateOffset(false))
+  window.addEventListener('resize', onResize)
 })
 
 onBeforeUnmount(() => {
   pause()
-  window.removeEventListener('resize', () => updateOffset(false))
+  window.removeEventListener('resize', onResize)
+  // 清理可能残留的 transitionend 监听
+  const t = track.value
+  if (t && lastTransitionHandler) {
+    try { t.removeEventListener('transitionend', lastTransitionHandler) } catch (e) {}
+    lastTransitionHandler = null
+  }
 })
 
 watch(() => props.images.length, () => {
@@ -233,7 +261,7 @@ watch(() => props.images.length, () => {
     align-items: center;
   position: relative;
   width: 100%;
-  height: 400px; /* 稍微增加高度以容纳更大的中间图片 */
+  height: 400px;
   overflow: hidden;
   display: block;
 }
@@ -243,7 +271,7 @@ watch(() => props.images.length, () => {
   align-items: center;
   height: 100%;
   will-change: transform;
-  padding: 0; /* 减少两侧间距 */
+  padding: 0;
 }
 
 .slide {

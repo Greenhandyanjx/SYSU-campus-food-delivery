@@ -115,9 +115,9 @@ const handleLogin = async () => {
         // const res = { code: '1', msg: 'success' }
 
         if (String(res.data.code) === "1") {
-          localStorage.setItem('token', res.data.token)
-          localStorage.setItem('username', res.data.username)
-          localStorage.setItem('role', res.data.role)
+          // localStorage.setItem('token', res.data.token)
+          // localStorage.setItem('username', res.data.username)
+          // localStorage.setItem('role', res.data.role)
           ElMessage.success("登录成功");
           // 保存用户名，供 Navbar 显示
           try { localStorage.setItem('username', loginForm.value.username) } catch (e) {}
