@@ -89,6 +89,24 @@ function ensureDemo() {
             { dishId: 'd3', name: '乌龙奶茶', price: 12, qty: 1, selected: false, category: '奶茶咖啡' },
             { dishId: 'd4', name: '百香果绿茶', price: 11, qty: 3, selected: false, category: '奶茶咖啡' }
           ]
+        },
+        {
+          storeId: 's3',
+          name: '茶百道',
+          selected: false,
+          items: [
+            { dishId: 'd3', name: '乌龙奶茶', price: 12, qty: 1, selected: false, category: '奶茶咖啡' },
+            { dishId: 'd4', name: '百香果绿茶', price: 11, qty: 3, selected: false, category: '奶茶咖啡' }
+          ]
+        },
+        {
+          storeId: 's4',
+          name: '茶百道',
+          selected: false,
+          items: [
+            { dishId: 'd3', name: '乌龙奶茶', price: 12, qty: 1, selected: false, category: '奶茶咖啡' },
+            { dishId: 'd4', name: '百香果绿茶', price: 11, qty: 3, selected: false, category: '奶茶咖啡' }
+          ]
         }
       ]
     }

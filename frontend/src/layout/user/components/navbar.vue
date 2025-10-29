@@ -41,9 +41,10 @@
             </template>
           </el-input>
         </div>
-        <div v-else class="notice">
-          <i class="iconfont icon-bell"></i>
-          今日满30减5元，骑手配送更快！
+        <!-- 公告部分 -->
+        <div v-else class="notice notice-promo">
+          <i class="iconfont icon-fire"></i>
+          <span>校园专享 · 午间特惠：满30减5，骑手极速达 🚴‍♀️</span>
         </div>
       </div>
     </div>
@@ -196,21 +197,60 @@ onUnmounted(() => { window.removeEventListener('scroll', onScroll); window.remov
   align-items: center;
 }
 
-.notice {
+/* === 公告样式 notice-promo === */
+.notice-promo {
   position: relative;
   z-index: 1110;
-  background: rgba(255, 255, 255, 0.5);
-  padding: 6px 16px;
-  /* border-radius: 8px; */
-  font-size: 14px;
-  color: #1a1a1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 20px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #fff8e1, #ffe7b3, #ffd580);
+  color: #7a3600;
+  font-weight: 600;
+  font-size: 20px;
+  box-shadow: 0 2px 6px rgba(255, 193, 7, 0.25);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  backdrop-filter: blur(3px);
 }
+
+.notice-promo:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(255, 183, 77, 0.5);
+}
+
+/* 图标动画 */
+.notice-promo i {
+  margin-right: 6px;
+  color: #ff7e29;
+  animation: flamePulse 2s infinite ease-in-out;
+}
+
+@keyframes flamePulse {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.2); opacity: 1; }
+}
+
+/* 文字发光渐变 */
+.notice-promo span {
+  background: linear-gradient(90deg, #ff9800, #ff6b00);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shineText 3s infinite ease-in-out;
+}
+
+@keyframes shineText {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 1; filter: drop-shadow(0 0 4px rgba(255, 153, 0, 0.6)); }
+}
+
 
 /* === 搜索框容器 === */
 .notice-search {
   max-width: 1000px;
   width: 80%;
-  background-color: #fffef4;
+  background-color: #fffef4 !important;
   border-radius: 32px !important;
   border: 2px solid #ffb400;
   box-shadow: 0 3px 8px rgba(250, 173, 20, 0.25);

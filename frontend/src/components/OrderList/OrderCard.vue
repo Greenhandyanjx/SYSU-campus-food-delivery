@@ -3,7 +3,7 @@
     <!-- 头部：店铺信息 -->
     <div class="card-header">
       <div class="store" @click="$emit('open-store', order.storeId)">
-        <img v-if="order.storeLogo" :src="order.storeLogo" alt="logo" />
+        <img v-if="order.storeLogo" :src="order.storeLogo" alt="logo" @error="onImgError" />
         <span class="store-name">{{ order.storeName }}</span>
         <i class="arrow el-icon-arrow-right"></i>
       </div>
@@ -14,7 +14,7 @@
     <div class="card-body" @click="$emit('view', order)">
       <div class="items">
         <div class="item" v-for="(it, idx) in order.items" :key="idx">
-          <img v-if="it.img" :src="it.img" alt="item" />
+          <img :src="itemImage(it)" alt="item" @error="onImgError" />
           <div class="meta">
             <div class="name">{{ it.name }}</div>
             <div class="count">x{{ it.count }}</div>
@@ -99,6 +99,17 @@ onMounted(() => {
   }
 })
 onBeforeUnmount(() => timer && clearInterval(timer))
+
+function onImgError(e) {
+  try { e.target && (e.target.src = '/src/assets/noImg.png') } catch (err) {}
+}
+
+function itemImage(it) {
+  // support multiple possible fields from backend: img, image, picture, pic, thumb, imgUrl
+  return (
+    it.img || it.image || it.picture || it.pic || it.thumb || it.imgUrl || '/src/assets/noImg.png'
+  )
+}
 </script>
 
 <style scoped>

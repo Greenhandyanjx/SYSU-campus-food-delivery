@@ -29,6 +29,12 @@ const routes = [
       { path: 'orderlist', component: () => import('@/views/user/orderlist/index.vue') },
       { path: 'order/:id', component: () => import('@/views/user/orderlist/Detail.vue') },
       { path: 'pay', component: () => import('@/views/user/orderlist/Detail.vue'), meta: { hidden: true } },
+      { path: 'wallet', component: () => import('@/views/user/wallet/index.vue') },
+      { path: 'coupons', component: () => import('@/views/user/coupons/index.vue') },
+      { path: 'address', component: () => import('@/views/user/address/index.vue') },
+      { path: 'support', component: () => import('@/views/user/support/index.vue') },
+      { path: 'settings', component: () => import('@/views/user/settings/index.vue') },
+      { path: 'vip', component: () => import('@/views/user/vip/index.vue') },
       { path: 'cart', component: () => import('@/views/user/cart/index.vue') },
       { path: 'my', component: () => import('@/views/user/my/index.vue') },
     ]
