@@ -50,8 +50,7 @@ func UploadImage(ctx *gin.Context){
     ctx.JSON(http.StatusOK, gin.H{
 		"code": 1,
         "msg":  "图片上传成功",
-        "data": gin.H{
-            "url": relativePath, // 或者返回完整的 URL，例如 base URL + relativePath
-        },
+        "url": relativePath, // 或者返回完整的 URL，例如 base URL + relativePath
+    
 	})
 }
