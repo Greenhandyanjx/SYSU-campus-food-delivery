@@ -11,15 +11,15 @@ import (
 )
 
 func SetRouter() *gin.Engine {
-		fe := gin.Default()
-		fe.Static("/images", global.Meal_image_path) // 静态文件服务，用于访问上传的图片
+	fe := gin.Default()
+	fe.Static("/images", global.Meal_image_path) // 静态文件服务，用于访问上传的图片
 	fe.Use(cors.New(cors.Config{
-        AllowOrigins:     []string{"http://localhost:5173"}, // 前端地址
-        AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-        AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
-        AllowCredentials: true,
-        MaxAge:           12 * time.Hour,
-    }))
+		AllowOrigins:     []string{"http://localhost:5173"}, // 前端地址
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
 	// 创建一个不需要中间件的组
 	noAuth := fe.Group("/api")
 	{
@@ -30,20 +30,20 @@ func SetRouter() *gin.Engine {
 		noAuth.POST("/merchant/register", controller.Register_Merchant)
 		noAuth.GET("/merchant/category/list", controller.Get_category)
 		noAuth.GET("/merchant/dish/categories", controller.Get_category)
-		noAuth.GET("/merchant/dishes/page", controller.Get_dishes) 
+		noAuth.GET("/merchant/dishes/page", controller.Get_dishes)
+		noAuth.POST("/common/upload", controller.UploadImage)
 
 	}
 	// 创建一个需要中间件的组
-	auth:=fe.Group("/api")
-	auth.Use(midware.AuthMiddleware()) 
+	auth := fe.Group("/api")
+	auth.Use(midware.AuthMiddleware())
 	{
 		auth.POST("/change_password", controller.ChangePassword)
-		auth.POST("/merchant/dish/add",controller.Dish_add)
-		auth.POST("/merchant/meal/add",controller.Meal_add)
-		auth.POST("/common/upload",controller.UploadImage)
-		auth.POST("/merchant/dish/edit",controller.Edit_dish)
-		auth.POST("/merchant/dish/delete",controller.Delete_dish)
-		auth.GET("/merchant/dish/status",controller.Edit_DishStatus_By_Status)
+		auth.POST("/merchant/dish/add", controller.Dish_add)
+		auth.POST("/merchant/meal/add", controller.Meal_add)
+		auth.POST("/merchant/dish/edit", controller.Edit_dish)
+		auth.POST("/merchant/dish/delete", controller.Delete_dish)
+		auth.GET("/merchant/dish/status", controller.Edit_DishStatus_By_Status)
 		// 其他需要中间件保护的路由可以添加在这里
 	}
 	return fe

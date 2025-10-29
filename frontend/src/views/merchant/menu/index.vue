@@ -182,11 +182,13 @@ async function init(isSearchFlag?: boolean) {
         categoryId: categoryId.value || undefined,
         status: dishStatus.value
       })
-      if (res && res.data && res.data.code === 1) {
-        // Support multiple backend shapes: { data: { records, total } } or { data: { items, total } } or { data: { list, totalCount } }
+      // console.log('获取菜品列表：', res.data.code)
+      if (res && res.data && res.data.code == 1) {
+        console.log('获取菜品列表：', res)
         const d = res.data.data || {}
         tableData.value = d.records || d.items || d.list || []
         counts.value = Number(d.total || d.totalCount || d.total || 0)
+        // Support multiple backend shapes: { data: { records, total } } or { data: { items, total } } or { data: { list, totalCount } }
       }
     } catch (err: any) {
       ElMessage.error('请求出错了：' + err.message)
