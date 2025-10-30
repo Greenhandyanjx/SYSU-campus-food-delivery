@@ -31,7 +31,8 @@ func SetRouter() *gin.Engine {
 		noAuth.GET("/merchant/category/list", controller.Get_category)
 		noAuth.GET("/merchant/dish/categories", controller.Get_category)
 		noAuth.GET("/merchant/dishes/page", controller.Get_dishes)
-		noAuth.POST("/common/upload", controller.UploadImage)
+		noAuth.GET("/merchant/common/download", controller. CommonDownload)
+		
 
 	}
 	// 创建一个需要中间件的组
@@ -43,7 +44,10 @@ func SetRouter() *gin.Engine {
 		auth.POST("/merchant/meal/add", controller.Meal_add)
 		auth.POST("/merchant/dish/edit", controller.Edit_dish)
 		auth.POST("/merchant/dish/delete", controller.Delete_dish)
-		auth.GET("/merchant/dish/status", controller.Edit_DishStatus_By_Status)
+		auth.GET("/merchant/dish/list", controller.QueryDishList)
+		auth.GET("/merchant/dish/query", controller.Get_Dish_ById)
+		auth.POST("/merchant/dish/status", controller.Edit_DishStatus_By_Status)
+		noAuth.POST("/common/upload", controller.UploadImage)
 		// 其他需要中间件保护的路由可以添加在这里
 	}
 	return fe
