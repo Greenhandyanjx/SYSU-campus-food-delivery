@@ -68,4 +68,55 @@ export async function reorder(order: any) {
   return Promise.resolve({ success: true })
 }
 
-export default { getOrderList, getOrderDetail, cancelOrder, payOrder, reorder }
+/**
+ * confirmOrder(id)
+ * 功能：用户确认收货
+ * 请求：POST /user/order/{id}/confirm
+ * 返回示例：{ code:1, data:{ success:true } }
+ */
+export function confirmOrder(id: string) {
+  return request({ url: `/user/order/${id}/confirm`, method: 'post' })
+}
+
+/**
+ * contactRider(id)
+ * 功能：联系骑手
+ * 请求：GET /user/order/{id}/rider
+ * 返回示例：{ code:1, data:{ name, phone, avatar } }
+ */
+export function contactRider(id: string) {
+  return request({ url: `/user/order/${id}/rider`, method: 'get' })
+}
+
+/**
+ * refundDetail(id)
+ * 功能：获取退款详情
+ * 请求：GET /user/order/{id}/refund
+ * 返回示例：{ code:1, data:{ status, reason, amount, createdAt } }
+ */
+export function refundDetail(id: string) {
+  return request({ url: `/user/order/${id}/refund`, method: 'get' })
+}
+
+/**
+ * reviewOrder(id, data)
+ * 功能：评价订单
+ * 请求：POST /user/order/{id}/review
+ * 请求体：{ rating: number, content: string, images?: string[] }
+ * 返回：{ code:1, data:{ success:true } }
+ */
+export function reviewOrder(id: string, data: any) {
+  return request({ url: `/user/order/${id}/review`, method: 'post', data })
+}
+
+export default {
+  getOrderList,
+  getOrderDetail,
+  cancelOrder,
+  payOrder,
+  reorder,
+  confirmOrder,
+  contactRider,
+  refundDetail,
+  reviewOrder
+}
