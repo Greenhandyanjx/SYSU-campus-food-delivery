@@ -8,6 +8,8 @@
   <rect width="800" height="400" fill="url(#g3)"/>
   <text x="40" y="75" font-family="sans-serif" font-size="32" fill="#2b5a2b" font-weight="700">新鲜蔬果 · 健康上桌</text>
   <text x="40" y="110" font-size="14" fill="#214a21">绿色配送 · 新用户立减</text>
-  <rect x="520" y="40" width="220" height="190" rx="14" fill="#fff" opacity="0.85"/>
+  <!-- 添加新鲜沙拉图 -->
+  <image x="520" y="40" width="220" height="190" href="images/fresh_salad_set.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <rect x="520" y="40" width="220" height="190" rx="14" fill="#fff" opacity="0.3"/>
   <text x="550" y="120" font-size="20" fill="#2b5a2b">沙拉季</text>
 </svg>
