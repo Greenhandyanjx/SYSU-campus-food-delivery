@@ -769,7 +769,7 @@ function handleCurrentChange(val: any) {
             display: inline-block;
             font-size: 14px;
             padding: 0 20px;
-            color: $gray-2;
+            color: white;
             border-right: solid 1px $gray-4;
           }
         }

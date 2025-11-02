@@ -176,7 +176,7 @@ const ruleForm = reactive<any>({
   id: '',
   price: '',
   code: '',
-  image: 'http://localhost:3000/images/meal_1761722574.png',
+  image: '',
   description: '',
   dishFlavors: [],
   status: true,
@@ -203,7 +203,7 @@ const rules = reactive({
     }
   ],
   categoryId: [{ required: true, message: '请选择菜品分类', trigger: 'change' }],
-  image: { required: false, message: '菜品图片不能为空' },
+  image: { required: true, message: '菜品图片不能为空' },
   price: [
     {
       required: true,
@@ -317,7 +317,7 @@ function getFlavorListHand() {
     { name: '忌口', value: ['不要葱', '不要蒜', '不要香菜', '不要辣'] },
     { name: '辣度', value: ['不辣', '微辣', '中辣', '重辣'] }
   ]
-  console.log('口味数据:', dishFlavorsData.value)
+  // console.log('口味数据:', dishFlavorsData.value)
 }
 
 function imageChange(value: any) {

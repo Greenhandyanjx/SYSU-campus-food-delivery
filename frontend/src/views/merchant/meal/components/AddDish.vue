@@ -313,7 +313,7 @@ onMounted(() => {
       padding: 0 10px;
       margin-bottom: 20px;
       border-radius: 6px;
-      color: #818693;
+      color: #d2d5dd;
       span:first-child {
         text-align: left;
         color: #20232a;

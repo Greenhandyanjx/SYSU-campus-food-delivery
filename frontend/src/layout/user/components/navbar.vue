@@ -104,8 +104,7 @@ function onOrderSearch() {
   }
   router.push({ path: '/user/orderlist', query: { oq: orderQuery.value } })
 }
-
-function onLocation() { console.log('定位') }
+function onLocation() { router.push('/user/address') }
 
 function handleCommand(command: string) {
   if (command === 'logout') {

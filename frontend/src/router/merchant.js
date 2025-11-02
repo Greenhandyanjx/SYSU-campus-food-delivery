@@ -3,7 +3,7 @@ import Layout from "@/layout/merchant/index.vue";
 
 const routes = [
   {
-    path: "/merchant",
+    path: "/merchant/login",
     component: () => import("@/views/login/Login.vue"),
     meta: { title: "商家登录", hidden: true, notNeedAuth: true },
   },

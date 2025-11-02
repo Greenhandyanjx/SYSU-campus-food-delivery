@@ -50,7 +50,7 @@
             >批量停售</span
           > -->
           <el-button type="primary"
-                     style="margin-left: 15px"
+                     style="margin-left: 15px;color: white;"
                      @click="addDishtype('add')">
             + 新建菜品
           </el-button>
@@ -58,6 +58,7 @@
       </div>
   <el-table v-if="tableData.length"
     :data="tableData"
+    :key="$route.fullPath"
     stripe
     class="tableBox"
     @selection-change="handleSelectionChange">
@@ -83,7 +84,7 @@
                          label="菜品分类" />
         <el-table-column label="售价">
           <template #default="scope">
-            <span style="margin-right: 10px">￥{{ (scope.row.price ).toFixed(2)*100/100 }}</span>
+            <span style="margin-right: 10px">￥{{ Number(scope.row.price||0 ).toFixed(2) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="售卖状态">
@@ -126,7 +127,8 @@
         </el-table-column>
       </el-table>
       <Empty v-else
-             :is-search="isSearch" />
+             :is-search="isSearch"
+              />
       <el-pagination v-if="counts > 10"
                      class="pageList"
                      :page-sizes="[10, 20, 30, 40]"
@@ -141,7 +143,7 @@
 
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted ,onBeforeUnmount} from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import HeadLable from '@/components/HeadLable/index.vue'
@@ -167,6 +169,7 @@ const dishCategoryOptions = ref<any[]>([])
 const categoryId = ref('')
 const dishStatus = ref('')
 const isSearch = ref(false)
+const isUnmounted = ref(false)
 const saleStatus = ref([
   { value: 0, label: '停售' },
   { value: 1, label: '启售' }
@@ -174,25 +177,52 @@ const saleStatus = ref([
 
 async function init(isSearchFlag?: boolean) {
   isSearch.value = !!isSearchFlag
-    try {
-      const res = await getDishPage({
-        page: page.value,
-        pageSize: pageSize.value,
-        name: input.value || undefined,
-        categoryId: categoryId.value || undefined,
-        status: dishStatus.value
-      })
-      // console.log('获取菜品列表：', res.data.code)
-      if (res && res.data && res.data.code == 1) {
-        console.log('获取菜品列表：', res)
-        const d = res.data.data || {}
-        tableData.value = d.records || d.items || d.list || []
-        counts.value = Number(d.total || d.totalCount || d.total || 0)
-        // Support multiple backend shapes: { data: { records, total } } or { data: { items, total } } or { data: { list, totalCount } }
+  try {
+    const res = await getDishPage({
+      page: page.value,
+      pageSize: pageSize.value,
+      name: input.value || undefined,
+      categoryId: categoryId.value || undefined,
+      status: dishStatus.value
+    })
+
+    // 组件已卸载则直接返回（防止卸载后更新导致 DOM 访问错误）
+    if (isUnmounted.value) return
+
+    // 兼容后端返回 "1" 或 1
+    if (res && res.data && Number(res.data.code) === 1) {
+      const d = res.data.data || {}
+      const rawList = d.records || d.items || d.list || []
+
+      // 为避免单条数据字段缺失导致渲染抛错，统一填充默认 demo 值
+      function createDefaultRow(r: any) {
+        const nowStr = new Date().toLocaleString()
+        return {
+          id: r?.id ?? `demo-${Math.random().toString(36).slice(2, 8)}`, // <- 使用反引号或字符串包裹
+          name: r?.name || '示例菜名',
+          image: r?.image || '/src/assets/noImg.png',
+          categoryName: r?.categoryName || '默认分类',
+          price: typeof r?.price === 'number' ? r.price : (r?.price ? Number(r.price) : 0),
+          status: r?.status ?? 1,
+          updateTime: r?.updateTime || nowStr,
+          // 保留原有字段，防止丢失其他自定义属性
+          ...r
+        }
       }
-    } catch (err: any) {
-      ElMessage.error('请求出错了：' + err.message)
+
+      tableData.value = rawList.map((it: any) => createDefaultRow(it))
+      counts.value = Number(d.total || d.totalCount || rawList.length || 0)
+    } else {
+      // 后端返回码不为 1，按需处理（比如显示提示，或清空列表）
+      tableData.value = []
+      counts.value = 0
+      // 可视情况：ElMessage.warning(res?.data?.msg || '请求异常')
     }
+  } catch (err: any) {
+    if (!isUnmounted.value) {
+      ElMessage.error('请求出错了：' + (err?.message || err))
+    }
+  }
 }
 
 function initFun() {
@@ -301,6 +331,10 @@ onMounted(() => {
   init()
   getDishCategoryList()
 })
+onBeforeUnmount(() => {
+  isUnmounted.value = true
+})
+
 </script>
 <style lang="scss">
 .el-table-column--selection .cell {
@@ -334,7 +368,7 @@ onMounted(() => {
             display: inline-block;
             font-size: 14px;
             padding: 0 20px;
-            color: $gray-2;
+            // color: white ;
           }
         }
       }
