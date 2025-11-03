@@ -16294,3 +16294,42 @@ body {
     border: 1px solid rgba(0, 0, 0, 0.04);
   }
 }
+
+/* 商家端蓝白风格覆盖（优先级较高） */
+.dashboard-container .container {
+  background: #ffffff !important;
+  border: 1px solid rgba(40, 146, 229, 0.08);
+  box-shadow: 0 8px 24px rgba(40, 146, 229, 0.06);
+  border-radius: 10px;
+  padding: 28px !important;
+}
+
+.dashboard-container h2 {
+  color: $blue;
+}
+
+.continue {
+  background: $blue !important;
+  border-color: $blue !important;
+  color: #fff !important;
+}
+
+.blueBug {
+  color: $blue !important;
+}
+
+.tableBar {
+  .tableLab span {
+    color: $white;
+  }
+}
+
+.tableColumn-status::before {
+  background: $green;
+}
+
+/* 按钮统一蓝色风格 */
+.el-button--primary {
+  background-color: $blue !important;
+  border-color: $blue !important;
+}

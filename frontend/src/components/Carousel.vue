@@ -12,7 +12,7 @@
         <div class="overlay" v-if="idx === currentPos">
           <h2>{{ item.title }}</h2>
           <p>{{ item.desc }}</p>
-          <a :href="item.link" class="banner-btn">{{ item.buttonText }}</a>
+          <button type="button" class="banner-btn" @click.stop.prevent="handleBannerClick(item)">{{ item.buttonText }}</button>
         </div>
       </div>
     </div>
@@ -36,6 +36,13 @@ const props = defineProps({
   interval: { type: Number, default: 3500 },
   autoplay: { type: Boolean, default: true },
 })
+
+const emit = defineEmits(['banner-click'])
+
+function handleBannerClick(item) {
+  // emit to parent with item (originally from images)
+  emit('banner-click', item)
+}
 
 const currentIndex = ref(0)
 const offset = ref(0)
@@ -376,11 +383,12 @@ watch(() => props.images.length, () => {
   color: #fff;
   padding: 10px 20px;
   border-radius: 8px;
+  border-width: 0px;
   text-decoration: none;
   font-weight: 600;
   font-size: 14px;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(255, 107, 0, 0.3);
+  box-shadow: 0 3px 3px rgba(255, 107, 0, 0.3);
 }
 
 .banner-btn:hover {

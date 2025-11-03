@@ -17,5 +17,8 @@ app.use(router)
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
   app.component(key, component)
 }
+app.config.errorHandler = (err, vm, info) => {
+  console.error('Vue 全局错误捕获:', err, info, vm)
+}
 
 app.mount('#app')

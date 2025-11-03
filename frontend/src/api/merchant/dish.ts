@@ -76,6 +76,18 @@ export function dishStatusByStatus(data: any) {
  * 请求：GET /merchant/dish/categories
  * 参数示例：{ merchantId?: string }
  * 返回示例：{ code:1, data: [ { id:'c1', name:'主食'} ] }
+ * 菜品分类包括：后面需要根据这些分类进行菜品的筛选和展示
+ *
+  { label: '招牌套餐'
+  { label: '现煮粉面'
+  { label: '汉堡炸鸡'
+  { label: '奶茶咖啡'
+  { label: '日式便当'
+  { label: '烧烤烤肉'
+  { label: '水果拼盘'
+  { label: '精致甜品'
+  { label: '家常快炒'
+  { label: '粥粉面饭'
  */
 export function getCategoryList(params: any) {
   return request({

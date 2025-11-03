@@ -32,7 +32,7 @@
 
 			<!-- 轮播 banner -->
 <div class="banner-container">
-    <Carousel :images="images" :interval="4000" />
+    <Carousel :images="images" :interval="40000" @banner-click="onBannerClick" />
   </div>
 
 			<!-- 活动卡片 -->
@@ -48,8 +48,8 @@
 					</div>
 				</section>
 
-			<!-- 推荐店铺（瀑布流） -->
-			<section class="recommend">
+            <!-- 推荐店铺（瀑布流） -->
+            <section class="recommend" id="meals">
   			<h3>为你推荐</h3>
         <div class="masonry">
         <div
@@ -124,7 +124,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { addToCart, removeFromCart } from '@/api/user/store'
@@ -179,17 +179,23 @@ const route = useRoute()
 const query = ref('')
 
 const categories = ref([
-  { label: '全部', icon: '/src/assets/icons/all.svg' },
-  { label: '招牌套餐', icon: '/src/assets/icons/setmeal.svg' },
-  { label: '现煮粉面', icon: '/src/assets/icons/noodle.svg' },
-  { label: '汉堡炸鸡', icon: '/src/assets/icons/burger.svg' },
-  { label: '奶茶咖啡', icon: '/src/assets/icons/milktea.svg' },
-  { label: '日式便当', icon: '/src/assets/icons/bento.svg' },
-  { label: '烧烤烤肉', icon: '/src/assets/icons/bbq.svg' },
-  { label: '水果拼盘', icon: '/src/assets/icons/fruit.svg' },
-  { label: '精致甜品', icon: '/src/assets/icons/dessert.svg' },
-  { label: '家常快炒', icon: '/src/assets/icons/stirfry.svg' },
-  { label: '粥粉面饭', icon: '/src/assets/icons/rice.svg' },
+  { label: '全部', icon: '/src/assets/icons/all.svg', key: 'all', filter: null },
+  { label: '招牌套餐', icon: '/src/assets/icons/setmeal.svg', key: 'setmeal', filter: 'setmeal' },
+  { label: '现煮粉面', icon: '/src/assets/icons/noodle.svg', key: 'noodle', filter: 'noodle' },
+  { label: '汉堡炸鸡', icon: '/src/assets/icons/burger.svg', key: 'burger', filter: 'burger' },
+  { label: '奶茶咖啡', icon: '/src/assets/icons/milktea.svg', key: 'milktea', filter: 'milktea' },
+  { label: '日式便当', icon: '/src/assets/icons/bento.svg', key: 'bento', filter: 'bento' },
+  { label: '烧烤烤肉', icon: '/src/assets/icons/bbq.svg', key: 'bbq', filter: 'bbq' },
+  { label: '水果拼盘', icon: '/src/assets/icons/fruit.svg', key: 'fruit', filter: 'fruit' },
+  { label: '精致甜品', icon: '/src/assets/icons/dessert.svg', key: 'dessert', filter: 'dessert' },
+  { label: '家常快炒', icon: '/src/assets/icons/stirfry.svg', key: 'stirfry', filter: 'stirfry' },
+  { label: '粥粉面饭', icon: '/src/assets/icons/rice.svg', key: 'rice', filter: 'rice' },
+  // 骑手端需要的五个额外分类（包括 icon 占位和 filter 标识）
+  { label: '极速配送', icon: '/src/assets/icons/delivery.svg', key: 'fast_delivery', filter: 'fast' },
+  { label: '夜宵优选', icon: '/src/assets/icons/night.svg', key: 'midnight', filter: 'midnight' },
+  { label: '低价专区', icon: '/src/assets/icons/discount.svg', key: 'low_price', filter: 'discount' },
+  { label: '学生专享', icon: '/src/assets/icons/student.svg', key: 'student', filter: 'student' },
+  { label: '同城热卖', icon: '/src/assets/icons/hot.svg', key: 'local_hot', filter: 'hot' },
 ])
 
 // 计算当前激活的分类：优先使用 route.query.cat，其次如果 q 与某个分类 label 相同也视作激活
@@ -307,15 +313,28 @@ function goToStore(s: any) {
 	router.push('/user/store/' + encodeURIComponent(s.name))
 }
 
+const scrollToMeals = (smooth = true) => {
+  nextTick(() => {
+    const el = document.getElementById('meals')
+    if (el) el.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' })
+  })
+}
+
+function onBannerClick(item: any) {
+  if (item && item.link) {
+    // 保持现有路由行为（可能会跳转）
+    router.push(item.link).catch(() => {})
+  }
+  scrollToMeals(true)
+}
+
 function onCategoryClick(c: any) {
-  // 点击分类时：如果搜索框有内容则保留 q，否则清除 q（以便回到全部或单独按分类的视图）
   const qv = (query.value || '').toString().trim()
   const newQuery: any = {}
   if (qv) newQuery.q = qv
-  // 如果选择的是 "全部"，不要传 cat（保持无筛选），否则传 cat
   if (c.label && c.label !== '全部') newQuery.cat = c.label
 
-  router.push({ path: '/user/home', query: newQuery })
+  router.push({ path: '/user/home', query: newQuery }).then(() => scrollToMeals(true)).catch(() => scrollToMeals(true))
 }
 </script>
 

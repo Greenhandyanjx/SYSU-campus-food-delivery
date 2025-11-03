@@ -2,9 +2,13 @@
   <rect width="800" height="400" fill="#fff"/>
   <text x="40" y="80" font-family="sans-serif" font-size="32" fill="#ff6b00" font-weight="700">甜品下午茶 · 买二送一</text>
   <g transform="translate(40,100)">
-    <rect x="0" y="0" width="220" height="140" rx="10" fill="#fff3f0" stroke="#ffd1c1"/>
+    <!-- 添加草莓蛋糕图片 -->
+    <image x="0" y="0" width="220" height="140" href="images/strawberry_cake.jpg" preserveAspectRatio="xMidYMid slice"/>
+    <rect x="0" y="0" width="220" height="140" rx="10" fill="#fff3f0" opacity="0.2" stroke="#ffd1c1"/>
     <text x="15" y="30" font-size="14" fill="#b84a2a">草莓蛋糕</text>
   </g>
-  <circle cx="650" cy="140" r="100" fill="#ffd6e0"/>
+  <!-- 添加甜品拼盘背景 -->
+  <image cx="650" cy="140" width="200" height="200" x="550" y="40" href="images/dessert_platter.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <circle cx="650" cy="140" r="100" fill="#ffd6e0" opacity="0.4"/>
   <text x="600" y="150" font-size="30" fill="#b84a2a">甜</text>
 </svg>

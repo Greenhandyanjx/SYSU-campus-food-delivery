@@ -2,12 +2,16 @@
   <rect width="800" height="400" fill="#fff7e6"/>
   <text x="40" y="80" font-family="sans-serif" font-size="36" fill="#d1495b" font-weight="700">午餐推荐 · 低至¥9.9</text>
   <g transform="translate(40,100)">
-    <rect x="0" y="0" width="280" height="150" rx="12" fill="#fff"/>
+    <!-- 添加招牌牛肉饭图片 -->
+    <image x="0" y="0" width="280" height="150" href="images/beef_rice_set.jpg" preserveAspectRatio="xMidYMid slice"/>
+    <rect x="0" y="0" width="280" height="150" rx="12" fill="#fff" opacity="0.1"/>
     <text x="15" y="30" font-size="14" fill="#444">招牌牛肉饭</text>
     <text x="15" y="55" font-size="12" fill="#999">香辣入味 · 超值套餐</text>
   </g>
   <g transform="translate(500,55)" width="220" height="160">
-    <rect x="0" y="0" width="220" height="160" rx="10" fill="#ffd89b"/>
+    <!-- 添加热销菜品组合图 -->
+    <image x="0" y="0" width="220" height="160" href="images/hot_selling_meal.jpg" preserveAspectRatio="xMidYMid slice"/>
+    <rect x="0" y="0" width="220" height="160" rx="10" fill="#ffd89b" opacity="0.2"/>
     <g transform="translate(15,20)">
       <rect width="55" height="55" rx="6" fill="#ffb86b"/>
       <text x="70" y="35" font-size="16" font-family="sans-serif" fill="#c44">热销</text>

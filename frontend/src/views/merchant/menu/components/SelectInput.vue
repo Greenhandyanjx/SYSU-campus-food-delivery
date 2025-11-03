@@ -40,7 +40,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 
 const props = defineProps<{
   dishFlavorsData?: any[]
@@ -52,7 +52,8 @@ const emit = defineEmits(['update:value', 'select'])
 
 const showDropdown = ref(false)
 const displayText = ref('') // 输入框展示文本
-const selectRef = ref<HTMLElement>()
+// ref 可能为 null，初始化为 null 且类型更宽松以避免运行时访问报错
+const selectRef = ref<HTMLElement | null>(null)
 
 // 响应式的口味列表
 const dishFlavorsData = computed(() => props.dishFlavorsData || [])
@@ -76,14 +77,23 @@ function toggleDropdown(st?: boolean) {
   showDropdown.value = st ?? !showDropdown.value
 }
 
-// 点击外部自动关闭
+// 点击外部自动关闭 — 更稳健的实现，避免在 DOM 已被移除或目标为 text node 时触发异常
 function handleClickOutside(e: MouseEvent) {
-  if (selectRef.value && !selectRef.value.contains(e.target as Node)) {
+  try {
+    const target = e.target as Node | null
+    if (!selectRef.value) return
+    // contains 有时对 text node/特殊节点行为不稳定，加 try/catch 保护
+    if (target && !selectRef.value.contains(target)) {
+      showDropdown.value = false
+    }
+  } catch (err) {
+    // 出现任何异常时安全地关闭下拉，避免未捕获异常导致的页面崩溃
     showDropdown.value = false
   }
 }
 
 onMounted(() => {
+  // 直接注册事件，卸载时移除
   document.addEventListener('click', handleClickOutside)
 })
 onBeforeUnmount(() => {
@@ -92,17 +102,20 @@ onBeforeUnmount(() => {
 
 // 点击选项（多选）
 function toggleOption(type: string, val: string) {
-  const arr = selectedMap.value[type] || []
+  if (!selectedMap.value[type]) {
+    selectedMap.value[type] = []
+  }
+  const arr = selectedMap.value[type]
   const idx = arr.indexOf(val)
   if (idx === -1) {
     arr.push(val)
   } else {
     arr.splice(idx, 1)
   }
-  selectedMap.value[type] = arr
 
-  // 展示文本
+  // 立即计算展示文本并通知父组件（无需等待 nextTick）
   const allValues = Object.entries(selectedMap.value)
+    .filter(([_, v]) => v && v.length)
     .flatMap(([k, v]) => v.map((x) => `${k}:${x}`))
   displayText.value = allValues.join('、')
 
