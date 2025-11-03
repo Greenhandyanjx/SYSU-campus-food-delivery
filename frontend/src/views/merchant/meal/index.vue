@@ -34,7 +34,7 @@
         <el-button type="primary" style="margin-left: 25px" @click="pageQuery()">查询</el-button>
         <div style="float: right">
          <el-button type="danger" @click="handleDelete('B')">批量删除</el-button>
-         <el-button type="info" @click="() => router.push('/merchant/meal/add')">+ 新建套餐</el-button>
+         <el-button type="info" style="background-color: #2892E5;" @click="() => router.push('/merchant/meal/add')">+ 新建套餐</el-button>
         </div>
       </div>
       <el-table :data="records" stripe class="tableBox" @selection-change="handleSelectionChange">
@@ -233,5 +233,6 @@ onMounted(() => {
       }
     }
   }
+  
 }
 </style>

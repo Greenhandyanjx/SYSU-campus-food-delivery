@@ -32,7 +32,7 @@
 
 			<!-- 轮播 banner -->
 <div class="banner-container">
-    <Carousel :images="images" :interval="40000" @banner-click="onBannerClick" />
+    <Carousel :images="images" :interval="4000" @banner-click="onCategoryClick(images)" />
   </div>
 
 			<!-- 活动卡片 -->
@@ -75,7 +75,7 @@
 
   			        <!-- 右侧：推荐菜 -->
   			  <div class="right-dishes">
-            <div class="dish" v-for="(d, i) in s.dishes" :key="i" @click.stop>
+                    <div class="dish" v-for="(d, i) in (s.dishes || []).slice(0,3)" :key="i" @click.stop>
               <div class="dish-img-box">
                 <img class="dish-img" src="/src/assets/noImg.png" alt="dish" />
               </div>
@@ -142,36 +142,41 @@ const images = [
     src: banner1,
     title: '立即下单',
     desc: '外卖下单立减 10 元',
+    lable:'低价满减',
     link: '/order',
     buttonText: '去下单'
   },
   {
     src: banner2,
-    title: '限时优惠',
-    desc: '今日饮品买一送一',
-    link: '/drinks',
-    buttonText: '查看优惠'
+    title: '午餐推荐',
+    desc: '精选套餐，工作日立减 8 元',
+    lable:'午餐推荐',
+    link: '/lunch',
+    buttonText: '立即查看'
   },
   {
     src: banner3,
     title: '新品上线',
     desc: '尝鲜价仅 9.9 元起',
+    lable:'沙拉轻食',
     link: '/new',
     buttonText: '去尝鲜'
   },
   {
     src: banner4,
-    title: '午餐推荐',
-    desc: '精选套餐，工作日立减 8 元',
-    link: '/lunch',
-    buttonText: '立即查看'
+    title: '限时优惠',
+    desc: '今日饮品买一送一',
+    lable:'极速配送',
+    link: '/drinks',
+    buttonText: '查看优惠'
   },
   {
     src: banner5,
-    title: '夜宵来袭',
-    desc: '宵夜加码，买二送一',
-    link: '/night',
-    buttonText: '抢购夜宵'
+    title: '极速配送',
+    desc: '下单立减配送费',
+    lable:'极速配送',
+    link: '/delivery',
+    buttonText: '享受优惠'
   }
 ];
 const router = useRouter()
@@ -190,12 +195,12 @@ const categories = ref([
   { label: '精致甜品', icon: '/src/assets/icons/dessert.svg', key: 'dessert', filter: 'dessert' },
   { label: '家常快炒', icon: '/src/assets/icons/stirfry.svg', key: 'stirfry', filter: 'stirfry' },
   { label: '粥粉面饭', icon: '/src/assets/icons/rice.svg', key: 'rice', filter: 'rice' },
-  // 骑手端需要的五个额外分类（包括 icon 占位和 filter 标识）
+  //五个额外分类
   { label: '极速配送', icon: '/src/assets/icons/delivery.svg', key: 'fast_delivery', filter: 'fast' },
-  { label: '夜宵优选', icon: '/src/assets/icons/night.svg', key: 'midnight', filter: 'midnight' },
-  { label: '低价专区', icon: '/src/assets/icons/discount.svg', key: 'low_price', filter: 'discount' },
-  { label: '学生专享', icon: '/src/assets/icons/student.svg', key: 'student', filter: 'student' },
-  { label: '同城热卖', icon: '/src/assets/icons/hot.svg', key: 'local_hot', filter: 'hot' },
+  { label: '午餐推荐', icon: '/src/assets/icons/lunch.svg', key: 'lunch', filter: 'lunch' },
+  { label: '低价满减', icon: '/src/assets/icons/discount.svg', key: 'low_price', filter: 'discount' },
+  { label: '沙拉轻食', icon: '/src/assets/icons/salad.svg', key: 'salad', filter: 'salad' },
+  { label: '精致下午茶', icon: '/src/assets/icons/afternoon.svg', key: 'afternoon', filter: 'afternoon' },
 ])
 
 // 计算当前激活的分类：优先使用 route.query.cat，其次如果 q 与某个分类 label 相同也视作激活
@@ -224,9 +229,9 @@ const stores = ref([
     minOrder: 15,
     deliveryFee: 2,
     dishes: [
-      { name: '黄焖鸡套餐', price: 18, count: 0, category: '招牌套餐' },
-      { name: '香菇滑鸡饭', price: 16, count: 0, category: '家常快炒' },
-      { name: '青椒土豆丝', price: 10, count: 0, category: '家常快炒' }
+      { name: '黄焖鸡套餐', price: 18, count: 0, categories: ['招牌套餐'], tags: ['招牌','热销'] },
+      { name: '香菇滑鸡饭', price: 16, count: 0, categories: ['家常快炒'], tags: ['家常'] },
+      { name: '青椒土豆丝', price: 10, count: 0, categories: ['家常快炒'], tags: [] }
     ]
   },
   {
@@ -240,9 +245,10 @@ const stores = ref([
     minOrder: 12,
     deliveryFee: 1,
     dishes: [
-      { name: '乌龙奶茶', price: 12, count: 0, category: '奶茶咖啡' },
-      { name: '杨枝甘露', price: 15, count: 0, category: '奶茶咖啡' },
-      { name: '百香果绿茶', price: 11, count: 0, category: '奶茶咖啡' }
+      { name: '乌龙奶茶', price: 12, count: 0, categories: ['奶茶咖啡'], tags: ['清新'] },
+      { name: '杨枝甘露', price: 15, count: 0, categories: ['奶茶咖啡'], tags: ['网红'] },
+      { name: '百香果绿茶', price: 11, count: 0, categories: ['奶茶咖啡','精致下午茶'], tags: ['水果'] },
+      { name: '芝士奶盖', price: 13, count: 0, categories: ['精致下午茶'], tags: ['奶盖'] }
     ]
   }
 ])
@@ -255,7 +261,11 @@ const filteredStores = computed(() => {
   return stores.value.filter((s: any) => {
     if (cat) {
       if (cat === '全部') return true
-      return s.dishes.some((d: any) => d.category === cat)
+      return s.dishes.some((d: any) => {
+        // 兼容旧字段 d.category 或 新结构 d.categories (数组)
+        if (Array.isArray(d.categories)) return d.categories.includes(cat)
+        return d.category === cat
+      })
     }
     return s.name.toLowerCase().includes(qv) || s.dishes.some((d: any) => d.name.toLowerCase().includes(qv))
   })
@@ -320,13 +330,13 @@ const scrollToMeals = (smooth = true) => {
   })
 }
 
-function onBannerClick(item: any) {
-  if (item && item.link) {
-    // 保持现有路由行为（可能会跳转）
-    router.push(item.link).catch(() => {})
-  }
-  scrollToMeals(true)
-}
+// function onBannerClick(item: any) {
+//   if (item && item.link) {
+//     // 保持现有路由行为（可能会跳转）
+//     router.push(item.link).catch(() => {})
+//   }
+//   scrollToMeals(true)
+// }
 
 function onCategoryClick(c: any) {
   const qv = (query.value || '').toString().trim()

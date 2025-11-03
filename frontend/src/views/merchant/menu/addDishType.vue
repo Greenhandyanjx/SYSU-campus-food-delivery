@@ -16,12 +16,14 @@
                       placeholder="请填写菜品名称"
                       maxlength="20" />
           </el-form-item>
-          <el-form-item label="菜品分类:"
-                        prop="categoryId">
-            <el-select v-model="ruleForm.categoryId"
-                       placeholder="请选择菜品分类">
-              <el-option v-for="(item, index) in dishList"
-                         :key="index"
+          <el-form-item label="菜品分类:" prop="categoryIds">
+            <!-- 支持多分类选择 -->
+            <el-select v-model="ruleForm.categoryIds"
+                       placeholder="请选择菜品分类"
+                       multiple
+                       clearable>
+              <el-option v-for="item in dishList"
+                         :key="item.id"
                          :label="item.name"
                          :value="item.id" />
             </el-select>
@@ -34,6 +36,12 @@
                       placeholder="请设置菜品价格" />
           </el-form-item>
         </div>
+        <!-- 标签（可选）：多标签、可输入新标签 -->
+        <el-form-item label="标签:" prop="tags">
+          <el-select v-model="ruleForm.tags" multiple filterable allow-create placeholder="输入或选择标签">
+            <el-option v-for="t in dishTagList" :key="t" :label="t" :value="t" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="口味做法配置:">
           <el-form-item>
             <div class="flavorBox">
@@ -152,6 +160,8 @@ const actionType = ref('')
 const dishList = ref<any[]>([])
 const dishFlavorsData = ref<any[]>([])
 const dishFlavors = ref<any[]>([])
+// 本地标签池（示例），可改为从后端获取
+const dishTagList = ref<any[]>(['推荐', '新品', '促销'])
 // const leftDishFlavors = ref<any[]>([])
 const leftDishFlavors = ref<any[]>([
   { name: '甜味', value: ['无糖', '少糖', '半糖', '多糖', '全糖'] },
@@ -180,7 +190,9 @@ const ruleForm = reactive<any>({
   description: '',
   dishFlavors: [],
   status: true,
-  categoryId: ''
+  // 新数据结构：支持多分类与标签
+  categoryIds: [] as number[],
+  tags: [] as string[]
 })
 
 const rules = reactive({
@@ -254,12 +266,20 @@ async function init() {
   try {
     const res = await queryDishById(route.query.id)
     if (res && res.data && res.data.code === 1) {
-      Object.assign(ruleForm, res.data.data)
-      ruleForm.price = String(res.data.data.price)
-      ruleForm.status = res.data.data.status == '1'
-      dishFlavors.value = (res.data.data.flavors || []).map((obj: any) => ({ ...obj, value: JSON.parse(obj.value) }))
-      getLeftDishFlavors()
-      imageUrl.value = res.data.data.image
+        const data = res.data.data
+        // 兼容后端老字段或新字段（categoryId 或 categories）
+        Object.assign(ruleForm, data)
+        ruleForm.price = String(data.price)
+        ruleForm.status = data.status == '1'
+        // categories 可能为数组或单值 id
+        if (Array.isArray(data.categories)) ruleForm.categoryIds = data.categories
+        else if (data.categoryId) ruleForm.categoryIds = [data.categoryId]
+        // tags 可能为数组或逗号分隔字符串
+        if (Array.isArray(data.tags)) ruleForm.tags = data.tags
+        else if (typeof data.tags === 'string' && data.tags) ruleForm.tags = data.tags.split(',')
+        dishFlavors.value = (data.flavors || []).map((obj: any) => ({ ...obj, value: JSON.parse(obj.value) }))
+        getLeftDishFlavors()
+        imageUrl.value = data.image
     } else {
       ElMessage.error(res.data.msg)
     }
@@ -328,12 +348,20 @@ async function submitForm(formRefName: string, st?: any) {
   const formRef = ruleFormRef.value
   if (formRef) {
     formRef.validate(async (valid: any) => {
-      if (valid) {
+        if (valid) {
         if (!ruleForm.image) return ElMessage.error('菜品图片不能为空')
-        const params: any = { ...ruleForm }
-        params.status = actionType.value === 'add' ? 0 : ruleForm.status ? 1 : 0
-        params.categoryId = ruleForm.categoryId
-        params.flavors = dishFlavors.value.map((obj: any) => ({ ...obj, value: JSON.stringify(obj.value) }))
+        // 构造符合新后端的数据结构：dish + categories + tags
+        const params: any = {
+          ...ruleForm,
+          status: actionType.value === 'add' ? 0 : ruleForm.status ? 1 : 0,
+          // categories 提交为数组（后端会把它映射到中间表）
+          categories: ruleForm.categoryIds || [],
+          // 保持向后兼容：提交第一个 categoryId 到旧接口字段
+          categoryId: (ruleForm.categoryIds && ruleForm.categoryIds[0]) || undefined,
+          // tags 可以作为字符串数组提交
+          tags: ruleForm.tags || [],
+          flavors: dishFlavors.value.map((obj: any) => ({ ...obj, value: JSON.stringify(obj.value) }))
+        }
         delete params.dishFlavors
         try {
           if (actionType.value === 'add') {
@@ -420,14 +448,14 @@ async function submitForm(formRefName: string, st?: any) {
   width: 777px;
 
   .addBut {
-    background: #ffc200;
+    background: $blue;
     display: inline-block;
     padding: 0px 20px;
     border-radius: 3px;
     line-height: 40px;
     cursor: pointer;
     border-radius: 4px;
-    color: #333333;
+    color:white;
     font-weight: 500;
   }
 

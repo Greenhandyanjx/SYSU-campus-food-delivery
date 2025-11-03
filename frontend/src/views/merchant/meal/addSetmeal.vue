@@ -496,14 +496,14 @@ onMounted(() => {
         width: 777px;
 
         .addBut {
-          background: #ffc200;
+          background: $blue;
           display: inline-block;
           padding: 0px 20px;
           border-radius: 3px;
           line-height: 40px;
           cursor: pointer;
           border-radius: 4px;
-          color: #333333;
+          color: white;
           font-weight: 500;
         }
 
