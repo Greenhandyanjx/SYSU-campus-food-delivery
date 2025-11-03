@@ -1,0 +1,8 @@
+app:
+  name: app
+  port: "3000"
+
+database:
+  DSN: "root:87733593yjx@tcp(localhost:3306)/mydatabase?charset=utf8mb4&parseTime=True&loc=Local"
+  max_open_conns: 100
+  max_idle_conns: 10

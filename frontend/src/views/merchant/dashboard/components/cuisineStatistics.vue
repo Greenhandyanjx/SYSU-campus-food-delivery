@@ -1,0 +1,126 @@
+<template>
+  <div class="container">
+    <h2 class="homeTitle">
+      菜品总览
+      <span>
+        <router-link to="/merchant/menu">菜品管理</router-link>
+      </span>
+    </h2>
+
+    <div class="orderviewBox">
+      <ul>
+        <li>
+          <span class="status">
+            <i class="iconfont icon-open"></i> 已启售
+          </span>
+          <span class="num">{{ Number.isFinite(Number(dishesData?.sold)) ? dishesData.sold : 0 }}</span>
+        </li>
+        <li>
+          <span class="status">
+            <i class="iconfont icon-stop"></i> 已停售
+          </span>
+          <span class="num">{{ Number.isFinite(Number(dishesData?.discontinued)) ? dishesData.discontinued : 0 }}</span>
+        </li>
+        <li class="add">
+          <router-link to="/merchant/menu/add">
+            <i class="iconfont icon-plus"></i>
+            <p>新增菜品</p>
+          </router-link>
+        </li>
+      </ul>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { defineProps } from 'vue'
+
+// 接收父组件传来的 props
+const props = defineProps<{
+  dishesData: {
+    sold: number
+    discontinued: number
+  }
+}>()
+</script>
+
+<style scoped lang="scss">
+.container {
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.homeTitle {
+  font-size: 18px;
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.homeTitle span a {
+  color: #409eff;
+  text-decoration: none;
+}
+
+.orderviewBox ul {
+  display: flex;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: 20px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.orderviewBox li {
+  flex: 1;
+  text-align: center;
+  background: #f5f7fa;
+  border-radius: 10px;
+  padding: 20px 0;
+  font-size: 16px;
+  color: #333;
+  transition: all 0.3s ease;
+}
+
+.orderviewBox li:hover {
+  background-color: #e8f3ff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.status {
+  display: block;
+  color: #666;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.num {
+  font-size: 28px;
+  font-weight: 700;
+  color: #409eff;
+}
+
+.add {
+  background-color: #409eff;
+  color: #fff;
+  cursor: pointer;
+}
+
+.add a {
+  color: #fff;
+  text-decoration: none;
+}
+
+.add:hover {
+  background-color: #66b1ff;
+}
+
+.iconfont {
+  margin-right: 6px;
+}
+</style>
