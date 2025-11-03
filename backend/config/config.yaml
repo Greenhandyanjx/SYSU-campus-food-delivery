@@ -3,6 +3,6 @@ app:
   port: "3000"
 
 database:
-  DSN: "root:123456@tcp(localhost:3306)/mydatabase?charset=utf8mb4&parseTime=True&loc=Local"
+  DSN: "yjxnbhh:ZxrnDN3EFgCCdqj6@tcp(mysql2.sqlpub.com:3307)/sysu_campus_food?charset=utf8mb4&parseTime=True&loc=Local"
   max_open_conns: 100
   max_idle_conns: 10
