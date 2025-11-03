@@ -36,4 +36,5 @@ func InitConfig() {
 
 	AppConfig = &cfg
 	InitDB()
+	Initalldb()
 }

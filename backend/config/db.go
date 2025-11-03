@@ -2,6 +2,8 @@ package config
 
 import (
 	"backend/global"
+	"backend/models"
+	"fmt"
 	"log"
 	"time"
 
@@ -26,4 +28,12 @@ func InitDB() {
 	sqldb.SetConnMaxIdleTime(5 * time.Minute)
 	sqldb.SetConnMaxLifetime(30 * time.Minute)
 	global.Db = db
+}
+
+func Initalldb(){
+	if err := global.Db.AutoMigrate(&models.Dish{},&models.Flavor{}); err != nil {
+		fmt.Println("dish,flavor table create fail")
+		return
+	}
+	
 }
