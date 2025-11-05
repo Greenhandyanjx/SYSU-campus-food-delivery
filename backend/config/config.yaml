@@ -1,7 +1,7 @@
 app:
   name: app
   port: "3000"
-
+#这数据库名字???  
 database:
   DSN: "yjxnbhh:ZxrnDN3EFgCCdqj6@tcp(mysql2.sqlpub.com:3307)/sysu_campus_food?charset=utf8mb4&parseTime=True&loc=Local"
   max_open_conns: 100
