@@ -2,38 +2,65 @@
   <div class="address-page">
     <div class="address-header">
       <h2>地址管理</h2>
-      <el-button type="primary" @click="openAdd">新增地址</el-button>
+      <div class="header-actions">
+        <el-input
+          v-model="searchQuery"
+          placeholder="搜索地址或标签"
+          prefix-icon="Search"
+          size="small"
+          class="search-bar"
+        />
+        <el-button type="primary" round @click="openAdd">新增地址</el-button>
+      </div>
     </div>
 
-    <el-tabs v-model="activeTab">
+    <el-tabs v-model="activeTab" stretch>
       <el-tab-pane label="我的收货地址" name="mine">
         <div class="addr-list">
-          <el-card v-for="(a, i) in myAddresses" :key="i" class="addr-card">
+          <el-card
+            v-for="(a, i) in filteredAddresses"
+            :key="i"
+            class="addr-card"
+            shadow="hover"
+          >
             <div class="addr-row">
               <div>
-                <div class="addr-name">{{ a.name }} <span class="addr-tag">{{ a.tag }}</span></div>
+                <div class="addr-name">
+                  {{ a.name }}
+                  <span :class="['addr-tag', tagColor(a.tag)]">{{ a.tag }}</span>
+                  <span v-if="a.isDefault" class="default-tag">默认</span>
+                </div>
                 <div class="addr-detail">{{ a.detail }}</div>
+                <div class="addr-phone">{{ a.phone }}</div>
               </div>
               <div class="addr-actions">
-                <el-button type="text" size="small" @click="editAddress(i)">编辑</el-button>
-                <el-button type="text" size="small" @click="removeAddress(i)">删除</el-button>
+                <el-button text size="small" @click="setDefault(i)">设为默认</el-button>
+                <el-button text size="small" @click="editAddress(i)">编辑</el-button>
+                <el-button text size="small" @click="removeAddress(i)">删除</el-button>
               </div>
             </div>
           </el-card>
-          <div v-if="myAddresses.length === 0" class="empty">你还没有收货地址，点击“新增地址”添加。</div>
+          <div v-if="filteredAddresses.length === 0" class="empty">
+            暂无匹配地址，点击“新增地址”添加。
+          </div>
         </div>
       </el-tab-pane>
 
       <el-tab-pane label="附近地址" name="nearby">
         <div class="nearby-list">
-          <el-card v-for="(a, i) in nearbyAddresses" :key="i" class="addr-card">
+          <el-card
+            v-for="(a, i) in nearbyAddresses"
+            :key="i"
+            class="addr-card"
+            shadow="hover"
+          >
             <div class="addr-row">
               <div>
                 <div class="addr-name">{{ a.name }}</div>
                 <div class="addr-detail">{{ a.detail }}</div>
               </div>
               <div class="addr-actions">
-                <el-button type="primary" size="small" @click="useNearby(a)">选择</el-button>
+                <el-button type="primary" size="small" round @click="useNearby(a)">选择</el-button>
               </div>
             </div>
           </el-card>
@@ -41,21 +68,110 @@
       </el-tab-pane>
     </el-tabs>
 
-    <el-dialog :model-value="showDialog" title="新增地址" width="520px">
-      <el-form :model="form">
-        <el-form-item label="收货人" label-width="80px">
-          <el-input v-model="form.name" placeholder="姓名" />
-        </el-form-item>
-        <el-form-item label="电话" label-width="80px">
-          <el-input v-model="form.phone" placeholder="手机号码" />
-        </el-form-item>
-        <el-form-item label="地址" label-width="80px">
-          <el-input v-model="form.detail" placeholder="省/市/区 详细地址" />
-        </el-form-item>
-        <el-form-item label="标签" label-width="80px">
-          <el-input v-model="form.tag" placeholder="例如：家、公司" />
-        </el-form-item>
-      </el-form>
+    <!-- 新增地址弹窗 -->
+    <el-dialog v-model="showDialog" title="新增地址" width="700px" class="dialog-box" @opened="initMap">
+      <el-form-item class="map-form-item">
+        <div class="map-panel">
+          <!-- 操作引导提示
+          <div class="map-guide">
+            <el-alert
+              title="选择收货地址的方法"
+              type="info"
+              :closable="false"
+              class="guide-alert"
+            >
+              <template #default>
+                <ol class="guide-steps">
+                  <li>方式一：在地图上<strong>点击</strong>或<strong>拖动图标</strong>到具体位置</li>
+                  <li>方式二：在下方搜索框<strong>输入地址关键词</strong>后从建议列表选择</li>
+                  <li>方式三：点击右下角<strong>定位图标</strong>快速定位到当前位置</li>
+                </ol>
+              </template>
+            </el-alert>
+          </div> -->
+
+          <!-- 大地图容器 -->
+          <div class="map-container-wrap">
+            <div id="mapContainer" class="map-container"></div>
+            <!-- 右下角定位按钮 -->
+            <div class="map-controls">
+              <el-button
+                class="locate-btn-fixed"
+                type="primary"
+                size="small"
+                circle
+                title="定位到当前位置"
+                @click="locateCurrent"
+              >
+                <el-icon><Location /></el-icon>
+              </el-button>
+            </div>
+          </div>
+
+          <!-- 搜索区域 -->
+          <div class="search-panel">
+            <el-input
+              v-model="searchKeyword"
+              placeholder="搜索地点、小区或街道名称"
+              clearable
+              class="map-search-input"
+              @input="onKeywordInput"
+            >
+              <template #prefix>
+                <el-icon><Search /></el-icon>
+              </template>
+            </el-input>
+            
+            <!-- 候选项 -->
+            <div v-if="suggestions.length" class="suggestion-box">
+              <div
+                v-for="(item, idx) in suggestions"
+                :key="idx"
+                class="suggestion-item"
+                @click="selectSuggestion(item)"
+              >
+                <div class="suggestion-content">
+                  <div class="suggestion-name">{{ item.name }}</div>
+                  <div class="suggestion-address">{{ formatTipAddress(item) }}</div>
+                </div>
+                <el-icon class="suggestion-icon"><Location /></el-icon>
+              </div>
+            </div>
+
+            <!-- 下面显示最终选中的详细地址（可长文本换行） -->
+            <div class="final-address" v-if="form.detail">
+              <div class="label">已选择地址：</div>
+              <div class="address-text">{{ form.detail }}</div>
+            </div>
+          </div>
+        </div>
+      </el-form-item>
+      <div class="floating-form">
+        <div class="form-item" :class="{ 'has-value': form.name }">
+          <input type="text" v-model="form.name" id="name" required>
+          <label for="name" :class="{ 'active': form.name }">收货人</label>
+        </div>
+
+        <div class="form-item" :class="{ 'has-value': form.phone }">
+          <input type="tel" v-model="form.phone" id="phone" required>
+          <label for="phone" :class="{ 'active': form.phone }">手机号码</label>
+        </div>
+
+        <div class="form-item" :class="{ 'has-value': form.detail }">
+          <input type="text" v-model="form.detail" id="address" required readonly>
+          <label for="address" :class="{ 'active': form.detail }">收货地址</label>
+        </div>
+
+        <div class="form-item" :class="{ 'has-value': form.tag }">
+          <select v-model="form.tag" id="tag" required>
+            <option value="" disabled selected></option>
+            <option value="家">家</option>
+            <option value="公司">公司</option>
+            <option value="学校">学校</option>
+          </select>
+          <label for="tag" :class="{ 'active': form.tag }">地址标签</label>
+        </div>
+      </div>
       <template #footer>
         <el-button @click="closeDialog">取消</el-button>
         <el-button type="primary" @click="saveAddress">保存</el-button>
@@ -65,15 +181,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, nextTick } from 'vue'
+import { ElMessage } from 'element-plus'
 
-const router = useRouter()
 const activeTab = ref('mine')
 const showDialog = ref(false)
+const searchQuery = ref('')
 
 const myAddresses = ref<any[]>([
-  { name: '张三', phone: '13800000000', detail: '广东省 广州市 中山大学', tag: '家' },
+  { name: '张三', phone: '13800000000', detail: '广东省 广州市 中山大学', tag: '家', isDefault: true },
 ])
 
 const nearbyAddresses = ref<any[]>([
@@ -81,18 +197,20 @@ const nearbyAddresses = ref<any[]>([
   { name: '学生食堂', detail: '第一食堂附近' },
 ])
 
-const form = ref({ name: '', phone: '', detail: '', tag: '' })
+const form = ref({ name: '', phone: '', detail: '', tag: '', isDefault: false, lng: 0, lat: 0 })
 
 function openAdd() {
-  form.value = { name: '', phone: '', detail: '', tag: '' }
+  form.value = { name: '', phone: '', detail: '', tag: '', isDefault: false, lng: 0, lat: 0 }
   showDialog.value = true
+  nextTick(() => {
+    setTimeout(initMap, 300)
+  })
 }
-
 function closeDialog() { showDialog.value = false }
 
 function saveAddress() {
   if (!form.value.detail || !form.value.name) {
-    // 简单校验
+    ElMessage.warning('请填写完整的收货信息')
     return
   }
   myAddresses.value.push({ ...form.value })
@@ -103,33 +221,602 @@ function editAddress(i: number) {
   const a = myAddresses.value[i]
   form.value = { ...a }
   showDialog.value = true
-  // 删除原条目，保存时会追加或你也可以替换
+  nextTick(initMap)
   myAddresses.value.splice(i, 1)
 }
 
 function removeAddress(i: number) { myAddresses.value.splice(i, 1) }
 
 function useNearby(a: any) {
-  // 将附近地址作为收货地址示例加入我的地址并切到我的地址页
-  myAddresses.value.push({ name: a.name, phone: '', detail: a.detail, tag: '附近' })
+  myAddresses.value.push({ name: a.name, phone: '', detail: a.detail, tag: '附近', isDefault: false })
   activeTab.value = 'mine'
 }
 
-// 如果从 navbar 跳过来时需要特殊处理，可在 mounted 中读取 route.query
+function setDefault(i: number) {
+  myAddresses.value.forEach(addr => (addr.isDefault = false))
+  myAddresses.value[i].isDefault = true
+}
 
+const filteredAddresses = computed(() =>
+  myAddresses.value.filter(a =>
+    a.name.includes(searchQuery.value) ||
+    a.detail.includes(searchQuery.value) ||
+    a.tag.includes(searchQuery.value)
+  )
+)
+
+function tagColor(tag: string) {
+  return {
+    '家': 'tag-home',
+    '公司': 'tag-work',
+    '学校': 'tag-school',
+    '附近': 'tag-near',
+  }[tag] || 'tag-default'
+}
+// 高德地图相关逻辑
+let map: any, marker: any, geocoder: any
+function initMap() {
+  // 从 Vite 环境变量读取高德 key 与安全码
+  // 请在项目根创建本地 .env 或 .env.local 并添加 VITE_AMAP_KEY 与 VITE_AMAP_SECURITY_CODE
+  const amapKey = (import.meta.env.VITE_AMAP_KEY as string) || ''
+  const amapSec = (import.meta.env.VITE_AMAP_SECURITY_CODE as string) || ''
+
+  if (amapSec) {
+    ;(window as any)._AMapSecurityConfig = {
+      securityJsCode: amapSec,
+    }
+  } else {
+    // 若未配置安全码，仅打印提示；高德控制台可通过 referer 限制来保护 key
+    console.warn('VITE_AMAP_SECURITY_CODE 未配置，建议在本地 .env 中设置安全码以增强安全性')
+  }
+
+  const AMapScriptUrl = `https://webapi.amap.com/maps?v=2.0&key=${amapKey}`
+  const old = document.getElementById('mapContainer')
+  if (!old) return
+  old.innerHTML = '' // 清空旧内容
+
+  // 确保容器可见后初始化
+  setTimeout(() => {
+    if (!(window as any).AMap) {
+      const script = document.createElement('script')
+      script.src = AMapScriptUrl
+      script.onload = setupMap
+      document.head.appendChild(script)
+    } else {
+      setupMap()
+    }
+  }, 300)
+}
+
+
+function setupMap() {
+  const AMap = (window as any).AMap
+  console.log('✅ setupMap 初始化成功')
+
+  // ✅ 保证 Geocoder 插件加载
+  AMap.plugin('AMap.Geocoder', () => {
+    geocoder = new AMap.Geocoder({
+      city: '全国', // 可选：限制查询范围
+    })
+    console.log('🟢 Geocoder 已加载')
+  })
+
+  map = new AMap.Map('mapContainer', {
+    zoom: 15,
+    center: [113.562, 22.256],
+  })
+
+  marker = new AMap.Marker({
+    position: [113.562, 22.256],
+    draggable: true,
+    map,
+  })
+
+  map.on('click', (e: any) => updateLocation(e.lnglat))
+  marker.on('dragend', (e: any) => updateLocation(e.lnglat))
+
+  // ✅ 地图显示修正
+  setTimeout(() => map.resize(), 500)
+  initAutoComplete()
+}
+let autoComplete: any, placeSearch: any
+const searchKeyword = ref('')      // 输入关键字（单独控制）
+const suggestions = ref<any[]>([])
+
+// 初始化 AutoComplete + PlaceSearch（在 setupMap() 完成后调用 initAutoComplete()）
+function initAutoComplete() {
+  const AMap = (window as any).AMap
+  if (!AMap) return
+  AMap.plugin(['AMap.AutoComplete', 'AMap.PlaceSearch'], () => {
+    // AutoComplete 用于获取 tips (提示)
+    autoComplete = new AMap.AutoComplete({
+      city: '全国',
+      // 不直接绑定 DOM input id：我们用 programmatic search
+    })
+    // PlaceSearch 用于进一步查询详情（可选，不必须）
+    placeSearch = new AMap.PlaceSearch({
+      city: '全国',
+      // map, // 不自动渲染到地图，除非需要
+    })
+    console.log('🟢 AutoComplete & PlaceSearch 已初始化')
+  })
+}
+
+// 当用户输入关键字时调用（带简单去抖）
+let _keywordTimer: any = null
+function onKeywordInput(val: string) {
+  if (_keywordTimer) clearTimeout(_keywordTimer)
+  if (!val || !autoComplete) {
+    suggestions.value = []
+    return
+  }
+  _keywordTimer = setTimeout(() => {
+    autoComplete.search(val, (status: string, result: any) => {
+      if (status === 'complete' && result?.tips) {
+        suggestions.value = result.tips.filter((t: any) => !!t.location)
+      } else {
+        suggestions.value = []
+      }
+    })
+  }, 250)
+}
+
+function formatTipAddress(tip: any) {
+  const parts: string[] = []
+  if (tip.district) parts.push(tip.district)
+  if (tip.address) parts.push(tip.address)
+  if (parts.length === 0 && tip.name) parts.push(tip.name)
+  return parts.join(' ')
+}
+
+function selectSuggestion(item: any) {
+  const name = item.name || ''
+  const district = item.district || ''
+  const address = item.address || ''
+  let final = name
+  if (district) final += ' ' + district
+  if (address) final += ' ' + address
+
+  form.value.detail = final.trim()
+  searchKeyword.value = form.value.detail  // 更新输入框为最终地址
+
+  if (item.location) {
+    const lng = item.location.lng
+    const lat = item.location.lat
+    form.value.lng = lng
+    form.value.lat = lat
+    if (map) {
+      map.setCenter([lng, lat])
+      marker && marker.setPosition([lng, lat])
+      setTimeout(() => map && map.resize(), 300)
+    }
+  } else {
+    if (placeSearch && name) {
+      placeSearch.search(name, (status: string, result: any) => {
+        if (status === 'complete' && result?.poiList?.poifs?.length) {
+          const p = result.poiList.poifs[0]
+          if (p.location) {
+            const lng = p.location.lng
+            const lat = p.location.lat
+            form.value.lng = lng
+            form.value.lat = lat
+            map.setCenter([lng, lat])
+            marker && marker.setPosition([lng, lat])
+          }
+        }
+      })
+    }
+  }
+  suggestions.value = []
+}
+function updateLocation(lnglat: any) {
+  if (!geocoder) {
+    console.warn('⚠️ Geocoder 未初始化')
+    return
+  }
+
+  // 更新经纬度 + Marker
+  form.value.lng = lnglat.lng
+  form.value.lat = lnglat.lat
+  marker.setPosition([lnglat.lng, lnglat.lat])
+
+  // 使用 Geocoder 获取地址
+  geocoder.getAddress([lnglat.lng, lnglat.lat], (status: string, result: any) => {
+    if (status === 'complete' && result.regeocode) {
+      const addr = result.regeocode.formattedAddress
+      console.log('逆地理解析成功：', addr)
+      form.value.detail = addr // ✅ 自动填充输入框
+    } else {
+      console.warn('逆地理解析失败', status, result)
+    }
+  })
+}
+
+
+// --------- 当前定位逻辑 ----------
+function locateCurrent() {
+  if (!navigator.geolocation) {
+    ElMessage.error('当前浏览器不支持定位功能')
+    return
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const { latitude, longitude } = pos.coords
+      const lnglat = { lng: longitude, lat: latitude }
+      map.setCenter([longitude, latitude])
+      updateLocation(lnglat)
+      ElMessage.success('定位成功，已更新到当前位置')
+    },
+    err => {
+      switch (err.code) {
+        case err.PERMISSION_DENIED:
+          ElMessage.error('定位权限被拒绝')
+          break
+        case err.POSITION_UNAVAILABLE:
+          ElMessage.error('位置信息不可用')
+          break
+        case err.TIMEOUT:
+          ElMessage.error('定位超时')
+          break
+        default:
+          ElMessage.error('定位失败，请重试')
+      }
+    },
+    { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+  )
+}
 </script>
 
 <style scoped>
-.address-page { padding: 18px }
-.address-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px }
-.addr-list { display:flex; flex-direction:column; gap:10px }
-.addr-card { padding: 12px }
-.addr-row { display:flex; justify-content:space-between; align-items:center }
-.addr-name { font-weight:600 }
-.addr-tag { margin-left:8px; padding:2px 8px; background:#eaf6ff; color:#154b75; border-radius:6px; font-size:12px }
-.addr-detail { color:#666; margin-top:6px }
-.empty { color:#999; padding:18px; background:#fff; border-radius:8px }
+/* 浮动标签表单样式 */
+.floating-form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-top: 20px;
+}
 
-.nearby-list { display:flex; flex-direction:column; gap:8px }
+.form-item {
+  position: relative;
+  width: 100%;
+}
 
+.form-item input,
+.form-item select {
+  width: 100%;
+  padding: 16px;
+  font-size: 15px;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  background: white;
+  transition: all 0.3s;
+  outline: none;
+  color: #2c3e50;
+}
+
+.form-item input[readonly] {
+  background-color: white;
+  cursor: default;
+}
+
+.form-item select {
+  appearance: none;
+  padding-right: 30px;
+  cursor: pointer;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L1 3h10z'/%3E%3C/svg%3E") no-repeat right 12px center;
+}
+
+.form-item label {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 15px;
+  color: #909399;
+  pointer-events: none;
+  transition: 0.2s ease all;
+  background: white;
+  padding: 0 4px;
+}
+
+.form-item input:focus,
+.form-item select:focus {
+  border-color: #409EFF;
+  box-shadow: 0 0 0 2px rgba(64,158,255,0.2);
+}
+
+.form-item input:focus ~ label,
+.form-item select:focus ~ label,
+.form-item.has-value label,
+.form-item label.active {
+  top: 0;
+  font-size: 12px;
+  color: #409EFF;
+  transform: translateY(-50%);
+}
+
+.form-item input:focus::placeholder {
+  color: transparent;
+}
+
+/* 地址管理头部样式优化 */
+.address-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+  justify-content: flex-end;
+}
+
+.search-bar {
+  width: 280px;
+  margin-right: auto; /* 将搜索框推到左边 */
+}
+
+/* 地址卡片样式优化 */
+.addr-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.addr-card {
+  border: 1px solid #e4e7ed;
+  border-radius: 12px;
+  transition: all 0.3s ease;
+}
+
+.addr-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* 标签样式优化 */
+.addr-tag, .default-tag {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.address-page {
+  max-width: 700px;
+  margin: 0 auto;
+  background: #fff;
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.05);
+  font-family: 'Arial', sans-serif;
+}
+.addr-list, .nearby-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.addr-card {
+  border-radius: 10px;
+  transition: all 0.2s;
+}
+.addr-card:hover {
+  transform: translateY(-2px);
+}
+
+.addr-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.addr-name {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.addr-detail {
+  color: #666;
+  margin-top: 6px;
+}
+
+.addr-phone {
+  color: #888;
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.addr-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+}
+
+.addr-tag {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.tag-home { background: #fffbe6; color: #ffb400; }
+.tag-work { background: #e6f7ff; color: #409eff; }
+.tag-school { background: #f0f9eb; color: #67c23a; }
+.tag-near { background: #fdf6ec; color: #e6a23c; }
+.default-tag {
+  margin-left: 6px;
+  padding: 2px 6px;
+  background: #ffd54f;
+  color: #222;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.empty {
+  color: #999;
+  padding: 24px;
+  background: #fafafa;
+  text-align: center;
+  border-radius: 8px;
+}
+.dialog-box {
+  border-radius: 12px;
+}
+/* 地图面板与控件样式 */
+.map-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.guide-alert {
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.guide-steps {
+  margin: 8px 0 4px 20px;
+  padding: 0;
+  color: #666;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.guide-steps strong {
+  color: #333;
+  font-weight: 600;
+}
+
+.map-container-wrap {
+  position: relative;
+  width: 100%;
+  height: 400px;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.map-container {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(180deg, #f8fafb, #eef2f6);
+}
+
+.map-controls {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 110;
+}
+
+.locate-btn-fixed {
+  background: #fff !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border: none !important;
+}
+
+.locate-btn-fixed:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.search-panel {
+  position: relative;
+  width: 100%;
+}
+
+.map-search-input {
+  width: 100%;
+}
+
+.suggestion-box {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 2000;
+}
+
+.suggestion-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.suggestion-item:hover {
+  background: #f5f7fa;
+}
+
+.suggestion-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.suggestion-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.suggestion-address {
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.suggestion-icon {
+  color: #909399;
+  font-size: 16px;
+  margin-left: 12px;
+}
+
+.final-address {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+}
+
+.final-address .label {
+  font-size: 13px;
+  color: #909399;
+  margin-bottom: 6px;
+}
+
+.final-address .address-text {
+  color: #2c3e50;
+  line-height: 1.5;
+  word-break: break-all;
+  white-space: pre-wrap;
+}
 </style>

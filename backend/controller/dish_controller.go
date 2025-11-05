@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 func Dish_add(ctx*gin.Context){
@@ -16,13 +17,6 @@ func Dish_add(ctx*gin.Context){
 		ctx.JSON(http.StatusBadRequest,gin.H{
 			"code":"400",
 			"msg":"binding error",
-		})
-		return
-	}
-	if err := global.Db.AutoMigrate(&dish,&models.Flavor{}); err != nil {
-		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"code": "500",
-			"msg": "table create error",
 		})
 		return
 	}
@@ -234,4 +228,51 @@ func Edit_DishStatus_By_Status(c *gin.Context) {
     }
     // 返回成功响应
     c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"success": true}})
+}
+
+//GET /merchant/dish/list
+// queryDishList 处理基于条件查询菜品的请求
+func QueryDishList(c *gin.Context) {
+    // 获取请求参数
+    categoryId := c.Query("categoryId")
+    name := c.Query("name")
+    // 构建查询条件
+    var dishes []models.Dish
+    db := global.Db
+    if categoryId != "" && name != "" {
+        db = db.Where("category_id = ? AND name LIKE ?", categoryId, "%"+name+"%")
+    } else if categoryId != "" {
+        db = db.Where("category_id = ?", categoryId)
+    } else if name != "" {
+        db = db.Where("name LIKE ?", "%"+name+"%")
+    }
+    // 执行查询
+    if err := db.Find(&dishes).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "查询菜品失败", "data": nil})
+        return
+    }
+    // 返回成功响应
+    c.JSON(http.StatusOK, gin.H{"code": 1, "data": dishes})
+}
+
+// queryDishById 处理查询单个菜品详情的请求
+func Get_Dish_ById(c *gin.Context) {
+    // 获取请求参数中的 id
+    id := c.Query("id")
+    if id == "" {
+        c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "请求参数中缺少 id 字段", "data": nil})
+        return
+    }
+    // 构建查询条件
+    var dish models.Dish
+    if err := global.Db.First(&dish, id).Error; err != nil {
+        if err == gorm.ErrRecordNotFound {
+            c.JSON(http.StatusNotFound, gin.H{"code": 0, "message": "菜品不存在", "data": nil})
+        } else {
+            c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "查询菜品失败", "data": nil})
+        }
+        return
+    }
+    // 返回成功响应
+    c.JSON(http.StatusOK, gin.H{"code": 1, "data": dish})
 }
