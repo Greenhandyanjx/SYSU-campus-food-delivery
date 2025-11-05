@@ -1,7 +1,7 @@
 <template>
   <div class="addBrand-container">
     <div class="container">
-      <el-form ref="ruleForm"
+  <el-form ref="ruleFormRef"
                :model="ruleForm"
                :rules="rules"
                :inline="true"
@@ -34,10 +34,8 @@
           </el-form-item>
         </div>
         <div>
-          <el-form-item label="套餐菜品:"
-                        required>
-            <el-form-item>
-              <div class="addDish">
+          <el-form-item label="套餐菜品:" required>
+            <div class="addDish">
                 <span v-if="dishTable.length == 0"
                       class="addBut"
                       @click="openAddDish('new')">
@@ -92,7 +90,6 @@
                   </div>
                 </div>
               </div>
-            </el-form-item>
           </el-form-item>
         </div>
         <div>
@@ -133,18 +130,18 @@
         </div>
       </el-form>
     </div>
-    <el-dialog v-if="dialogVisible"
-               title="添加菜品"
-               class="addDishList"
-               :visible.sync="dialogVisible"
-               width="60%"
-               :before-close="handleClose">
-      <AddDish v-if="dialogVisible"
-               ref="adddish"
-               :check-list="checkList"
-               :seach-key="seachKey"
-               :dish-list="dishList"
-               @checkList="getCheckList" />
+  <el-dialog
+         title="添加菜品"
+         class="addDishList"
+         v-model:visible="dialogVisible"
+         width="60%"
+         :before-close="handleClose">
+    <AddDish
+         ref="adddish"
+         :check-list="checkList"
+         :seach-key="seachKey"
+         :dish-list="dishList"
+         @checkList="getCheckList" />
       <template #footer class="dialog-footer">
         <el-button @click="handleClose">取 消</el-button>
         <el-button type="primary"
