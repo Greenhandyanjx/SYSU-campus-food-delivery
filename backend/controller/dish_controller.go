@@ -13,6 +13,7 @@ import (
 
 func Dish_add(ctx*gin.Context){
     var dish models.Dish
+    baseUserID := ctx.MustGet("baseUserID").(uint)
     if err := ctx.ShouldBind(&dish); err!= nil {
 		ctx.JSON(http.StatusBadRequest,gin.H{
 			"code":"400",
@@ -20,6 +21,8 @@ func Dish_add(ctx*gin.Context){
 		})
 		return
 	}
+    // 将用户ID赋给菜品的MerchantID字段
+	dish.MerchantID = baseUserID
 	if err := global.Db.Create(&dish).Error; err != nil {
 		log.Printf("数据库插入错误: %v", err) // 记录详细错误日志
 		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
