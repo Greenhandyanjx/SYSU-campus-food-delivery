@@ -265,7 +265,7 @@ function selectHandle(...args: any[]) {
 async function init() {
   try {
     const res = await queryDishById(route.query.id)
-    if (res && res.data && res.data.code === 1) {
+    if (res && res.data && Number(res.data.code) === 1) {
         const data = res.data.data
         // 兼容后端老字段或新字段（categoryId 或 categories）
         Object.assign(ruleForm, data)
@@ -383,7 +383,7 @@ async function submitForm(formRefName: string, st?: any) {
             delete params.createTime
             delete params.updateTime
             const res = await editDish(params)
-            if (res && res.data && res.data.code === 1) {
+            if (res && res.data && Number(res.data.code) === 1) {
               router.push({ path: '/menu' })
               ElMessage.success('菜品修改成功！')
             } else {

@@ -1,16 +1,16 @@
 <template>
   <div class="dashboard-container">
-    <div class="container" style="width: 80%; margin:0 auto">
+    <div class="container" >
       <div class="tableBar">
-        <label style="margin-right: 5px">
+        <label style="margin-right: 5px; margin-left: 15px;">
           套餐名称: 
         </label>
-        <el-input v-model="name" placeholder="请输入套餐名称" style="width: 15%" />
+        <el-input v-model="name" placeholder="请输入套餐名称" style="width: 20%" />
 
-        <label style="margin-right: 5px">
+        <label style="margin-right: 5px;margin-left: 15px;">
           套餐分类: 
         </label>
-        <el-select v-model="categoryId" placeholder="请选择">
+        <el-select v-model="categoryId" placeholder="请选择" style="width: 20%">
           <el-option
             v-for="item in options"
             :key="item.id"
@@ -19,10 +19,10 @@
           </el-option>
         </el-select>
 
-        <label style="margin-right: 5px">
+        <label style="margin-right: 5px;margin-left: 15px;" >
           售卖状态: 
         </label>
-        <el-select v-model="status" placeholder="请选择">
+        <el-select v-model="status" placeholder="请选择" style="width: 15%">
           <el-option
             v-for="item in statusArr"
             :key="item.value"
@@ -32,7 +32,7 @@
         </el-select>
 
         <el-button type="primary" style="margin-left: 25px" @click="pageQuery()">查询</el-button>
-        <div style="float: right">
+        <div style="float: right ;margin-top: 10px;">
          <el-button type="danger" @click="handleDelete('B')">批量删除</el-button>
          <el-button type="info" style="background-color: #2892E5;" @click="() => router.push('/merchant/meal/add')">+ 新建套餐</el-button>
         </div>
@@ -198,7 +198,7 @@ onMounted(() => {
       background: #fff;
       position: relative;
       z-index: 1;
-      padding: 30px 28px;
+      // padding: 30px 28px;
       border-radius: 4px;
 
       .tableBar {
