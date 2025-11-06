@@ -81,11 +81,11 @@
                          width="25" />
         <el-table-column prop="name"
                          label="菜品名称" />
-        <el-table-column prop="image"
+        <el-table-column prop="imageUrl"
                          label="图片">
           <template #default="{ row }">
             <el-image style="width: 80px; height: 40px; border: none; cursor: pointer"
-                      :src="row.image">
+                      :src="row.imageUrl">
               <template #error>
                 <div class="image-slot">
                   <img src="/src/assets/noImg.png"
@@ -183,6 +183,7 @@ const dishState = ref<any>('')
 const dishCategoryOptions = ref<any[]>([])
 const categoryId = ref('')
 const dishStatus = ref('')
+const imageUrl = ref('')
 const isSearch = ref(false)
 const isUnmounted = ref(false)
 const saleStatus = ref([
@@ -198,6 +199,7 @@ async function init(isSearchFlag?: boolean) {
       pageSize: pageSize.value,
       name: input.value || undefined,
       categoryId: categoryId.value || undefined,
+      imageUrl: imageUrl.value || undefined,
       status: dishStatus.value
     })
 
@@ -215,7 +217,7 @@ async function init(isSearchFlag?: boolean) {
         return {
           id: r?.id ?? `demo-${Math.random().toString(36).slice(2, 8)}`, // <- 使用反引号或字符串包裹
           name: r?.name || '示例菜名',
-          image: r?.image || '/src/assets/noImg.png',
+          imageUrl: r?.imageUrl || '/src/assets/noImg.png',
           categoryName: r?.categoryName || '默认分类',
           price: typeof r?.price === 'number' ? r.price : (r?.price ? Number(r.price) : 0),
           status: r?.status ?? 1,

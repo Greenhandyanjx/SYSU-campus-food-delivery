@@ -340,8 +340,10 @@ function getFlavorListHand() {
   // console.log('口味数据:', dishFlavorsData.value)
 }
 
-function imageChange(value: any) {
-  ruleForm.image = value
+function imageChange(url: string) {
+console.log('父组件接收到上传事件，新的图片地址：', value)
+  imageUrl.value = url
+  ruleForm.image = url
 }
 
 async function submitForm(formRefName: string, st?: any) {
