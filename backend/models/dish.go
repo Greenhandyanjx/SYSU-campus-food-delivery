@@ -8,7 +8,7 @@ type Dish struct {
 	DishName    string   `gorm:"unique" json:"name" form:"dish_name"`
 	Price       string   `gorm:"not null" json:"price" form:"price"`
 	Description string   `gorm:"not null" json:"description" form:"description"`
-	MerchantID  int      `gorm:"not null" json:"merchant_id" form:"merchant_id"`
+	MerchantID  uint      `gorm:"not null" json:"merchant_id" form:"merchant_id"`
 	Tastes      string   `gorm:"not null" json:"tastes" form:"tastes"`
 	ImagePath   string   `gorm:"type:varchar(255)" json:"image" form:"image_path"` // 存储图片相对路径
 	Category    int      `gorm:"not null" json:"categoryId" form:"category"`

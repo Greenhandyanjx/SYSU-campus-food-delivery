@@ -50,7 +50,7 @@
                 </el-table-column>
                 <el-table-column label="份数" align="center">
                   <template #default="{ row }">
-                    <el-input-number v-model="row.copies" size="small" :min="1" :max="99" />
+                    <el-input-number v-model.number="row.copies" size="small" :min="1" :max="99" controls-position="right"/>
                   </template>
                 </el-table-column>
                 <el-table-column label="操作" width="120" align="center">
@@ -148,7 +148,7 @@ const ruleForm = reactive<any>({
   categoryId: '',
   price: '',
   code: '',
-  image: '',
+  image: '/images/fresh_salad_set.jpg',
   description: '',
   dishList: [],
   status: true,
@@ -172,7 +172,7 @@ const rules = {
     trigger: 'blur'
   },
   categoryId: { required: true, message: '请选择套餐分类', trigger: 'change' },
-  image: { required: true, message: '菜品图片不能为空' },
+  image: { required: false, message: '套餐图片不能为空' },
   price: {
     required: true,
     validator: (rules: any, value: string, callback: Function) => {
@@ -188,23 +188,40 @@ const rules = {
   code: { required: true, message: '请输入商品码', trigger: 'blur' }
 }
 
+// ✅ 修复版 init()
 function init() {
   if (route.query.id) {
     querySetmealById(route.query.id).then((res: any) => {
       if (res && res.data && Number(res.data.code) === 1) {
+        // 同步基础表单
         Object.assign(ruleForm, res.data.data)
         ruleForm.status = res.data.data.status == '1'
-        ;(ruleForm as any).price = res.data.data.price
+        ruleForm.price = res.data.data.price
         imageUrl.value = res.data.data.image
-        checkList.value = res.data.data.setmealDishes
-        dishTable.value = [...(res.data.data.setmealDishes || [])].reverse()
+
+        // 初始化菜品列表
+        const dishes = res.data.data.setmealDishes || []
+
+        // ✅ 确保 copies 是数字且响应式
+        checkList.value = dishes.map((dish: any) => ({
+          ...dish,
+          copies: Number(dish.copies) || 1
+        }))
+
+        // dishTable 同步（保持顺序一致）
+        dishTable.value = [...checkList.value]
+
+        // 分类回显
         ruleForm.categoryId = res.data.data.categoryId
       } else {
-        ElMessage.error(res.data.msg)
+        ElMessage.error(res.data.msg || '加载套餐信息失败')
       }
+    }).catch((err: any) => {
+      ElMessage.error('加载出错：' + err.message)
     })
   }
 }
+
 
 function getDishTypeList() {
   getCategoryList({ type: 2 }).then((res: any) => {
@@ -234,11 +251,17 @@ function handleClose() {
   checkList.value = JSON.parse(JSON.stringify(dishTable.value))
 }
 
+// ✅ 修复版 addTableList()
 function addTableList() {
-  dishTable.value = JSON.parse(JSON.stringify(checkList.value))
-  dishTable.value.forEach((n: any) => (n.copies = 1))
+  // 使用 map 保持响应性，避免 JSON 深拷贝
+  dishTable.value = checkList.value.map((item: any) => ({
+    ...item,
+    // 确保 copies 为 number 类型
+    copies: Number(item.copies) || 1
+  }))
   dialogVisible.value = false
 }
+
 
 function submitForm(formName: string, st: any) {
   ;(ruleFormRef.value as any)?.validate((valid: any) => {
@@ -273,13 +296,13 @@ function submitForm(formName: string, st: any) {
                   categoryId: '',
                   price: '',
                   code: '',
-                  image: '',
+                  image: '/images/fresh_salad_set.jpg',
                   description: '',
                   dishList: [],
                   status: true,
                   id: '',
                 })
-                imageUrl.value = ''
+                imageUrl.value = '/images/fresh_salad_set.jpg'
               }
             } else {
               ElMessage.error(res.data.msg)
