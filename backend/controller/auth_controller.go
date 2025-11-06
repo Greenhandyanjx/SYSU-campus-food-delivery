@@ -274,6 +274,7 @@ func Register_Merchant(ctx *gin.Context) {
 func Login(ctx *gin.Context) {
 	var input models.LoginInput
 	if err := ctx.ShouldBindJSON(&input); err != nil {
+		fmt.Println("Login bind error:", err)
 		ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 			"code": "0",
 			"msg":"server or input error",
