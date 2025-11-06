@@ -1,19 +1,19 @@
 
 <template>
   <div class="dashboard-container">
-    <div class="container" style="width: 80%; margin:0 auto">
+  <div class="container main-container">
       <div class="tableBar">
-        <label style="margin-right: 10px">菜品名称：</label>
+        <label style="margin-right: 10px ;width: 100px;">菜品名称：</label>
   <el-input v-model="input"
       placeholder="请填写菜品名称"
-      style="width: 14%"
+      style="width: 30%"
       clearable
       @clear="init"
       @keyup.enter="initFun" />
 
         <label style="margin-right: 10px; margin-left: 20px">菜品分类：</label>
         <el-select v-model="categoryId"
-                   style="width: 14%"
+                   style="width: 30%"
                    placeholder="请选择"
                    clearable
                    @clear="init">
@@ -25,7 +25,7 @@
 
         <label style="margin-right: 10px; margin-left: 20px">售卖状态：</label>
         <el-select v-model="dishStatus"
-                   style="width: 14%"
+                   style="width: 20%"
                    placeholder="请选择"
                    clearable
                    @clear="init">
@@ -39,22 +39,37 @@
           查询
         </el-button>
 
-        <div class="tableLab">
-          <span class="delBut non"
-                @click="deleteHandle('批量', null)">批量删除</span>
-          <!-- <span class="blueBug non" @click="statusHandle('1')">批量启售</span>
-          <span
-            style="border: none"
-            class="delBut non"
-            @click="statusHandle('0')"
-            >批量停售</span
-          > -->
-          <el-button type="primary"
-                     style="margin-left: 15px;color: white;"
-                     @click="addDishtype('add')">
-            + 新建菜品
-          </el-button>
-        </div>
+      </div>
+      <div style="float: right;">
+        <!-- <span class="delBut non"
+              @click="deleteHandle('批量', null)">批量删除</span>
+        <span class="blueBug non" @click="statusHandle('1')">批量启售</span>
+        <span
+          style="border: none"
+          class="delBut non"
+          @click="statusHandle('0')"
+          >批量停售</span
+        > -->
+        <el-button type="primary"
+                   style="margin-left: 15px;color: white;"
+                   @click="deleteHandle('批量', null)">
+          批量删除
+        </el-button>
+        <el-button type="primary"
+                   style="margin-left: 15px;color: white;"
+                   @click="statusHandle('1')">
+          批量启售
+        </el-button>
+        <el-button type="primary"
+                   style="margin-left: 15px;color: white;"
+                   @click="statusHandle('0')">
+         批量停售
+        </el-button>
+        <el-button type="primary"
+                   style="margin-left: 15px;color: white;"
+                   @click="addDishtype('add')">
+          + 新建菜品
+        </el-button>
       </div>
   <el-table v-if="tableData.length"
     :data="tableData"
@@ -254,7 +269,7 @@ function deleteHandle(type: string, id: any) {
     .then(async () => {
       try {
         const res = await deleteDish(type === '批量' ? checkList.value.join(',') : id)
-        if (res && res.data && res.data.code === 1) {
+        if (res && res.data && Number(res.data.code) === 1) {
           ElMessage.success('删除成功！')
           init()
         } else {
@@ -270,7 +285,7 @@ function deleteHandle(type: string, id: any) {
 async function getDishCategoryList() {
   try {
     const res = await fetchDishCategoryList({ type: 1 })
-    if (res && res.data && res.data.code === 1) {
+    if (res && res.data && Number(res.data.code) === 1) {
       dishCategoryOptions.value = (res.data?.data || []).map((item: any) => ({ value: item.id, label: item.name }))
     }
   } catch (err) {
@@ -300,7 +315,7 @@ function statusHandle(row: any) {
     .then(async () => {
       try {
         const res = await dishStatusByStatus(dishState.value)
-        if (res && res.data && res.data.code === 1) {
+        if (res && res.data && Number(res.data.code) === 1) {
           ElMessage.success('菜品状态已经更改成功！')
           init()
         } else {
@@ -345,38 +360,77 @@ onBeforeUnmount(() => {
 .dashboard {
   &-container {
     margin: 30px;
-    .container {
+    .container, .main-container {
       background: #fff;
       position: relative;
       z-index: 1;
-      padding: 30px 28px;
-      border-radius: 4px;
-      //查询黑色按钮样式
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 26px 32px;
+      border-radius: 10px;
+      box-shadow: 0 8px 30px rgba(20,24,31,0.06);
+
+      // 查询按钮样式
       .normal-btn {
         background: #333333;
         color: white;
         margin-left: 20px;
+        padding: 8px 16px;
+        border-radius: 6px;
       }
+
       .tableBar {
-        margin-bottom: 20px;
+        margin-bottom: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+
+        .left-controls {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
 
         .tableLab {
-          /* float layout is used here; remove display:inline-block to avoid linter warning */
-          float: right;
+          display: flex;
+          align-items: center;
+          gap: 12px;
           span {
             cursor: pointer;
             display: inline-block;
             font-size: 14px;
-            padding: 0 20px;
-            // color: white ;
+            padding: 6px 12px;
+            color: #666;
+            border-radius: 6px;
+            transition: background 0.2s;
           }
         }
       }
+
+      /* 修复 input placeholder 显示被裁切的问题，以及统一输入高度 */
+      .el-input,
+      .el-select {
+        margin-right: 8px;
+      }
+
+      .el-input .el-input__inner,
+      .el-select .el-input__inner {
+        height: 38px;
+        line-height: 38px;
+        padding: 0 12px;
+        box-sizing: border-box;
+        border-radius: 6px;
+      }
+
       .tableBox {
         width: 100%;
         border: 1px solid $gray-5;
         border-bottom: 0;
+        border-radius: 8px;
+        overflow: hidden;
       }
+
       .pageList {
         text-align: center;
         margin-top: 30px;
