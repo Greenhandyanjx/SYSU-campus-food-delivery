@@ -1,11 +1,11 @@
 <template>
-  <div class="dashboard-container" style="width: 80%; margin:0 auto">
+  <div class="dashboard-container">
     <TabChange
       :order-statics="orderStatics"
       :default-activity="defaultActivity"
       @tabChange="change"
     />
-    <div class="container" :class="{ hContainer: tableData.length }" >
+  <div class="container main-container" :class="{ hContainer: tableData.length }" >
       <!-- 搜索项 -->
       <div class="tableBar">
         <label style="margin-right: 10px">订单号：</label>
@@ -130,8 +130,8 @@
           label="实收金额"
           align="center"
         >
-          <template slot-scope="{ row }">
-            <span>￥{{ (row.amount.toFixed(2) * 100) / 100 }}</span>
+          <template #default="{ row }">
+            <span>￥{{ (typeof row.amount === 'number' ? row.amount : Number(row.amount || 0)).toFixed(2) }}</span>
           </template>
         </el-table-column>
         <el-table-column
@@ -612,22 +612,46 @@ async function init(activeIndex = 0, isSearchFlag?: boolean) {
   try {
     const res = await getOrderDetailPage({ ...params })
     if (res.data.code === 1) {
-      tableData.value = res.data.data.records || []
+      const data = res.data.data || {}
+      const raw = data.records || []
+      // 格式化时间字段，防止前端出现 NaN 或 undefined
+      tableData.value = raw.map((it: any) => {
+        const safeFormat = (v: any) => {
+          if (!v && v !== 0) return ''
+          try {
+            const d = new Date(v)
+            if (isNaN(d.getTime())) return String(v)
+            return d.toLocaleString()
+          } catch (e) {
+            return String(v)
+          }
+        }
+        return {
+          ...it,
+          orderTime: safeFormat(it.orderTime),
+          cancelTime: safeFormat(it.cancelTime),
+          deliveryTime: safeFormat(it.deliveryTime),
+          estimatedDeliveryTime: safeFormat(it.estimatedDeliveryTime),
+          checkoutTime: safeFormat(it.checkoutTime),
+          // 保证 amount 是数字或空字符串，避免模板中 toFixed 报错
+          amount: typeof it.amount === 'number' ? it.amount : it.amount ? Number(it.amount) : 0,
+        }
+      })
       orderStatus.value = activeIndex
-      counts.value = Number(res.data.data.total)
+      counts.value = Number(data.total || data.totalCount || tableData.value.length || 0)
       getOrderListBy3Status()
       if (
         dialogOrderStatus.value === 2 &&
         orderStatus.value === 2 &&
         isAutoNext.value &&
         !isTableOperateBtn.value &&
-        res.data.data.records.length > 1
+        tableData.value.length > 1
       ) {
-        const r = res.data.data.records[0]
+        const r = tableData.value[0]
         goDetail(r.id, r.status, r)
       }
     } else {
-      ElMessage.error(res.data.msg)
+      ElMessage.error(res?.data?.msg || '获取订单列表失败')
     }
   } catch (err: any) {
     ElMessage.error('请求出错了：' + err.message)
@@ -749,47 +773,64 @@ function handleCurrentChange(val: any) {
     margin: 30px;
     // height: 100%;
     min-height: 700px;
-    .container {
+    .container, .main-container {
       background: #fff;
       position: relative;
       z-index: 1;
-      padding: 30px 28px;
-      border-radius: 4px;
-      // min-height: 650px;
-      height: calc(100% - 55px);
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 28px 32px;
+      border-radius: 10px;
+      box-shadow: 0 8px 30px rgba(20,24,31,0.06);
 
       .tableBar {
-        // display: flex;
-        margin-bottom: 20px;
-        justify-content: space-between;
+        margin-bottom: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 12px;
+      }
 
-        .tableLab {
-          span {
-            cursor: pointer;
-            display: inline-block;
-            font-size: 14px;
-            padding: 0 20px;
-            color: white;
-            border-right: solid 1px $gray-4;
-          }
+      .tableLab {
+        span {
+          cursor: pointer;
+          display: inline-block;
+          font-size: 14px;
+          padding: 0 20px;
+          color: white;
+          border-right: solid 1px $gray-4;
         }
+      }
+
+      /* Ensure inputs have consistent height so placeholder text isn't clipped */
+      .tableBar ::v-deep .el-input__inner,
+      .tableBar ::v-deep .el-select .el-input__inner,
+      .tableBar ::v-deep .el-date-editor--daterange .el-input__inner {
+        height: 40px;
+        line-height: 40px;
+        padding: 8px 12px;
+        border-radius: 6px;
       }
 
       .tableBox {
         width: 100%;
         border: 1px solid $gray-5;
         border-bottom: 0;
+        border-radius: 8px;
+        overflow: hidden;
       }
 
       .pageList {
         text-align: center;
         margin-top: 30px;
       }
-      //查询黑色按钮样式
       .normal-btn {
         background: #333333;
         color: white;
         margin-left: 20px;
+        padding: 8px 14px;
+        border-radius: 6px;
       }
     }
     .hContainer {
