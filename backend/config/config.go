@@ -19,7 +19,7 @@ type Config struct {
 var AppConfig *Config
 
 // InitConfig reads configuration from file and unmarshals into AppConfig
-func InitConfig() {
+func InitConfig(){
 	viper.SetConfigName("config")
 	viper.SetConfigType("yml")
 	viper.AddConfigPath("config/")
@@ -36,5 +36,9 @@ func InitConfig() {
 
 	AppConfig = &cfg
 	InitDB()
-	Initalldb()
+	//只运行一次
+	// err:= Initalldb()
+	// if(err!=nil){
+	// 	panic(err)
+	// }
 }
