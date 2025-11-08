@@ -14,6 +14,7 @@ type Dish struct {
 	Category    int      `gorm:"not null" json:"categoryId" form:"category"`
 	Flavors     []Flavor `json:"flavors"`
 	Status      int      `gorm:"not null;default:1" json:"status" form:"status"`
+	Tags []string `gorm:"type:json;serializer:json" json:"tags" form:"tags"`
 	gorm.Model
 }
 

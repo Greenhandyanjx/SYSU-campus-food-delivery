@@ -3,6 +3,7 @@ package controller
 import (
 	"backend/global"
 	"backend/models"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 func Dish_add(ctx *gin.Context) {
 	var dish models.Dish
 	baseUserID := ctx.MustGet("baseUserID").(uint)
+	fmt.Println(ctx.Request.Body)
 	if err := ctx.ShouldBind(&dish); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code": "400",
