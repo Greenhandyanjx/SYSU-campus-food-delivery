@@ -62,8 +62,8 @@
                     <div class="itTit">
                       <!-- :dish-flavors-data="filterDishFlavorsData()" -->
 <SelectInput
-  v-model:value="selectedFlavors"
   :dishFlavorsData="leftDishFlavors"
+  :index="index"
   @select="selectHandle"
 />
 
@@ -175,7 +175,7 @@ const inputStyle = { flex: 1 }
 // headers removed
 const ruleFormRef = ref<any>(null)
 
-const selectedFlavors = ref([])
+// removed shared selectedFlavors binding; each SelectInput manages its own selections
 
 // function selectHandle(type, index, val) {
 //   console.log('选中口味:', type, val)
@@ -254,12 +254,18 @@ function getLeftDishFlavors() {
   leftDishFlavors.value = arr
 }
 
-function selectHandle(...args: any[]) {
-  const [val, key, ind] = args
-  const arrDate = [...dishFlavors.value]
-  const idx = dishFlavorsData.value.findIndex((item: any) => item.name === val)
-  arrDate[key] = JSON.parse(JSON.stringify(dishFlavorsData.value[idx]))
-  dishFlavors.value = arrDate
+function selectHandle(type: string, idx: number, val: string) {
+  // type: flavor group name, idx: index of the current flavor item, val: option toggled
+  if (typeof idx !== 'number' || idx < 0) return
+  const arr = [...dishFlavors.value]
+  if (!arr[idx]) arr[idx] = { name: '', value: [] }
+  // set the flavor group name
+  arr[idx].name = type
+  if (!Array.isArray(arr[idx].value)) arr[idx].value = []
+  const pos = arr[idx].value.indexOf(val)
+  if (pos === -1) arr[idx].value.push(val)
+  else arr[idx].value.splice(pos, 1)
+  dishFlavors.value = arr
 }
 
 async function init() {
@@ -340,10 +346,8 @@ function getFlavorListHand() {
   // console.log('口味数据:', dishFlavorsData.value)
 }
 
-function imageChange(url: string) {
-console.log('父组件接收到上传事件，新的图片地址：', value)
-  imageUrl.value = url
-  ruleForm.image = url
+function imageChange(value: any) {
+  ruleForm.image = value
 }
 
 async function submitForm(formRefName: string, st?: any) {
