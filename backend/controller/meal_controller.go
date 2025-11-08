@@ -17,10 +17,20 @@ import (
 func Meal_add(ctx *gin.Context) {
     var meal models.Meal
     // 中间结构体用于绑定
+    type SetmealDish struct {
+        Copies int    `json:"copies"`
+        Name   string `json:"name"`
+        Price  string `json:"price"`
+    }
     type mealRequest struct {
-        DishIDs []int `json:"dishids"`
+        DishIDs []SetmealDish `json:"setmealDishes"`
     }
     var request mealRequest
+    //
+    baseUserID := ctx.MustGet("baseUserID").(uint)
+    // 将用户ID赋给套餐的MerchantID字段
+	meal.MerchantID = baseUserID
+    //第一次绑定
     body, _ := io.ReadAll(ctx.Request.Body)
     fmt.Println("Request Body:", string(body)) // 打印请求体内容
     ctx.Request.Body = io.NopCloser(bytes.NewBuffer(body)) // 重置请求体
@@ -33,9 +43,10 @@ func Meal_add(ctx *gin.Context) {
         })
         return
     }
+
     fmt.Println("Request Body:", string(body)) // 打印请求体内容
    	ctx.Request.Body = io.NopCloser(bytes.NewBuffer(body))
-    // 获取 dish_ids
+    // 获取 dish_ids，第二次绑定
     if err := ctx.ShouldBindJSON(&request); err != nil {
         // 打印绑定错误的详细信息
 		log.Printf("绑定错误: %v", err.Error())
@@ -46,15 +57,8 @@ func Meal_add(ctx *gin.Context) {
         return
     }
 
-    // 创建 meal
-	if err := global.Db.Table("meals").AutoMigrate(&models.Meal{}); err != nil {
-		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"code": "500",
-			"msg": "table create error",
-		})
-		return
-	}
     if err := global.Db.Create(&meal).Error; err != nil {
+        fmt.Println(err.Error())
         ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
             "code": "500",
             "msg":  "服务器内部错误，请稍后再试",
@@ -62,22 +66,28 @@ func Meal_add(ctx *gin.Context) {
         return
     }
 
-    // 创建关联关系
-    if err := global.Db.Table("sysu_campus_food.meal_dishes").AutoMigrate(&models.MealDish{}); err != nil {
-		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"code": "500",
-			"msg": "table md create error",
-		})
-		return
-	}
-    dishIDs := request.DishIDs
-    for _, dishID := range dishIDs {
+    // 创建 meal_dish 关联关系
+    for _, setmealDish := range request.DishIDs {
         mealDish := models.MealDish{
-            MealID:  meal.ID,
-            DishID:  dishID,
+            MealID: meal.ID,
+            DishID: 0, // 假设 setmealDish 中没有 DishID，你需要从 DishList 或其他地方获取
+            Num:    setmealDish.Copies,
         }
+        // 如果 setmealDish 中有 DishID，可以直接使用
+        // 如果没有，你需要根据 setmealDish.Name 或其他信息查询 DishID
+        // 这里假设你需要通过名称查询 DishID
+        var dish models.Dish
+        if err := global.Db.Where("dish_name = ?", setmealDish.Name).First(&dish).Error; err != nil {
+            log.Printf("查询 DishID 错误: %v", err)
+            ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+                "code": "500",
+                "msg":  "查询 DishID 错误",
+            })
+            return
+        }
+        mealDish.DishID = dish.ID
         if err := global.Db.Create(&mealDish).Error; err != nil {
-            log.Printf("创建关联关系错误: %v", err) // 记录详细错误日志
+            log.Printf("创建关联关系错误: %v", err)
             ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
                 "code": "500",
                 "msg":  "服务器内部错误，请稍后再试",

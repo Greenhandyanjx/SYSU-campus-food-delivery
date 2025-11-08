@@ -54,7 +54,7 @@
               </div>
             </template>
         </el-table-column>
-        <el-table-column prop="updateTime" label="最后操作时间" />
+        <el-table-column prop="UpdatedAt  " label="最后操作时间" />
         <el-table-column label="操作" align="center" width="250px">
             <template #default="{ row }">
               <el-button type="text" size="small"> 修改 </el-button>
@@ -108,9 +108,10 @@ function pageQuery() {
     categoryId: categoryId.value
   }
   getSetmealPage(params).then((res: any) => {
-    if (res.data.code === 1) {
-      total.value = res.data.data.total
-      records.value = res.data.data.records
+    if (Number(res.data.code) === 1) {
+      console.log('套餐列表：', res.data.data)  // ✅ 在 return 之前打印
+      total.value = res.data.data.total || res.data.data.items.length
+      records.value = res.data.data.items || []
     }
   })
 }
