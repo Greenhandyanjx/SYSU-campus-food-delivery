@@ -28,15 +28,12 @@ func SetRouter() *gin.Engine {
 		noAuth.POST("/user/register", controller.Register_User)
 		noAuth.POST("/rider/register", controller.Register_Rider)
 		noAuth.POST("/merchant/register", controller.Register_Merchant)
-		
-		
+
 		noAuth.GET("/merchant/category/list", controller.Get_category)
 		noAuth.GET("/merchant/dish/categories", controller.Get_category)
 		noAuth.GET("/merchant/dishes/page", controller.Get_dishes)
-		
-		
-		noAuth.GET("/merchant/common/download", controller. CommonDownload)
-		
+
+		noAuth.GET("/merchant/common/download", controller.CommonDownload)
 
 	}
 	// 创建一个需要中间件的组
@@ -44,14 +41,14 @@ func SetRouter() *gin.Engine {
 	auth.Use(midware.AuthMiddleware())
 	{
 		auth.POST("/change_password", controller.ChangePassword)
-		
+
 		auth.POST("/merchant/dish/add", controller.Dish_add)
 		auth.POST("/merchant/dish/edit", controller.Edit_dish)
 		auth.POST("/merchant/dish/delete", controller.Delete_dish)
 		auth.GET("/merchant/dish/list", controller.QueryDishList)
 		auth.GET("/merchant/dish/query", controller.Get_Dish_ById)
 		auth.POST("/merchant/dish/status", controller.Edit_DishStatus_By_Status)
-		
+
 		auth.POST("/common/upload", controller.UploadImage)
 
 		auth.POST("/merchant/meal/add", controller.Meal_add)
