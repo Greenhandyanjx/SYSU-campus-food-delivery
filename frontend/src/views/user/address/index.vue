@@ -1,7 +1,7 @@
 <template>
   <div class="address-page">
     <div class="address-header">
-      <h2>地址管理</h2>
+      <h2 class="page-title" style="margin-right: 10px;">地址管理</h2>
       <div class="header-actions">
         <el-input
           v-model="searchQuery"
@@ -10,7 +10,7 @@
           size="small"
           class="search-bar"
         />
-        <el-button type="primary" round @click="openAdd">新增地址</el-button>
+        <el-button type="primary" round class="add-btn" @click="openAdd"> 新增地址</el-button>
       </div>
     </div>
 
@@ -57,7 +57,7 @@
             <div class="addr-row">
               <div>
                 <div class="addr-name">{{ a.name }}</div>
-                <div class="addr-detail">{{ a.detail }}</div>
+                  <div class="addr-detail">{{ a.detail }} <span class="addr-distance" v-if="a.distanceText">· {{ a.distanceText }}</span></div>
               </div>
               <div class="addr-actions">
                 <el-button type="primary" size="small" round @click="useNearby(a)">选择</el-button>
@@ -69,7 +69,16 @@
     </el-tabs>
 
     <!-- 新增地址弹窗 -->
-    <el-dialog v-model="showDialog" title="新增地址" width="700px" class="dialog-box" @opened="initMap">
+    <el-dialog v-model="showDialog" width="700px" class="dialog-box" @opened="initMap">
+      <template #title>
+        <div class="dialog-title">
+          <span class="dialog-title-icon">📍</span>
+          <div>
+            <div class="dialog-title-main">新增地址</div>
+            <div class="dialog-title-sub">选择位置或输入详细地址以便骑手准确配送</div>
+          </div>
+        </div>
+      </template>
       <el-form-item class="map-form-item">
         <div class="map-panel">
           <!-- 操作引导提示
@@ -103,7 +112,7 @@
                 title="定位到当前位置"
                 @click="locateCurrent"
               >
-                <el-icon><Location /></el-icon>
+                <img src="@/assets/icons/icon_locate.svg" class="locate-icon" alt="定位" />
               </el-button>
             </div>
           </div>
@@ -181,9 +190,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-
+(window as any)._AMapSecurityConfig = {
+  securityJsCode: import.meta.env.VITE_AMAP_SECURITY_CODE || ''
+}
 const activeTab = ref('mine')
 const showDialog = ref(false)
 const searchQuery = ref('')
@@ -228,7 +239,12 @@ function editAddress(i: number) {
 function removeAddress(i: number) { myAddresses.value.splice(i, 1) }
 
 function useNearby(a: any) {
-  myAddresses.value.push({ name: a.name, phone: '', detail: a.detail, tag: '附近', isDefault: false })
+  // 尝试从 localStorage 获取用户默认联系人信息（若有）以便快速添加
+  const defaultName = localStorage.getItem('userName') || ''
+  const defaultPhone = localStorage.getItem('userPhone') || ''
+  const nameToUse = defaultName || a.name || ''
+  const phoneToUse = defaultPhone || ''
+  myAddresses.value.push({ name: nameToUse, phone: phoneToUse, detail: a.detail, tag: '附近', isDefault: false })
   activeTab.value = 'mine'
 }
 
@@ -303,11 +319,11 @@ function setupMap() {
 
   map = new AMap.Map('mapContainer', {
     zoom: 15,
-    center: [113.562, 22.256],
+    center: [113.582, 22.352],
   })
 
   marker = new AMap.Marker({
-    position: [113.562, 22.256],
+    position: [113.582, 22.352],
     draggable: true,
     map,
   })
@@ -322,6 +338,22 @@ function setupMap() {
 let autoComplete: any, placeSearch: any
 const searchKeyword = ref('')      // 输入关键字（单独控制）
 const suggestions = ref<any[]>([])
+
+// 计算两个经纬度点之间的距离（米），使用 Haversine 公式
+function distanceMeters(lon1: number, lat1: number, lon2: number, lat2: number) {
+  const toRad = (deg: number) => (deg * Math.PI) / 180
+  const R = 6371000 // 地球半径（米）
+  const dLat = toRad(lat2 - lat1)
+  const dLon = toRad(lon2 - lon1)
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
+}
+
+function formatDistance(meters: number) {
+  if (meters < 1000) return Math.round(meters) + 'm'
+  return (meters / 1000).toFixed(1) + 'km'
+}
 
 // 初始化 AutoComplete + PlaceSearch（在 setupMap() 完成后调用 initAutoComplete()）
 function initAutoComplete() {
@@ -426,6 +458,9 @@ function updateLocation(lnglat: any) {
       const addr = result.regeocode.formattedAddress
       console.log('逆地理解析成功：', addr)
       form.value.detail = addr // ✅ 自动填充输入框
+      // 点击地图后清空搜索框与建议列表，让最终选择更明确
+      searchKeyword.value = ''
+      suggestions.value = []
     } else {
       console.warn('逆地理解析失败', status, result)
     }
@@ -466,9 +501,147 @@ function locateCurrent() {
     { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
   )
 }
+
+// 加载高德脚本（如未加载），并查询当前位置周边 POI 填充 nearbyAddresses
+async function loadNearbyAddresses() {
+  console.log('📍 开始执行 loadNearbyAddresses')
+
+  if (!navigator.geolocation) {
+    ElMessage.error('浏览器不支持定位，无法获取附近地址')
+    return
+  }
+
+  navigator.geolocation.getCurrentPosition(async pos => {
+    console.log('✅ 成功获取定位', pos.coords)
+    const lng = pos.coords.longitude
+    const lat = pos.coords.latitude
+    
+    const amapKey = import.meta.env.VITE_AMAP_KEY || ''
+    const AMapScriptUrl = `https://webapi.amap.com/maps?v=2.0&key=${amapKey}`
+    console.log('🧭 加载地图脚本:', AMapScriptUrl)
+
+    try {
+      if (!(window as any).AMap) {
+        await new Promise<void>((resolve, reject) => {
+          const s = document.createElement('script')
+          s.src = AMapScriptUrl
+          s.onload = () => resolve()
+          s.onerror = () => reject(new Error('加载高德地图脚本失败'))
+          document.head.appendChild(s)
+        })
+      }
+    } catch (e) {
+      console.error('❌ 加载地图失败:', e)
+      return
+    }
+
+    const AMap = (window as any).AMap
+    if (!AMap) {
+      ElMessage.error('未能初始化高德地图')
+      return
+    }
+    console.log('✅ AMap 初始化成功')
+
+    await new Promise((resolve) => {
+      const check = setInterval(() => {
+        if (AMap.plugin) {
+          clearInterval(check)
+          resolve(true)
+        }
+      }, 100)
+    })
+    console.log('✅ AMap.plugin 可用')
+
+    try {
+      AMap.plugin('AMap.PlaceSearch', () => {
+        console.log('✅ PlaceSearch 插件加载成功')
+        const ps = new AMap.PlaceSearch({ city: '全国' })
+        ps.searchNearBy('', [lng, lat], 2000, (status: string, result: any) => {
+          console.log('📍 AMap 返回结果:', status, result)
+          if (status === 'complete' && result?.poiList?.pois?.length) {
+            const list = result.poiList.pois.map((p: any) => {
+              const loc = p.location || p._location || { lng: 0, lat: 0 }
+              const dist = distanceMeters(lng, lat, loc.lng, loc.lat)
+              return {
+                name: p.name || '',
+                detail: p.address || (p.district ? `${p.district} ${p.name}` : p.name),
+                location: loc,
+                distance: dist,
+                distanceText: formatDistance(dist),
+              }
+            })
+            // 按距离升序排序
+            list.sort((a: any, b: any) => (a.distance || 0) - (b.distance || 0))
+            nearbyAddresses.value = list
+          } else {
+            nearbyAddresses.value = []
+          }
+        })
+      })
+    } catch (err: any) {
+      console.warn('查询附近地址失败', err)
+      nearbyAddresses.value = []
+    }
+  }, err => {
+    console.warn('❌ 定位失败', err)
+    ElMessage.error('获取定位失败')
+  }, { enableHighAccuracy: true, timeout: 5000 })
+}
+
+// 当用户切换标签到 nearby 时，自动加载附近地址
+watch(activeTab, (v) => {
+  console.log('当前切换 tab：', v)
+  if (v === 'nearby') {
+    nearbyAddresses.value = []
+    loadNearbyAddresses()
+  }
+})
 </script>
 
 <style scoped>
+/* 页面标题与新增按钮美化 */
+.page-title {
+  font-size: 20px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.title-badge {
+  font-size: 12px;
+  color: #fff;
+  background: linear-gradient(90deg,#ffd54f,#ffb400);
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+.add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+}
+.add-btn .plus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff3e0;
+  color: #ff9800;
+  font-weight: 700;
+}
+
+.dialog-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.dialog-title-icon { font-size: 18px }
+.dialog-title-main { font-weight: 700; font-size: 16px }
+.dialog-title-sub { font-size: 12px; color: #909399 }
+
 /* 浮动标签表单样式 */
 .floating-form {
   display: flex;
@@ -629,6 +802,11 @@ function locateCurrent() {
   color: #666;
   margin-top: 6px;
 }
+.addr-distance {
+  color: #999;
+  font-size: 12px;
+  margin-left: 6px;
+}
 
 .addr-phone {
   color: #888;
@@ -731,6 +909,12 @@ function locateCurrent() {
 .locate-btn-fixed:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.locate-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-block;
 }
 
 .search-panel {

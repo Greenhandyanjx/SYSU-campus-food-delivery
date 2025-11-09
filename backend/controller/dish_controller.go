@@ -140,10 +140,10 @@ func Edit_dish(c *gin.Context) {
 		Price:       dish.Price,
 		Description: dish.Description,
 		MerchantID:  dish.MerchantID,
-		Tastes:      dish.Tastes,
-		ImagePath:   dish.ImagePath,
-		Category:    dish.Category,
-		Status:      dish.Status,
+		// Tastes:      dish.Tastes,
+		ImagePath: dish.ImagePath,
+		Category:  dish.Category,
+		Status:    dish.Status,
 	}).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "更新菜品信息失败", "data": nil})
 		return
