@@ -64,5 +64,9 @@ func Initalldb() error{
 		fmt.Println("mealdish table create fail")
 		return err
 	}
+	if err := global.Db.Table("orders").AutoMigrate(&models.Order{}); err != nil {
+		fmt.Println("orders table create fail")
+		return err
+	}
 	return nil
 }
