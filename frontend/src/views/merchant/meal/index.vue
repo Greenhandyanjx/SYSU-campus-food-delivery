@@ -61,7 +61,7 @@
               <el-button type="text" size="small" @click="handleStartOrStop(row)">
                 {{ row.status == '1' ? '停售' : '启售' }}
               </el-button>
-              <el-button type="text" size="small" @click="handleDelete('S', row.id)"> 删除 </el-button>
+              <el-button type="text" size="small" @click="handleDelete('S', row.ID)"> 删除 </el-button>
             </template>
         </el-table-column>
       </el-table>
@@ -127,10 +127,12 @@ function handleCurrentChange(p: number) {
 }
 
 function handleStartOrStop(row: any) {
+  const newStatus = row.status == 1 ? "off" : "on" // ✅ 改这里
   const p = {
-    id: row.id,
-    status: !row.status ? 1 : 0
+    id: row.ID,
+    status: newStatus
   }
+ console.log('发送前参数:', p)
   ElMessageBox.confirm('确认调整当前套餐的售卖状态, 是否继续?', '提示', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
@@ -140,10 +142,13 @@ function handleStartOrStop(row: any) {
       if (res.data.code === 1) {
         ElMessage.success('套餐售卖状态修改成功！')
         pageQuery()
+      } else {
+        ElMessage.error(res.data.message || '修改失败')
       }
     })
-  }).catch(() => {})
+  })
 }
+
 
 function handleDelete(type: string, id?: string) {
   ElMessageBox.confirm('确认删除当前指定的套餐, 是否继续?', '提示', {
