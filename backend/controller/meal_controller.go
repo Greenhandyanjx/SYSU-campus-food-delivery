@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -148,26 +149,40 @@ func Meal_Delete(c*gin.Context){
         c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "请求体中缺少 id 字段", "data": nil})
         return
     }
-    var removedIDs []string
+    var removedIDs []int
     switch ids := idOrList.(type) {
-    case string:
-        // 单个菜品删除
-        removedIDs = append(removedIDs, ids)
+    case float64:
+        removedIDs = append(removedIDs, int(ids))
         if err := global.Db.Table("meals").Delete(&models.Meal{}, ids).Error; err != nil {
-            c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "删除菜品失败", "data": nil})
+            c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "删除套餐失败", "data": nil})
             return
+        }
+    case string:
+           // 处理逗号分隔的 ID 字符串
+        idStrings := strings.Split(ids, ",")
+        for _, idStr := range idStrings {
+            idInt, err := strconv.Atoi(idStr)
+            if err != nil {
+                c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "id 字段包含无效数字", "data": nil})
+                return
+            }
+            removedIDs = append(removedIDs, idInt)
+            if err := global.Db.Table("meals").Where("id = ?", idInt).Delete(&models.Meal{}).Error; err != nil {
+                c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "删除套餐失败", "data": nil})
+                return
+            }
         }
     case []interface{}:
         // 批量删除菜品
         for _, id := range ids {
-            if idStr, ok := id.(string); ok {
-                removedIDs = append(removedIDs, idStr)
-                if err := global.Db.Table("meals").Delete(&models.Meal{}, idStr).Error; err != nil {
-                    c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "删除菜品失败", "data": nil})
+            if idFloat, ok := id.(float64); ok {
+                removedIDs = append(removedIDs, int(idFloat))
+                if err := global.Db.Table("meals").Delete(&models.Meal{}, int(idFloat)).Error; err != nil {
+                    c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "删除套餐失败", "data": nil})
                     return
                 }
             } else {
-                c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "id 列表中包含非字符串类型", "data": nil})
+                c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "id 列表中包含float64以外类型", "data": nil})
                 return
             }
         }
@@ -183,7 +198,7 @@ func Meal_Delete(c*gin.Context){
 func Edit_Meal_Status(c *gin.Context) {
     // 绑定请求体到结构体
     var request struct {
-        ID     string `json:"id" form:"id"`
+        ID     int `json:"id" form:"id"`
         Status string `json:"status" form:"status"`
     }
     if err := c.ShouldBindJSON(&request); err != nil {
@@ -203,19 +218,17 @@ func Edit_Meal_Status(c *gin.Context) {
         c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "状态值无效", "data": nil})
         return
     }
-    // 根据 ID 查找菜品
-    var existingMeal models.Dish
+    // 根据 ID 查找，可忽略
+    var existingMeal models.Meal
     if err := global.Db.Table("meals").First(&existingMeal, request.ID).Error; err != nil {
         c.JSON(http.StatusNotFound, gin.H{"code": 0, "message": "套餐未找到", "data": nil})
         return
     }
     // 更新菜品状态
-    if err :=global.Db.Table("meals").Model(&existingMeal).Updates(models.Meal{
-        Status: status,
-    }).Error; err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "更新套餐状态失败", "data": nil})
-        return
-    }
+    if err := global.Db.Table("meals").Where("id = ?", request.ID).Update("status", status).Error; err != nil {
+    c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "更新套餐状态失败", "data": nil})
+    return
+}
     // 返回成功响应
     c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"success": true}})
 }
@@ -227,13 +240,33 @@ func GetMealsPage(c *gin.Context) {
     page, err1 := strconv.Atoi(c.DefaultQuery("page", "1"))
     size, err2 := strconv.Atoi(c.DefaultQuery("size", "20"))
     name := c.Query("name")
-
+    statusParam := c.Query("status")
+    categoryIdParam := c.Query("categoryId") // 获取 categoryId 参数
     // 检查参数是否合法
     if err1 != nil || err2 != nil {
         c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "无效的分页参数", "data": nil})
         return
     }
-
+     // 将 status 参数转换为整数
+    var status int
+    if statusParam != "" {
+        var err error
+        status, err = strconv.Atoi(statusParam)
+        if err != nil {
+            c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "无效的状态参数", "data": nil})
+            return
+        }
+    }
+     // 将 categoryId 参数转换为整数
+    var categoryId int
+    if categoryIdParam != "" {
+        var err error
+        categoryId, err = strconv.Atoi(categoryIdParam)
+        if err != nil {
+            c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "无效的类别参数", "data": nil})
+            return
+        }
+    }
     // 计算分页的偏移量
     offset := (page - 1) * size
 
@@ -245,8 +278,15 @@ func GetMealsPage(c *gin.Context) {
 
     if name != "" {
         query = query.Where("mealname LIKE ?", "%"+name+"%")
+    } 
+    // 根据 status 查询
+    if statusParam != "" {
+        query = query.Where("status = ?", status)
     }
-
+     // 根据 categoryId 查询
+    if categoryIdParam != "" {
+        query = query.Where("category= ?", categoryId)
+    }
     // 获取总记录数
     if err := query.Count(&total).Error; err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "获取套餐总数失败", "data": nil})
