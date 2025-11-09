@@ -102,23 +102,6 @@ func Meal_add(ctx *gin.Context) {
     })
 }
 
-func QueryDishById(ctx *gin.Context) {
-    id := ctx.Query("id")
-    var dish models.Dish
-    if err := global.Db.Model(&models.Dish{}).Where("ID = ?", id).First(&dish).Error; err != nil {
-        ctx.JSON(http.StatusInternalServerError, gin.H{
-            "code": "500",
-            "msg":  "查询菜品失败",
-        })
-        return
-    }
-    ctx.JSON(http.StatusOK, gin.H{
-        "code": "1",
-        "msg":  "success",
-        "data": dish,
-    })
-}
-
 
 func Meal_Edit(c *gin.Context) {
     var meal models.Meal
