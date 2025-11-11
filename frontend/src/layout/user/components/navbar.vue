@@ -30,18 +30,7 @@
       <!-- 非订单页仍维持原有的公告/搜索逻辑 -->
       <div v-else style="width: 100%;">
         <div v-if="isOverlapping" class="notice notice-search" style="margin: 0 auto;">
-          <el-input
-            v-model="query"
-            placeholder="搜索店铺 / 美食"
-            clearable
-            class="search-input"
-          >
-            <template #suffix>
-              <el-button class="search-btn" type="warning" round @click="onSearch">
-                <el-icon><Search /></el-icon>
-              </el-button>
-            </template>
-          </el-input>
+          <SearchSuggest v-model="query" @search="onSearch" @select="onSelectStore" />
         </div>
         <!-- 公告部分 -->
         <div v-else class="notice notice-promo">
@@ -71,9 +60,16 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import SearchSuggest from '@/components/SearchSuggest.vue'
+import { Search } from '@element-plus/icons-vue'
 
 const query = ref('')
 const orderQuery = ref('')
+
+function onSelectStore(s: any) {
+  if (!s || !s.name) return
+  router.push('/user/store/' + encodeURIComponent(s.name))
+}
 const router = useRouter()
 const route = useRoute()
 const q = ref('')
@@ -363,6 +359,7 @@ onUnmounted(() => { window.removeEventListener('scroll', onScroll); window.remov
 /* 文字发光渐变 */
 .notice-promo span {
   background: linear-gradient(90deg, #ff9800, #ff6b00);
+  background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: shineText 3s infinite ease-in-out;
@@ -379,29 +376,31 @@ onUnmounted(() => { window.removeEventListener('scroll', onScroll); window.remov
   max-width: 1000px;
   width: 80%;
   background-color: #fffef4 !important;
-  border-radius: 32px !important;
-  border: 2px solid #ffb400;
-  box-shadow: 0 3px 8px rgba(250, 173, 20, 0.25);
-  padding: 6px 20px;
+  border-radius: 30px !important;
+  border: 2px solid #faad14;
+  box-shadow: 0 2px 6px rgba(250, 173, 20, 0.25);
+  padding: 8px;
   transition: 0.25s;
   display: flex;
   align-items: center;
 }
 .notice-search:hover,
 .notice-search:focus-within {
-  box-shadow: 0 0 0 3px rgba(255, 213, 79, 0.35);
+  box-shadow: 0 0 0 3px rgba(255, 213, 79, 0.3);
 }
 
 /* === 输入框内部 === */
 .notice-search :deep(.el-input__wrapper) {
-  background: transparent;
-  border: none;
-  box-shadow: none;
+  background-color: #fffef4;
+  border-radius: 30px;
+  border: 2px solid #faad14;
+  box-shadow: 0 2px 6px rgba(250, 173, 20, 0.25);
+  padding-right: 0px;
+  height: 46px;
 }
 .notice-search :deep(.el-input__inner) {
   font-size: 15px;
-  color: #704f00;
-  padding-right: 36px;
+  color: #8c6d1f;
 }
 .notice-search :deep(.el-input__suffix) {
   position: relative;
@@ -423,6 +422,25 @@ onUnmounted(() => { window.removeEventListener('scroll', onScroll); window.remov
   cursor: pointer;
   transition: 0.25s;
 }
+.navbar-suggestions {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 100%;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  z-index: 1400;
+  max-height: 300px;
+  overflow: auto;
+  border: 1px solid rgba(0,0,0,0.06);
+}
+.navbar-suggestions ul{ margin:0; padding:8px 0; list-style:none }
+.nav-sugg-item{ padding:8px 12px; cursor:pointer; display:flex; flex-direction:column; gap:6px }
+.nav-sugg-item + .nav-sugg-item{ border-top: 1px solid rgba(0,0,0,0.06) }
+.nav-sugg-item.active{ background: #fff9e6 }
+.nav-sugg-name strong{ background: rgba(255,235,59,0.5); padding:0 2px }
+.nav-sugg-desc{ font-size:12px; color:#888 }
 .notice-search .search-btn:hover {
   background-color: #ffd34e;
   color: #744d00;

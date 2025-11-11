@@ -3,20 +3,9 @@
 	<div class="user-home" style="width: 60%; margin:0 auto ;box-shadow:10px;" >
 		<!-- 搜索和横幅 -->
 		<header class="hero">
-		  <div class="search">
-		    <el-input
-		      v-model="query"
-		      placeholder="搜索店铺 / 美食"
-		      clearable
-		      class="search-input"
-		    >
-		      <template #suffix>
-		        <el-button class="search-btn" type="warning" round @click="onSearch">
-		          <el-icon><Search /></el-icon>
-		        </el-button>
-		      </template>
-		    </el-input>
-		  </div>
+      <div class="search">
+          <SearchSuggest v-model="query" @search="onSearch" @select="(s) => goToStore(s)" />
+      </div>
 		</header>
     <!-- 分类 -->
     <section class="categories">
@@ -58,6 +47,7 @@
           :key="idx"
           @click="goToStore(s)"
         >
+      <!-- 回到顶部按钮（固定在主内容右侧） -->
   			    <!-- <div class="store-banner" :style="{ backgroundImage: `url(${s.img})` }"></div> -->
   			    <div class="store-body">
   			      <div class="row top">
@@ -119,17 +109,22 @@
   			</div>
 			</section>
 
-	</div>
-	</div>
+  </div>
+  <!-- 回到顶部按钮（固定在主内容右侧） -->
+  <button v-show="showBack" class="back-to-top" @click="scrollToTop" aria-label="回到顶部">
+  <img src="@/assets/icons/top-arrow.svg" alt="回到顶部" class="back-icon" />
+  </button> 
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { addToCart, removeFromCart } from '@/api/user/store'
-import { Search } from '@element-plus/icons-vue'
 import Carousel from '@/components/Carousel.vue'
+import SearchSuggest from '@/components/SearchSuggest.vue'
+import { Search } from '@element-plus/icons-vue'
 import CategoryItem from '@/components/CategoryItem.vue'
 import banner1 from '@/assets/banners/banner1.svg'
 import banner2 from '@/assets/banners/banner2.svg'
@@ -314,8 +309,10 @@ const activities = ref([
 
 function onSearch() {
 	// TODO: hook up search
-	if (!query.value) return
-	router.push({ path: '/user/home', query: { q: query.value } })
+  if (!query.value) return
+  router.push({ path: '/user/home', query: { q: query.value } })
+    .then(() => scrollToMeals(true))
+    .catch(() => scrollToMeals(true))
 }
 
 function goToStore(s: any) {
@@ -329,6 +326,18 @@ const scrollToMeals = (smooth = true) => {
     if (el) el.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' })
   })
 }
+
+
+
+const showBack = ref(false)
+function scrollHandler() {
+  showBack.value = window.scrollY > 240
+}
+function scrollToTop() {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+onMounted(() => window.addEventListener('scroll', scrollHandler, { passive: true }))
+onBeforeUnmount(() => window.removeEventListener('scroll', scrollHandler))
 
 // function onBannerClick(item: any) {
 //   if (item && item.link) {
@@ -391,6 +400,7 @@ function onCategoryClick(c: any) {
 }
 .search {
   width: 80%;
+  position: relative; /* 让下拉可以绝对定位 */
 }
 
 /* 调整 el-input 外观 */
@@ -644,4 +654,108 @@ function onCategoryClick(c: any) {
 .banner-container{
   margin: 20px 0;
 }
+
+/* 回到顶部按钮样式 */
+.back-to-top {
+  position: fixed;
+  right: calc(20% - 36px);
+  bottom: 120px;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: none;
+  background-color: #fff; /* 改成白色背景 */
+  color: #333;
+  font-size: 22px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s ease;
+  z-index: 1200;
+  position: fixed;
+}
+
+/* hover 效果：轻微上浮 + 黄色描边 */
+.back-to-top:hover {
+  transform: translateY(-4px);
+  border: 2px solid #ffd100;
+}
+
+/* 提示气泡（默认隐藏） */
+.back-to-top::before {
+  content: "回到顶部";
+  position: absolute;
+  right: 110%;
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  background: rgba(51, 51, 51, 0.9);
+  color: #fff;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+/* 提示框出现时 */
+.back-to-top:hover::before {
+  opacity: 1;
+  transform: translateY(-50%) translateX(-4px);
+}
+
+/* 提示气泡的小三角形 */
+.back-to-top::after {
+  content: "";
+  position: absolute;
+  right: calc(110% - 6px);
+  top: 50%;
+  transform: translateY(-50%);
+  border-width: 6px;
+  border-style: solid;
+  border-color: transparent transparent transparent rgba(51, 51, 51, 0.9);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+/* 悬停时显示小三角 */
+.back-to-top:hover::after {
+  opacity: 1;
+}
+.back-icon {
+  width: 40px;
+  height: 40px;
+  pointer-events: none;
+}
+
+/* 搜索建议下拉样式 */
+.search-suggestions {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 8px);
+  width: 100%;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  z-index: 1300;
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid rgba(0,0,0,0.06);
+}
+.search-suggestions ul { list-style: none; margin: 0; padding: 8px 0; }
+.sugg-item { padding: 10px 14px; cursor: pointer; display:flex; flex-direction:column; gap:4px }
+.sugg-item:hover { background: #fff9e6 }
+.sugg-name strong { background: rgba(255, 235, 59, 0.5); padding: 0 2px; }
+.sugg-desc { font-size: 12px; color: #888 }
+
+/* 响应式：在小屏幕上贴右边 */
+@media (max-width: 900px) {
+  .back-to-top {
+    right: 16px;
+  }
+}
+
 </style>
