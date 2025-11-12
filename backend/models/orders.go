@@ -9,6 +9,9 @@ import (
 type Order struct {
 	gorm.Model
 	OrderID uint `json:"orderid" gorm:"not null;unique"`
+	Username string `json:"username" gorm:"not null"`
+	Phone string `json:"phonenumber" gorm:"not null"`
+	Location string `json:"location" gorm:"not null"`
 	PickupPoint time.Time `json:"pickuppoint" gorm:"not null"`
 	DropofPoint time.Time `json:"dropofpoint" gorm:"not null"`
 	ExpectedTime time.Time `json:"expectedtime" gorm:"not null"`

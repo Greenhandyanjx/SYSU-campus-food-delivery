@@ -40,7 +40,7 @@ func InitConfig(){
 
 	AppConfig = &cfg
 	InitDB()
-    if err := global.Db.Table("orders").AutoMigrate(&models.Order{}); err != nil {
+    if err := global.Db.Table("revenues").AutoMigrate(&models.Revenue{}); err != nil {
 		fmt.Println("orders table create fail")
 		panic(err)
 	}

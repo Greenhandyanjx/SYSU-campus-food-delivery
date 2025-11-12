@@ -39,7 +39,10 @@ func SetRouter() *gin.Engine {
 		noAuth.GET("/merchant/orders/page",controller.GetOrderPage)
 		noAuth.GET("/merchant/order/detail",controller.GetOrderDetail)
 		noAuth.POST("/merchant/order/add",controller.Orderadd)
-
+        noAuth.GET("/merchant/businessData",controller.GetBusinessData)
+		noAuth.GET("/merchant/orderData", controller.GetOrderData)
+		noAuth.GET("/merchant/overviewDishes",controller.GetOverviewDishes)
+		noAuth.GET("/merchant/setMealStatistics",controller.GetOverviewMeals)
 	}
 	// 创建一个需要中间件的组
 	auth := fe.Group("/api")

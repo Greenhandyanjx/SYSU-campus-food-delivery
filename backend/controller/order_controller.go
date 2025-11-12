@@ -127,7 +127,7 @@ func GetOrderDetail(c *gin.Context) {
         return
     }
     var order models.Order
-    result := global.Db.Preload("Items").First(&order, orderId)
+    result := global.Db.First(&order, orderId)
     if result.Error != nil {
         if result.Error == gorm.ErrRecordNotFound {
             c.JSON(http.StatusNotFound, gin.H{"code": 0, "message": "order not found", "data": nil})
