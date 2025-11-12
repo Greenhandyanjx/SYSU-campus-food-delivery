@@ -611,30 +611,49 @@ async function init(activeIndex = 0, isSearchFlag?: boolean) {
   }
   try {
     const res = await getOrderDetailPage({ ...params })
-    if (res.data.code === 1) {
+    if (Number(res.data.code) === 1) {
       const data = res.data.data || {}
-      const raw = data.records || []
+      const raw = data.items || []
       // 格式化时间字段，防止前端出现 NaN 或 undefined
       tableData.value = raw.map((it: any) => {
         const safeFormat = (v: any) => {
-          if (!v && v !== 0) return ''
+          if (v === null || v === undefined || v === '') return ''
           try {
             const d = new Date(v)
-            if (isNaN(d.getTime())) return String(v)
+            if (!d || isNaN(d.getTime())) return String(v)
             return d.toLocaleString()
           } catch (e) {
             return String(v)
           }
         }
+
+        // 兼容后端不同命名：id/orderid/OrderID，订单号使用 number 字段
+        const id = it.id ?? it.ID ?? it.orderId ?? it.orderID ?? it.orderid ?? it.OrderID
+        const number = it.number ?? it.orderNumber ?? it.orderNo ?? it.orderid ?? it.orderId ?? id
+
+        // 金额兼容：amount / totalPrice / totalprice / total_price
+        const rawAmount =
+          it.amount ?? it.totalPrice ?? it.totalprice ?? it.total_price ?? it.totalPrice ?? 0
+
+        // 订单明细兼容
+        const orderDetailList = it.orderDetailList ?? it.orderDetails ?? it.details ?? it.items ?? it.order_items ?? []
+
         return {
           ...it,
-          orderTime: safeFormat(it.orderTime),
-          cancelTime: safeFormat(it.cancelTime),
-          deliveryTime: safeFormat(it.deliveryTime),
-          estimatedDeliveryTime: safeFormat(it.estimatedDeliveryTime),
-          checkoutTime: safeFormat(it.checkoutTime),
-          // 保证 amount 是数字或空字符串，避免模板中 toFixed 报错
-          amount: typeof it.amount === 'number' ? it.amount : it.amount ? Number(it.amount) : 0,
+          id,
+          number,
+          orderDetailList,
+          // 常见时间字段兼容：orderTime/createTime/createdAt/expectedtime/pickuppoint/dropofpoint
+          orderTime:
+            safeFormat(it.orderTime ?? it.createTime ?? it.createdAt ?? it.created_at ?? it.create_time ?? it.expectedtime ?? it.expectedTime),
+          cancelTime: safeFormat(it.cancelTime ?? it.cancel_time ?? it.cancelAt),
+          deliveryTime: safeFormat(it.deliveryTime ?? it.delivery_time ?? it.deliveredAt),
+          estimatedDeliveryTime: safeFormat(it.estimatedDeliveryTime ?? it.estimatedDeliveryTime ?? it.expectedtime ?? it.expectedTime),
+          checkoutTime: safeFormat(it.checkoutTime ?? it.paidAt ?? it.paymentTime),
+          // 保证 amount 是数字或 0，避免模板中 toFixed 报错
+          amount: typeof rawAmount === 'number' ? rawAmount : rawAmount ? Number(rawAmount) : 0,
+          // 打包费兼容
+          packAmount: it.packAmount ?? it.pack_amount ?? it.packageFee ?? it.packFee ?? '',
         }
       })
       orderStatus.value = activeIndex
@@ -665,9 +684,39 @@ async function goDetail(id: any, status: number, r?: any) {
   orderId.value = id
   try {
     const { data } = await queryOrderDetailById({ orderId: id })
-    diaForm.value = data.data
+    const raw = data.data || {}
+
+    const safeFormat = (v: any) => {
+      if (v === null || v === undefined || v === '') return ''
+      try {
+        const d = new Date(v)
+        if (!d || isNaN(d.getTime())) return String(v)
+        return d.toLocaleString()
+      } catch (e) {
+        return String(v)
+      }
+    }
+
+    const idVal = raw.id ?? raw.ID ?? raw.orderId ?? raw.orderID ?? raw.orderid ?? raw.OrderID
+    const numberVal = raw.number ?? raw.orderNumber ?? raw.orderNo ?? raw.orderid ?? raw.orderId ?? idVal
+    const amountVal = raw.amount ?? raw.totalPrice ?? raw.totalprice ?? raw.total_price ?? 0
+    const orderDetailListVal = raw.orderDetailList ?? raw.orderDetails ?? raw.details ?? raw.items ?? raw.order_items ?? []
+
+    diaForm.value = {
+      ...raw,
+      id: idVal,
+      number: numberVal,
+      orderDetailList: orderDetailListVal,
+      orderTime: safeFormat(raw.orderTime ?? raw.createTime ?? raw.createdAt ?? raw.created_at ?? raw.create_time ?? raw.expectedtime ?? raw.expectedTime),
+      cancelTime: safeFormat(raw.cancelTime ?? raw.cancel_time ?? raw.cancelAt),
+      deliveryTime: safeFormat(raw.deliveryTime ?? raw.delivery_time ?? raw.deliveredAt),
+      estimatedDeliveryTime: safeFormat(raw.estimatedDeliveryTime ?? raw.expectedtime ?? raw.expectedTime),
+      checkoutTime: safeFormat(raw.checkoutTime ?? raw.paidAt ?? raw.paymentTime),
+      amount: typeof amountVal === 'number' ? amountVal : amountVal ? Number(amountVal) : 0,
+      packAmount: raw.packAmount ?? raw.pack_amount ?? raw.packageFee ?? raw.packFee ?? '',
+    }
     row.value = r || { id: route.query.orderId, status }
-  if (route.query.orderId) router.push('/merchant/orders')
+    if (route.query.orderId) router.push('/merchant/orders')
   } catch (err: any) {
     ElMessage.error('请求出错了：' + err.message)
   }
