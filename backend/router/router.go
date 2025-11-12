@@ -37,6 +37,8 @@ func SetRouter() *gin.Engine {
 
 		noAuth.GET("/merchant/orders/status",controller.GetOrderListByStatus)
 		noAuth.GET("/merchant/orders/page",controller.GetOrderPage)
+		noAuth.GET("/merchant/order/detail",controller.GetOrderDetail)
+		noAuth.POST("/merchant/order/add",controller.Orderadd)
 
 	}
 	// 创建一个需要中间件的组
@@ -60,6 +62,8 @@ func SetRouter() *gin.Engine {
 		auth.POST("merchant/meal/edit", controller.Meal_Edit)
 		auth.GET("/merchant/meal/query", controller.Get_Meal_ById)
 		auth.GET("/merchant/meal/page", controller.GetMealsPage)
+		auth.POST("/merchant/order/accept",controller.OrderAccept)
+		auth.POST("/merchant/order/reject",controller.OrderReject)
 		// 其他需要中间件保护的路由可以添加在这里
 	}
 	return fe

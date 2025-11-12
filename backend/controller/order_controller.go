@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 )
 
+//根据status查询order
 func GetOrderListByStatus(c *gin.Context) {
 	status := c.Query("status")
 	pageStr := c.Query("page")
@@ -46,6 +47,7 @@ func GetOrderListByStatus(c *gin.Context) {
 	})
 }
 
+//获取order列表，时间划分
 func GetOrderPage(c *gin.Context) {
     pageStr := c.Query("page")
     sizeStr := c.Query("size")
@@ -94,7 +96,14 @@ func GetOrderPage(c *gin.Context) {
         return
     }
     // 查询总订单数
-    global.Db.Model(&models.Order{}).Where("created_at >= ? AND created_at <= ?", beginTime, endTime).Count(&count)
+	countQuery := global.Db.Model(&models.Order{})
+	if !beginTime.IsZero() {
+		countQuery = countQuery.Where("created_at >= ?", beginTime)
+	}
+	if !endTime.IsZero() {
+		countQuery = countQuery.Where("created_at <= ?", endTime)
+	}
+	countQuery.Count(&count)
     // 返回结果
     c.JSON(http.StatusOK, gin.H{
         "code": 1,
@@ -105,7 +114,7 @@ func GetOrderPage(c *gin.Context) {
     })
 }
 
-
+// 根据orderId获取订单详情
 func GetOrderDetail(c *gin.Context) {
     orderIdStr := c.Query("orderId")
     if orderIdStr == "" {
@@ -155,12 +164,12 @@ func OrderAccept(c *gin.Context) {
         return
     }
     // 检查订单状态是否可以接受
-    if order.Status != "pending" {
+    if order.Status != 2 {
         c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "order is not in pending state", "data": nil})
         return
     }
     // 更新订单状态为 'accepted'
-    order.Status = "accepted"
+    order.Status = 3
     updateResult := global.Db.Save(&order)
     if updateResult.Error != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to update order status", "data": nil})
@@ -204,12 +213,12 @@ func OrderReject(c *gin.Context) {
         return
     }
     // 检查订单状态是否可以拒单
-    if order.Status != "pending" {
+    if order.Status != 2{
         c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "order is not in pending state", "data": nil})
         return
 	}
     // 更新订单状态为 'rejected'
-    order.Status = "rejected"
+    order.Status = 6
     updateResult := global.Db.Save(&order)
     if updateResult.Error != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to update order status", "data": nil})
@@ -228,4 +237,31 @@ func notifyUser(order models.Order, reason string) {
     // 这里可以实现具体的用户通知逻辑，例如发送消息或邮件
     fmt.Printf("Notifying user of order ID: %d with reason: %s\n", order.OrderID, reason)
     // 实际应用中可能需要调用其他服务或发送消息
+}
+
+func Orderadd(c *gin.Context) {
+		var newOrder models.Order
+		// 绑定请求体到 Order 结构体
+		if err := c.ShouldBindJSON(&newOrder); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+        }
+        // 设置默认值或其他逻辑处理
+		if newOrder.PickupPoint.IsZero() {
+			newOrder.PickupPoint = time.Now()
+		}
+		if newOrder.DropofPoint.IsZero() {
+			newOrder.DropofPoint = time.Now()
+		}
+		if newOrder.ExpectedTime.IsZero() {
+			newOrder.ExpectedTime = time.Now()
+		}
+		// 创建订单记录
+		result := global.Db.Table("orders").Create(&newOrder)
+		if result.Error != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
+			return
+		}
+		// 返回成功响应
+		c.JSON(http.StatusOK, gin.H{"message": "order added successfully", "order": newOrder})
 }
