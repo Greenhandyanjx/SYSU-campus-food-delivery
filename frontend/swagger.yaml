@@ -1,0 +1,227 @@
+openapi: 3.0.3
+info:
+  title: SYSU Campus Food Delivery - Frontend API Mock
+  version: 1.0.0
+  description: API definitions used by frontend (examples). Adjust paths to match backend implementation.
+servers:
+  - url: http://localhost:3000
+paths:
+  /login:
+    post:
+      summary: 登录（用户名或手机号）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                  description: 用户名（可选）
+                phone:
+                  type: string
+                  description: 手机号（可选）
+                password:
+                  type: string
+                role:
+                  type: string
+                  description: user|rider|merchant
+                code:
+                  type: string
+              example:
+                phone: "13800000000"
+                password: "123456"
+                role: "user"
+      responses:
+        '200':
+          description: 登录响应
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardResponse'
+  /upload/image:
+    post:
+      summary: 上传图片
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: 上传结果，返回图片 URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 1
+                  data:
+                    type: object
+                    properties:
+                      url:
+                        type: string
+                        format: uri
+  /common/upload:
+    post:
+      summary: 兼容旧上传接口路径（multipart/form-data）
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: 上传结果，返回图片 URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                    example: 1
+                  data:
+                    type: object
+                    properties:
+                      url:
+                        type: string
+                        format: uri
+  /register/user:
+    post:
+      summary: 注册 - 普通用户
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterUser'
+      responses:
+        '200':
+          description: 注册响应
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardResponse'
+  /register/rider:
+    post:
+      summary: 注册 - 骑手（含身份证照片 URL）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRider'
+      responses:
+        '200':
+          description: 注册响应
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardResponse'
+  /register/merchant:
+    post:
+      summary: 注册 - 商家（含营业执照与 Logo URL）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterMerchant'
+      responses:
+        '200':
+          description: 注册响应
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardResponse'
+components:
+  schemas:
+    StandardResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 1 表示成功
+        msg:
+          type: string
+        data:
+          type: object
+    RegisterUser:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        nickname:
+          type: string
+        phone:
+          type: string
+        address:
+          type: string
+        code:
+          type: string
+      required:
+        - username
+        - password
+    RegisterRider:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        realname:
+          type: string
+        idNumber:
+          type: string
+        phone:
+          type: string
+        vehicle:
+          type: string
+        idPhotoUrl:
+          type: string
+        code:
+          type: string
+      required:
+        - username
+        - password
+    RegisterMerchant:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        shopName:
+          type: string
+        shopLocation:
+          type: string
+        owner:
+          type: string
+        phone:
+          type: string
+        licenseUrl:
+          type: string
+        logoUrl:
+          type: string
+        code:
+          type: string
+      required:
+        - username
+        - password
+    

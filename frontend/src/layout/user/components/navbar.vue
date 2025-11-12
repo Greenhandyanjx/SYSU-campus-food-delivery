@@ -376,8 +376,8 @@ onUnmounted(() => { window.removeEventListener('scroll', onScroll); window.remov
   max-width: 1000px;
   width: 80%;
   background-color: #fffef4 !important;
-  border-radius: 30px !important;
-  border: 2px solid #faad14;
+  border-radius: 5px !important;
+  /* border: 2px solid #fffef4; */
   box-shadow: 0 2px 6px rgba(250, 173, 20, 0.25);
   padding: 8px;
   transition: 0.25s;
