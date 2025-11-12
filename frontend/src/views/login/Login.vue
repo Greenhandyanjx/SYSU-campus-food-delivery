@@ -3,7 +3,7 @@
     <div class="login-box">
       <!-- <img src="@/assets/login/login-l.png" alt="" /> -->
       <div class="login-form">
-        <el-form ref="loginFormRef" :model="loginForm" :rules="loginRules">
+  <el-form ref="loginFormRef" :model="loginForm" :rules="loginRules" @keydown.enter.prevent="handleLogin">
           <!-- <div class="login-form-title">
             <img
               src="@/assets/login/icon_logo.png"
@@ -14,7 +14,7 @@
           <div class="login-form-title">
             <span class="title-label">校园外卖管理系统</span>
           </div>
-          <el-radio-group v-model="loginForm.role" class="role-selector">
+          <el-radio-group v-model="loginForm.role" class="role-selector" style="margin-bottom: 10px;">
             <el-radio-button label="user">
               <el-icon><User /></el-icon>
               <span>我是用户</span>
@@ -29,21 +29,17 @@
             </el-radio-button>
           </el-radio-group>
           <el-form-item prop="username">
-            <el-input
-              v-model="loginForm.username"
-              placeholder="账号"
-              prefix-icon="User"
-            />
+            <div class="form-item" :class="{ 'has-value': loginForm.username }">
+              <el-input v-model="loginForm.username" prefix-icon="User" />
+              <label>账号/手机号</label>
+            </div>
           </el-form-item>
 
           <el-form-item prop="password">
-            <el-input
-              v-model="loginForm.password"
-              type="password"
-              placeholder="密码"
-              prefix-icon="Lock"
-              @keyup.enter="handleLogin"
-            />
+            <div class="form-item" :class="{ 'has-value': loginForm.password }">
+              <el-input v-model="loginForm.password" type="password" prefix-icon="Lock" />
+              <label>密码</label>
+            </div>
           </el-form-item>
 
           <el-form-item>
@@ -86,7 +82,7 @@ const loginForm = ref({
 });
 
 const loginRules: FormRules = {
-  username: [{ required: true, message: "请输入用户名", trigger: "blur" }],
+  username: [{ required: true, message: "请输入用户名/手机号", trigger: "blur" }],
   password: [
     { required: true, message: "请输入密码", trigger: "blur" },
     { min: 6, message: "密码必须在6位以上", trigger: "blur" },
@@ -104,14 +100,21 @@ const handleLogin = async () => {
       loading.value = true;
 
       try {
-        //等我们封装loginapi
-        //暂时测试
-        const res = await loginApi({
-          username: loginForm.value.username,
+        // 支持账号或手机号登录：如果输入看起来像手机号则以 phone 字段登录
+        const usernameOrPhone = (loginForm.value.username || '').toString().trim()
+        const phoneRegex = /^1[3-9]\d{9}$/
+        const payload: any = {
           password: loginForm.value.password,
           role: loginForm.value.role,
           code: loginForm.value.code,
-        });
+        }
+        if (phoneRegex.test(usernameOrPhone)) {
+          payload.phone = usernameOrPhone
+        } else {
+          payload.username = usernameOrPhone
+        }
+
+        const res = await loginApi(payload);
         // const res = { code: '1', msg: 'success' }
 
         if (String(res.data.code) === "1") {
@@ -205,6 +208,7 @@ const handleLogin = async () => {
   background: #ffffff;
   opacity: 0.9;
   width: 30%;
+  height: 450px;
   padding: 32px;
   border-radius: 8px 8px 8px 8px;
   display: flex;
@@ -278,20 +282,38 @@ const handleLogin = async () => {
     margin-left: -2px;
   }
   .el-input__inner {
-    border: 0;
-    border-bottom: 1px solid #e9e9e8;
-    border-radius: 0;
-    font-size: 12px;
-    font-weight: 400;
-    color: #333333;
-    height: 32px;
-    line-height: 32px;
+    //  border: 1px solid #dcdfe6;
+     border-radius:0;
+     font-size: 14px;
+     font-weight: 400;
+     color: #333333;
+     padding: 0; /* 左侧为前缀图标预留空间 */
+     margin-left: 0px;
+     height: 38px; /* 更舒适的输入高度 */
+     background: #fff;
   }
+    /* floating label container */
+    .form-item { position: relative }
+    .form-item label { position: absolute; left: 40px; top: 50%; transform: translateY(-50%); color: #909399; transition: 0.18s; pointer-events: none ;}
+    /* 浮动时移动到输入框上方并用背景块遮盖输入框，避免与输入内容重叠 */
+    .form-item:focus-within label, .form-item.has-value label {
+      top: -10px;
+      left: 30px;
+      transform: none;
+      font-size: 10px;
+      color: #409eff;
+      // background: #fff;
+      padding: 0 6px;
+      z-index: 2;
+    }
   .el-input__prefix {
-    left: 0;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 3;
   }
   .el-input--prefix .el-input__inner {
-    padding-left: 26px;
+    padding-left: 40px; /* 给前缀图标留出合适空间 */
   }
   .el-input__inner::placeholder {
     color: #aeb5c4;
