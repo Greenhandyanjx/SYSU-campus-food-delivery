@@ -9,6 +9,7 @@
           prefix-icon="Search"
           size="small"
           class="search-bar"
+          @keyup.enter="applySearch"
         />
         <el-button type="primary" round class="add-btn" @click="openAdd"> 新增地址</el-button>
       </div>
@@ -260,6 +261,11 @@ const filteredAddresses = computed(() =>
     a.tag.includes(searchQuery.value)
   )
 )
+
+function applySearch() {
+  // 入口由 Enter 键触发：将结果面板切换到我的地址，computed 会自动更新列表
+  activeTab.value = 'mine'
+}
 
 function tagColor(tag: string) {
   return {

@@ -173,7 +173,7 @@ async function httpRequest({ file, onProgress, onError }: any) {
 }
 
 </script>
-<style lang='scss'>
+<style scoped lang="scss">
 .borderNone {
   .el-upload {
     border: 1px solid #d9d9d9 !important;
@@ -181,18 +181,22 @@ async function httpRequest({ file, onProgress, onError }: any) {
 }
 </style>
 <style scoped lang="scss">
+.avatar-uploader .el-icon-plus {
+  position: relative;
+}
+
 .avatar-uploader .el-icon-plus:after {
   position: absolute;
-  display: inline-block;
-  content: ' ' !important;
-  left: calc(50% - 20px);
-  top: calc(50% - 40px);
+  content: '';
+  left: calc(100% - 20px);
+  top: calc(100% - 20px);
   width: 40px;
   height: 40px;
-  background: url('./../../assets/icons/icon_upload@2x.png') center center
-    no-repeat;
+  background: url('./../../assets/icons/icon_upload@2x.png') center center no-repeat;
   background-size: 20px;
+  transform: translate(-50%, -50%); /* ✅ 永远居中，无论容器大小 */
 }
+
 
 .el-upload-list__item-actions:hover .upload-icon {
   display: inline-block;
@@ -215,7 +219,7 @@ async function httpRequest({ file, onProgress, onError }: any) {
 }
 .upload-tips {
   font-size: 12px;
-  color: #666666;
+  color: #6c6b6b;
   display: inline-block;
   line-height: 17px;
   margin-left: 36px;

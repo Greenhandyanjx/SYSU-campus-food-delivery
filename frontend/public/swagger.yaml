@@ -1,0 +1,1137 @@
+openapi: 3.0.0
+info:
+  title: SYSU Campus Food Delivery - API
+  version: 1.0.0
+  description: Generated OpenAPI with realistic examples derived from frontend/src/api/* for import into Apifox/Postman.
+
+servers:
+  - url: http://localhost:3000/api
+    description: local
+
+paths:
+  /login:
+    post:
+      summary: 用户登录（支持 role=user|merchant|rider）
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                  example: alice
+                password:
+                  type: string
+                  example: secret
+                role:
+                  type: string
+                  enum: [user, merchant, rider]
+                  example: user
+              required:
+                - username
+                - password
+                - role
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  token: eyJhbGci...
+                  username: alice
+                  role: user
+
+  /register:
+    post:
+      summary: 用户注册
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                  example: bob
+                password:
+                  type: string
+                  example: pwd123
+                role:
+                  type: string
+                  enum: [user, merchant, rider]
+                  example: user
+              required:
+                - username
+                - password
+                - role
+      responses:
+        '200':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  success: true
+                  userId: u_1001
+
+  /change-password:
+    post:
+      summary: 修改密码
+      operationId: changePassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                  example: alice
+                oldPassword:
+                  type: string
+                  example: oldpwd
+                newPassword:
+                  type: string
+                  example: newpwd
+              required:
+                - username
+                - oldPassword
+                - newPassword
+      responses:
+        '200':
+          description: 修改成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  success: true
+
+  /merchant/category/list:
+    get:
+      summary: 获取分类列表
+      operationId: getMerchantCategories
+      responses:
+        '200':
+          description: 分类数组
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  - id: c1
+                    name: 主食
+                    type: dish
+                    sort: 1
+
+  /merchant/dish/list:
+    get:
+      summary: 通用菜品查询 (下拉/选择用)
+      operationId: listMerchantDishes
+      responses:
+        '200':
+          description: 菜品数组
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  - id: d1
+                    name: 宫保鸡丁
+                    price: 28.0
+
+  /merchant/dish/query:
+    get:
+      summary: 查询菜品详情
+      operationId: getDishDetail
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 菜品详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  id: d1
+                  name: 宫保鸡丁
+                  price: 28.0
+                  images: []
+                  description: 经典川菜
+                  categoryId: c1
+                  stock: 100
+
+  /merchant/dish/add:
+    post:
+      summary: 新增菜品
+      operationId: addDish
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: 宫保鸡丁
+                price:
+                  type: number
+                  example: 28.0
+                categoryId:
+                  type: string
+                  example: c1
+                images:
+                  type: array
+                  items:
+                    type: string
+                  example: ["https://cdn.example.com/img1.png"]
+                description:
+                  type: string
+                  example: 下饭佳品
+                stock:
+                  type: integer
+                  example: 50
+              required:
+                - name
+                - price
+                - categoryId
+      responses:
+        '200':
+          description: 新增成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  success: true
+                  id: d_new_001
+
+  /merchant/dish/edit:
+    post:
+      summary: 编辑菜品
+      operationId: editDish
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  example: d1
+                name:
+                  type: string
+                  example: 宫保鸡丁（微辣）
+                price:
+                  type: number
+                  example: 30.0
+                categoryId:
+                  type: string
+                  example: c1
+                images:
+                  type: array
+                  items:
+                    type: string
+                  example: []
+                status:
+                  type: string
+                  enum: [on, off]
+                  example: on
+              required:
+                - id
+      responses:
+        '200':
+          description: 编辑成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  success: true
+                  dishId: d1
+
+  /merchant/dish/delete:
+    post:
+      summary: 删除菜品
+      operationId: deleteDishes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: array
+                  items:
+                    type: string
+                  example: ["d1", "d2"]
+              required:
+                - id
+      responses:
+        '200':
+          description: 删除结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  success: true
+                  removed:
+                    - d1
+
+  /merchant/dish/status:
+    post:
+      summary: 修改菜品状态
+      operationId: updateDishStatus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  example: d1
+                status:
+                  type: string
+                  enum: [on, off]
+                  example: off
+              required:
+                - id
+                - status
+      responses:
+        '200':
+          description: 状态变更
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  success: true
+
+  /merchant/meal/page:
+    get:
+      summary: 分页获取套餐
+      operationId: listMeals
+      responses:
+        '200':
+          description: 套餐分页
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  items:
+                    - id: m1
+                      name: 经典套餐
+                      price: 45.0
+                      status: on
+                  total: 1
+
+  /merchant/orders/status:
+    get:
+      summary: 按状态查询商家订单（分页）
+      operationId: listMerchantOrdersByStatus
+      responses:
+        '200':
+          description: 分页订单
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  items:
+                    - orderId: o1
+                      status: pending
+                      total: 50
+                      createdAt: 2025-11-01T10:00:00Z
+                  total: 1
+
+  /merchant/order/detail:
+    get:
+      summary: 商家查询订单详情
+      operationId: getMerchantOrderDetail
+      parameters:
+        - name: orderId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 订单详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  orderId: o1
+                  items:
+                    - name: 宫保鸡丁
+                      qty: 1
+                      price: 28
+                  status: pending
+                  address:
+                    name: 张三
+                    phone: '13800000000'
+                    address: 中山大学南校园
+                  delivery:
+                    courierId: r1
+                    name: 小李
+
+  /merchant/order/accept:
+    post:
+      summary: 商家接单
+      operationId: acceptOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                orderId:
+                  type: string
+                  example: o1
+                acceptBy:
+                  type: string
+                  example: merchant_01
+              required:
+                - orderId
+      responses:
+        '200':
+          description: 接单结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  success: true
+
+  /merchant/order/reject:
+    post:
+      summary: 商家拒单
+      operationId: rejectOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                orderId:
+                  type: string
+                  example: o1
+                reason:
+                  type: string
+                  example: 缺货
+              required:
+                - orderId
+                - reason
+      responses:
+        '200':
+          description: 拒单结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  success: true
+
+  /merchant/businessData:
+    get:
+      summary: 店铺经营概览
+      operationId: getBusinessData
+      responses:
+        '200':
+          description: 概览数据
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  revenue: 12345.6
+                  orders: 123
+                  avgTicket: 100
+
+  /store/query:
+    get:
+      summary: 按 name 或 id 查询门店
+      operationId: queryStore
+      parameters:
+        - name: name
+          in: query
+          schema:
+            type: string
+        - name: id
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 门店对象
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  id: s1
+                  name: 黄焖鸡米饭
+                  desc: 经典家常菜
+
+  /store/dishes:
+    get:
+      summary: 获取门店菜品
+      operationId: getStoreDishes
+      parameters:
+        - name: storeId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 门店菜品数组
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  - id: d1
+                    name: 黄焖鸡套餐
+                    price: 18.0
+
+  /user/cart/add:
+    post:
+      summary: 加入购物车
+      operationId: addToCart
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                storeId:
+                  type: string
+                  example: s1
+                dishId:
+                  type: string
+                  example: d1
+                name:
+                  type: string
+                  example: 黄焖鸡套餐
+                qty:
+                  type: integer
+                  example: 1
+              required:
+                - storeId
+                - dishId
+                - qty
+      responses:
+        '200':
+          description: 加入结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  success: true
+
+  /user/cart:
+    get:
+      summary: 获取购物车详情
+      operationId: getCart
+      responses:
+        '200':
+          description: 购物车结构
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  shops:
+                    - storeId: s1
+                      name: 黄焖鸡米饭
+                      items:
+                        - dishId: d1
+                          name: 黄焖鸡套餐
+                          price: 18.0
+                          qty: 1
+                          selected: true
+
+  /user/cart/update:
+    post:
+      summary: 更新购物车数量
+      operationId: updateCartItem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                storeId:
+                  type: string
+                  example: s1
+                dishId:
+                  type: string
+                  example: d1
+                qty:
+                  type: integer
+                  example: 2
+              required:
+                - storeId
+                - dishId
+                - qty
+      responses:
+        '200':
+          description: 更新结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  success: true
+                  updatedItem:
+                    storeId: s1
+                    dishId: d1
+                    qty: 2
+
+  /user/cart/selectItem:
+    post:
+      summary: 选择/取消选择单个菜品
+      operationId: selectCartItem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                storeId:
+                  type: string
+                  example: s1
+                dishId:
+                  type: string
+                  example: d1
+                selected:
+                  type: boolean
+                  example: true
+              required:
+                - storeId
+                - dishId
+                - selected
+      responses:
+        '200':
+          description: 设置结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  success: true
+
+  /user/cart/selectShop:
+    post:
+      summary: 选择/取消选择店铺内所有菜品
+      operationId: selectShopItems
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                storeId:
+                  type: string
+                  example: s1
+                selected:
+                  type: boolean
+                  example: true
+              required:
+                - storeId
+                - selected
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  success: true
+
+  /user/cart/selectAll:
+    post:
+      summary: 全选/全不选购物车
+      operationId: selectAllCart
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                selected:
+                  type: boolean
+                  example: true
+              required:
+                - selected
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  success: true
+
+  /user/cart/checkout:
+    post:
+      summary: 购物车结算/下单
+      operationId: checkoutCart
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                shops:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      storeId:
+                        type: string
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            dishId:
+                              type: string
+                            qty:
+                              type: integer
+                  example:
+                    - storeId: s1
+                      items:
+                        - dishId: d1
+                          qty: 1
+      responses:
+        '200':
+          description: 结算结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  success: true
+                  orderId: order_20251110_0001
+
+  /user/cart/deleteSelected:
+    post:
+      summary: 删除已选商品
+      operationId: deleteSelectedItems
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: 删除结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  success: true
+                  removed:
+                    s1:
+                      - d1
+
+  /user/order/list:
+    get:
+      summary: 获取用户订单列表
+      operationId: listUserOrders
+      responses:
+        '200':
+          description: 订单分页列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  items:
+                    - id: o1
+                      orderNo: NO123
+                      status: pending
+                      total: 50.0
+                      createdAt: 2025-11-01T10:00:00Z
+                  total: 1
+
+  /user/order/{id}:
+    get:
+      summary: 获取订单详情
+      operationId: getUserOrderDetail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 订单详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  id: o1
+                  orderNo: NO123
+                  items:
+                    - name: 宫保鸡丁
+                      qty: 1
+                      price: 28.0
+                  status: pending
+                  address:
+                    name: 张三
+                    phone: '13800000000'
+                    address: 中山大学南校园
+                  payInfo:
+                    paid: false
+
+  /user/order/cancel:
+    post:
+      summary: 用户取消订单
+      operationId: cancelOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  example: o1
+                reason:
+                  type: string
+                  example: 用户取消
+              required:
+                - id
+      responses:
+        '200':
+          description: 取消结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  success: true
+
+  /user/order/pay:
+    post:
+      summary: 发起支付
+      operationId: payOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                  example: o1
+                payChannel:
+                  type: string
+                  enum: [alipay, wechat]
+                  example: alipay
+                amount:
+                  type: number
+                  example: 100.0
+              required:
+                - id
+                - payChannel
+                - amount
+      responses:
+        '200':
+          description: 支付发起结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  success: true
+                  paymentId: p_1001
+                  redirectUrl: ''
+
+  /user/order/{id}/confirm:
+    post:
+      summary: 用户确认收货
+      operationId: confirmOrder
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 确认结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  success: true
+
+  /user/order/{id}/rider:
+    get:
+      summary: 联系骑手
+      operationId: getRiderInfo
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 骑手信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  name: 骑手小李
+                  phone: '13800000000'
+                  avatar: https://cdn.example.com/avatars/r1.png
+
+  /user/order/{id}/refund:
+    get:
+      summary: 退款详情
+      operationId: getRefundInfo
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 退款信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  status: pending
+                  reason: 商品缺失
+                  amount: 20.0
+                  createdAt: 2025-11-02T10:00:00Z
+
+  /user/order/{id}/review:
+    post:
+      summary: 评价订单
+      operationId: reviewOrder
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                  example: 5
+                content:
+                  type: string
+                  example: 很好吃
+                images:
+                  type: array
+                  items:
+                    type: string
+                  example: []
+              required:
+                - rating
+      responses:
+        '200':
+          description: 评价结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  success: true
+
+  /user/profile:
+    get:
+      summary: 获取用户个人信息
+      operationId: getUserProfile
+      responses:
+        '200':
+          description: 用户信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  username: 游客
+                  vipLevel: 普通用户
+                  points: 120
+                  orderCount: 3
+                  couponCount: 2
+
+  /user/wallet:
+    get:
+      summary: 获取钱包余额
+      operationId: getWallet
+      responses:
+        '200':
+          description: 钱包信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  balance: 0.0
+
+  /user/coupons:
+    get:
+      summary: 获取用户优惠券列表
+      operationId: listCoupons
+      responses:
+        '200':
+          description: 优惠券数组
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                code: 1
+                data:
+                  - id: cp1
+                    title: 5元无门槛
+                    value: 5
+                    minSpend: 0
+                    expiresAt: 2025-12-31
+
+components:
+  schemas:
+    ApiResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 1
+        data:
+          type: object
+        message:
+          type: string
+      required:
+        - code
