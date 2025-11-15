@@ -100,37 +100,29 @@ func GetOrderData(c *gin.Context) {
 
 // GetOverviewDishes 获取菜品一览
 func GetOverviewDishes(c *gin.Context) {
-   value,err := c.Get("baseUserID");
+   baseUserID,err := c.Get("baseUserID");
     // 解析请求体
     if !err {
         c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "请求参数错误"})
         return
     }    
      
-    // 统计启售和停售的数量
+  // 统计启售和停售的数量
     var soldCount, discontinuedCount int64
     // 查询 dish 表，统计启售和停售的数量
-    type statusCount struct {
-        Status int64 `json:"status"`
-        Count  int64 `json:"count"`
-    }
-    var statusCounts []statusCount
     if err := global.Db.Model(&models.Dish{}).
-        Where("merchant_id = ?",value ).
-        Select("status, COUNT(*) as count").
-        Group("status").
-        Scan(&statusCounts).Error; err != nil {
+        Where("merchant_id = ? AND status = ?", baseUserID, 1).
+        Count(&soldCount).Error; err != nil {
         fmt.Println(err)
         c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "查询失败"})
         return
     }
-    // 遍历结果，统计启售和停售的数量
-    for _, sc := range statusCounts {
-        if sc.Status == 1 {
-            soldCount = sc.Count
-        } else if sc.Status == 0 {
-            discontinuedCount = sc.Count
-        }
+    if err := global.Db.Model(&models.Dish{}).
+        Where("merchant_id = ? AND status = ?", baseUserID, 0).
+        Count(&discontinuedCount).Error; err != nil {
+        fmt.Println(err)
+        c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "查询失败"})
+        return
     }
     // 返回结果
     c.JSON(http.StatusOK, gin.H{

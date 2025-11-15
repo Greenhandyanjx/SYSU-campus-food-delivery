@@ -51,10 +51,11 @@ func GetOrderListByStatus(c *gin.Context) {
 func GetOrderPage(c *gin.Context) {
     pageStr := c.Query("page")
     sizeStr := c.Query("size")
-    beginStr := c.Query("begin")
-    endStr := c.Query("end")
+    beginStr := c.Query("beginTime")
+    endStr := c.Query("endTime")
     phonestr:= c.Query("phone")
     numberstr:= c.Query("number")
+    status:=c.Query("status")
     page, err := strconv.Atoi(pageStr)
     if err != nil || page < 1 {
         page = 1
@@ -63,17 +64,19 @@ func GetOrderPage(c *gin.Context) {
     if err != nil || size < 1 {
         size = 20
     }
+  
     // 解析时间范围
     var beginTime, endTime time.Time
     if beginStr != "" {
-        beginTime, err = time.Parse("2006-01-02T15:04:05Z07:00", beginStr)
+        beginTime, err = time.Parse("2006-01-02 15:04:05", beginStr)
         if err != nil {
+            fmt.Println(err)
             c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid begin time format", "data": nil})
             return
         }
     }
     if endStr != "" {
-        endTime, err = time.Parse("2006-01-02T15:04:05Z07:00", endStr)
+        endTime, err = time.Parse("2006-01-02 15:04:05", endStr)
         if err != nil {
             c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid end time format", "data": nil})
             return
@@ -100,15 +103,27 @@ func GetOrderPage(c *gin.Context) {
         }
         query = query.Where("ID= ?", num)
     }
+
     if phonestr != "" {
         query = query.Where("phone = ?", phonestr)
     }
+
+    if status != "" {{
+        stat, err := strconv.Atoi(status)
+        if err != nil {
+            c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid status format", "data": nil})
+            return
+        }
+        query = query.Where("status = ?", stat)
+    }
+
     // 查询订单列表
     result := query.Limit(size).Offset(offset).Find(&orders)
     if result.Error != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get order page", "data": nil})
         return
     }
+
     // 查询总订单数
 	countQuery := global.Db.Model(&models.Order{})
 	if !beginTime.IsZero() {
@@ -118,6 +133,7 @@ func GetOrderPage(c *gin.Context) {
 		countQuery = countQuery.Where("created_at <= ?", endTime)
 	}
 	countQuery.Count(&count)
+
     // 返回结果
     c.JSON(http.StatusOK, gin.H{
         "code": 1,
@@ -126,7 +142,9 @@ func GetOrderPage(c *gin.Context) {
             "total": count,
         },
     })
+    }
 }
+
 
 // 根据orderId获取订单详情
 func GetOrderDetail(c *gin.Context) {
@@ -150,7 +168,7 @@ func GetOrderDetail(c *gin.Context) {
         c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get order detail", "data": nil})
         return
     }
-    // 返回结果
+
     c.JSON(http.StatusOK, gin.H{
         "code": 1,
         "data": order,
@@ -190,7 +208,6 @@ func OrderAccept(c *gin.Context) {
     }
     // 触发配送流程（这里假设配送流程是一个简单的消息通知）
     triggerDeliveryProcess(order)
-    // 返回结果
     c.JSON(http.StatusOK, gin.H{
         "code": 1,
         "data": gin.H{"success": true},
@@ -198,7 +215,6 @@ func OrderAccept(c *gin.Context) {
 }
 
 func triggerDeliveryProcess(order models.Order) {
-    // 这里可以实现具体的配送流程逻辑，例如发送消息到配送员
     fmt.Printf("Delivery process triggered for order ID: %d\n", order.ID)
     // 实际应用中可能需要调用其他服务或发送消息
 }
@@ -247,7 +263,6 @@ func OrderReject(c *gin.Context) {
 }
 
 func notifyUser(order models.Order, reason string) {
-    // 这里可以实现具体的用户通知逻辑，例如发送消息或邮件
     fmt.Printf("Notifying user of order ID: %d with reason: %s\n", order.ID, reason)
     // 实际应用中可能需要调用其他服务或发送消息
 }
@@ -286,7 +301,7 @@ func OrderDelivery(c *gin.Context) {
     // 返回结果
     c.JSON(http.StatusOK, gin.H{
         "code": 1,
-        "data": gin.H{"success": true},
+        "msg":"success",
     })
 }
 
@@ -324,7 +339,7 @@ func OrderComplete(c *gin.Context) {
     // 返回结果
     c.JSON(http.StatusOK, gin.H{
         "code": 1,
-        "data": gin.H{"success": true},
+        "msg":"success",
     })
 }
 
