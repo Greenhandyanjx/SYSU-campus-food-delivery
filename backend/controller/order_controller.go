@@ -108,7 +108,7 @@ func GetOrderPage(c *gin.Context) {
         query = query.Where("phone = ?", phonestr)
     }
 
-    if status != "" {{
+    if status != "" {
         stat, err := strconv.Atoi(status)
         if err != nil {
             c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid status format", "data": nil})
@@ -142,7 +142,7 @@ func GetOrderPage(c *gin.Context) {
             "total": count,
         },
     })
-    }
+    
 }
 
 
