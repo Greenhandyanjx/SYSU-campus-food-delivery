@@ -148,6 +148,251 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StandardResponse'
+  /merchant/orders/status:
+    get:
+      summary: 按订单状态查询（分页/筛选）
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: integer
+          description: 订单状态（0:全部,1:待付款,2:待接单,3:待派送,4:派送中,5:已完成,6:已取消）
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: size
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: 按状态查询订单统计（简单列表）
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/OrderSummary'
+                      total:
+                        type: integer
+                example:
+                  code: 1
+                  data:
+                    items:
+                      - id: "o123"
+                        number: "20251115001"
+                        amount: 78.5
+                        status: 2
+                        createdAt: "2025-11-15T10:12:00Z"
+                    total: 42
+
+  /merchant/orders/page:
+    get:
+      summary: 分页获取订单详情列表（用于订单管理页面）
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            default: 10
+        - in: query
+          name: number
+          schema:
+            type: string
+          description: 订单号模糊匹配
+        - in: query
+          name: phone
+          schema:
+            type: string
+          description: 下单手机号
+        - in: query
+          name: beginTime
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: endTime
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: status
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 分页订单详情（包含 items 列表与 total）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderPage'
+
+  /merchant/order/detail:
+    get:
+      summary: 根据订单 id 查询订单详情
+      parameters:
+        - in: query
+          name: orderId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 订单完整详情
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  data:
+                    $ref: '#/components/schemas/OrderDetail'
+                example:
+                  code: 1
+                  data:
+                    id: "o123"
+                    number: "20251115001"
+                    amount: 78.5
+                    status: 2
+                    createdAt: "2025-11-15T10:12:00Z"
+                    items:
+                      - skuId: "s1"
+                        name: "黄焖鸡米饭"
+                        qty: 2
+                        price: 22.5
+                    address:
+                      receiver: "张三"
+                      phone: "13800000000"
+                      detail: "宿舍楼A座 101"
+                    delivery:
+                      courierId: "r100"
+                      courierName: "李四"
+                      deliveredAt: null
+
+  /merchant/order/accept:
+    post:
+      summary: 商家接单
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                orderId:
+                  type: string
+                acceptBy:
+                  type: string
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+
+  /merchant/order/reject:
+    post:
+      summary: 商家拒单
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                orderId:
+                  type: string
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+
+  /merchant/order/cancel:
+    post:
+      summary: 商家取消订单（后台操作）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                orderId:
+                  type: string
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+
+  /merchant/order/delivery:
+    post:
+      summary: 商家标记已派送
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                orderId:
+                  type: string
+                courierId:
+                  type: string
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+
+  /merchant/order/complete:
+    post:
+      summary: 标记订单完成
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                orderId:
+                  type: string
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
 components:
   schemas:
     StandardResponse:
@@ -224,4 +469,333 @@ components:
       required:
         - username
         - password
+    OrderItem:
+      type: object
+      description: 单个订单项，后端应返回商品标识、名称、数量、单价及可选规格/备注
+      properties:
+        skuId:
+          type: string
+          description: 商品 SKU 或菜品 id
+        name:
+          type: string
+          description: 菜品名称
+        qty:
+          type: integer
+          description: 数量
+        unit:
+          type: string
+          description: 单位（可选，例如 份）
+        price:
+          type: number
+          format: float
+          description: 单价
+        subtotal:
+          type: number
+          format: float
+          description: 小计（qty * price - itemDiscount）
+        options:
+          type: object
+          description: 可选规格/属性（例如辣度、饭量）
+        note:
+          type: string
+          description: 单项备注
+        imageUrl:
+          type: string
+          format: uri
+          description: 菜品图片 URL（可选）
+      example:
+        skuId: "s1"
+        name: "黄焖鸡米饭"
+        qty: 2
+        unit: "份"
+        price: 22.5
+        subtotal: 45.0
+        options:
+          spicy: "中辣"
+        note: "不要香菜"
+        imageUrl: "https://cdn.example.com/dish/s1.jpg"
+
+    Address:
+      type: object
+      description: 通用地址结构（用于收货人/取货地址）
+      properties:
+        province:
+          type: string
+        city:
+          type: string
+        district:
+          type: string
+        street:
+          type: string
+        detail:
+          type: string
+          description: 详细门牌 / 楼栋信息
+        location:
+          type: object
+          properties:
+            lat:
+              type: number
+            lng:
+              type: number
+      example:
+        province: "广东省"
+        city: "广州市"
+        district: "天河区"
+        street: "中山大道"
+        detail: "宿舍楼A座101"
+        location:
+          lat: 23.1
+          lng: 113.3
+
+    DeliveryInfo:
+      type: object
+      description: 配送相关信息
+      properties:
+        courierId:
+          type: string
+        courierName:
+          type: string
+        courierPhone:
+          type: string
+        pickedAt:
+          type: string
+          format: date-time
+        deliveredAt:
+          type: string
+          format: date-time
+        status:
+          type: integer
+          description: 配送当前状态（与订单状态可相关联）
+
+    ShopInfo:
+      type: object
+      properties:
+        shopId:
+          type: string
+        shopName:
+          type: string
+        shopPhone:
+          type: string
+        shopAddress:
+          $ref: '#/components/schemas/Address'
+
+    PaymentInfo:
+      type: object
+      properties:
+        paymentMethod:
+          type: string
+          description: 支付方式（例如 wechat, alipay, cash, card）
+        paymentStatus:
+          type: string
+          description: paid | unpaid | refund
+        paidAt:
+          type: string
+          format: date-time
+        transactionId:
+          type: string
+      example:
+        paymentMethod: "wechat"
+        paymentStatus: "paid"
+        paidAt: "2025-11-15T10:15:00Z"
+        transactionId: "txn_abc123"
+
+    OrderSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        number:
+          type: string
+        amount:
+          type: number
+          format: float
+        status:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        consignee:
+          type: string
+          description: 收件人姓名（consignee）
+        consigneePhone:
+          type: string
+        shop:
+          $ref: '#/components/schemas/ShopInfo'
+      example:
+        id: "o123"
+        number: "20251115001"
+        amount: 78.5
+        status: 2
+        createdAt: "2025-11-15T10:12:00Z"
+        consignee: "张三"
+        consigneePhone: "13800000000"
+        shop:
+          shopId: "shop_1"
+          shopName: "黄焖鸡米饭店"
+
+    OrderDetail:
+      type: object
+      properties:
+        id:
+          type: string
+        number:
+          type: string
+        orderType:
+          type: string
+          description: 订单类型（delivery|pickup）
+        amount:
+          type: number
+          format: float
+        status:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        paidAt:
+          type: string
+          format: date-time
+        cancelledAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        billing:
+          type: object
+          properties:
+            subtotal:
+              type: number
+              format: float
+            discount:
+              type: number
+              format: float
+            shippingFee:
+              type: number
+              format: float
+            tax:
+              type: number
+              format: float
+            total:
+              type: number
+              format: float
+        consignee:
+          type: object
+          properties:
+            name:
+              type: string
+            phone:
+              type: string
+            address:
+              $ref: '#/components/schemas/Address'
+        payment:
+          $ref: '#/components/schemas/PaymentInfo'
+        delivery:
+          $ref: '#/components/schemas/DeliveryInfo'
+        shop:
+          $ref: '#/components/schemas/ShopInfo'
+        customer:
+          type: object
+          properties:
+            userId:
+              type: string
+            username:
+              type: string
+            phone:
+              type: string
+        notes:
+          type: string
+          description: 订单备注
+      example:
+        id: "o123"
+        number: "20251115001"
+        orderType: "delivery"
+        amount: 78.5
+        status: 2
+        createdAt: "2025-11-15T10:12:00Z"
+        updatedAt: "2025-11-15T10:20:00Z"
+        paidAt: "2025-11-15T10:15:00Z"
+        items:
+          - skuId: "s1"
+            name: "黄焖鸡米饭"
+            qty: 2
+            unit: "份"
+            price: 22.5
+            subtotal: 45.0
+        billing:
+          subtotal: 45.0
+          discount: 0
+          shippingFee: 5
+          tax: 0.5
+          total: 50.5
+        consignee:
+          name: "张三"
+          phone: "13800000000"
+          address:
+            province: "广东省"
+            city: "广州市"
+            district: "天河区"
+            street: "中山大道"
+            detail: "宿舍楼A座101"
+        payment:
+          paymentMethod: "wechat"
+          paymentStatus: "paid"
+          paidAt: "2025-11-15T10:15:00Z"
+          transactionId: "txn_abc123"
+        delivery:
+          courierId: "r100"
+          courierName: "李四"
+          courierPhone: "13811112222"
+
+    OrderPage:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/OrderDetail'
+            total:
+              type: integer
+      example:
+        code: 1
+        data:
+          items:
+            - id: "o123"
+              number: "20251115001"
+              amount: 78.5
+              status: 2
+              createdAt: "2025-11-15T10:12:00Z"
+              consignee:
+                name: "张三"
+                phone: "13800000000"
+          total: 42
+
+    ActionResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          type: object
+          properties:
+            success:
+              type: boolean
+            updatedOrderId:
+              type: string
+              description: 可选，返回被更新的订单 id
+      example:
+        code: 1
+        data:
+          success: true
     
