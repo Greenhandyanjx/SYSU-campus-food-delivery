@@ -2840,7 +2840,7 @@ input[type="number"] {
 
 .el-select .el-input__inner {
   cursor: pointer;
-  padding-right: 35px;
+  padding-right: 5px;
 }
 
 .el-select .el-input__inner:focus {
@@ -13046,13 +13046,13 @@ input[type="number"] {
   color: #f56c6c;
 }
 
-.el-input--suffix .el-input__inner {
-  padding-right: 30px;
-}
+// .el-input--suffix .el-input__inner {
+//   padding-right: 5px;
+// }
 
-.el-input--prefix .el-input__inner {
-  padding-left: 30px;
-}
+// .el-input--prefix .el-input__inner {
+//   padding-left: 5px;
+// }
 
 .el-input--medium {
   font-size: 14px;
