@@ -15,7 +15,7 @@
           style="width: 15%"
           clearable
           @clear="onClear"
-          @keyup.enter="initFun(orderStatus)"
+          @keyup.enter="initFun(orderStatus.value)"
         />
         <label style="margin-left: 20px">手机号：</label>
         <el-input
@@ -24,7 +24,7 @@
           style="width: 15%"
           clearable
           @clear="onClear"
-          @keyup.enter="initFun(orderStatus)"
+          @keyup.enter="initFun(orderStatus.value)"
         />
         <label style="margin-left: 20px">下单时间：</label>
 <el-date-picker
@@ -37,9 +37,13 @@
   end-placeholder="结束日期"
   class="date-range"
 />
-        <el-button class="normal-btn continue" @click="init(orderStatus, true)">
-          查询
-        </el-button>
+<el-button 
+  class="normal-btn continue" 
+  @click="init(orderStatus.value, true)"
+  :loading="loading"
+>
+  查询
+</el-button>
       </div>
       <el-table
         v-if="tableData.length"
@@ -384,7 +388,7 @@
       </el-scrollbar>
       <span v-if="dialogOrderStatus !== 6" slot="footer" class="dialog-footer">
         <el-checkbox
-          v-if="dialogOrderStatus === 2 && orderStatus === 2"
+          v-if="dialogOrderStatus === 2 && orderStatus.value === 2"
           v-model="isAutoNext"
           >处理完自动跳转下一条</el-checkbox
         >
@@ -513,6 +517,7 @@ const diaForm = ref<any>({})
 const isSearch = ref(false)
 const orderStatus = ref(0)
 const dialogOrderStatus = ref(0)
+const loading = ref(false)
 const onClear = () => {
   valueTime.value = undefined // ❌ 不再是 []
   console.log("valueTime = ", valueTime.value)
@@ -616,7 +621,11 @@ async function init(activeIndex = 0, isSearchFlag?: boolean) {
 //   if (!Array.isArray(valueTime.value)) {
 //   valueTime.value = []
 // }
-  console.log("valueTime = ", valueTime.value)
+  console.log('init 调用', { activeIndex, isSearchFlag })
+  if (loading.value) return
+  loading.value = true
+  try
+  {console.log("valueTime = ", valueTime.value)
   isSearch.value = !!isSearchFlag
   const params: any = {
     page: page.value,
@@ -743,6 +752,8 @@ endTime: valueTime.value[1] ? formatForApi(valueTime.value[1]) : undefined,
     }
   } catch (err: any) {
     ElMessage.error('请求出错了：' + err.message)
+  }}finally {
+    loading.value = false
   }
 }
 
