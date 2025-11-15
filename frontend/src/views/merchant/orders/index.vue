@@ -14,7 +14,7 @@
           placeholder="请填写订单号"
           style="width: 15%"
           clearable
-          @clear="init(orderStatus)"
+          @clear="onClear"
           @keyup.enter="initFun(orderStatus)"
         />
         <label style="margin-left: 20px">手机号：</label>
@@ -23,22 +23,20 @@
           placeholder="请填写手机号"
           style="width: 15%"
           clearable
-          @clear="init(orderStatus)"
+          @clear="onClear"
           @keyup.enter="initFun(orderStatus)"
         />
         <label style="margin-left: 20px">下单时间：</label>
-        <el-date-picker
-          v-model="valueTime"
-          clearable
-          value-format="yyyy-MM-dd HH:mm:ss"
-          range-separator="至"
-          :default-time="['00:00:00', '23:59:59']"
-          type="daterange"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
-          style="width: 25%; margin-left: 10px"
-          @clear="init(orderStatus)"
-        />
+<el-date-picker
+  v-model="valueTime"
+  type="daterange"
+  unlink-panels
+  clearable
+  range-separator="至"
+  start-placeholder="开始日期"
+  end-placeholder="结束日期"
+  class="date-range"
+/>
         <el-button class="normal-btn continue" @click="init(orderStatus, true)">
           查询
         </el-button>
@@ -515,6 +513,11 @@ const diaForm = ref<any>({})
 const isSearch = ref(false)
 const orderStatus = ref(0)
 const dialogOrderStatus = ref(0)
+const onClear = () => {
+  valueTime.value = undefined // ❌ 不再是 []
+  console.log("valueTime = ", valueTime.value)
+  init(orderStatus.value)
+}
 
 const cancelOrderReasonList = [
   { value: 1, label: '订单量较多，暂时无法接单' },
@@ -540,6 +543,17 @@ const orderList = [
   { label: '已完成', value: 5 },
   { label: '已取消', value: 6 },
 ]
+
+// 辅助：把 Date 或可解析的时间字符串格式化为 API 所需的 'yyyy-MM-dd HH:mm:ss'
+function formatForApi(v: any) {
+  if (!v) return ''
+  const d = v instanceof Date ? v : new Date(v)
+  if (isNaN(d.getTime())) return String(v)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(
+    d.getHours()
+  )}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
 
 onMounted(() => {
   const status = Number(route.query.status) || 0
@@ -599,14 +613,20 @@ function getOrderType(row: any) {
 }
 
 async function init(activeIndex = 0, isSearchFlag?: boolean) {
+//   if (!Array.isArray(valueTime.value)) {
+//   valueTime.value = []
+// }
+  console.log("valueTime = ", valueTime.value)
   isSearch.value = !!isSearchFlag
   const params: any = {
     page: page.value,
     pageSize: pageSize.value,
     number: input.value || undefined,
     phone: phone.value || undefined,
-    beginTime: valueTime.value && valueTime.value.length > 0 ? valueTime.value[0] : undefined,
-    endTime: valueTime.value && valueTime.value.length > 0 ? valueTime.value[1] : undefined,
+// 在发送请求时手动格式化
+beginTime: valueTime.value[0] ? formatForApi(valueTime.value[0]) : undefined,
+endTime: valueTime.value[1] ? formatForApi(valueTime.value[1]) : undefined,
+
     status: activeIndex || undefined,
   }
   try {
@@ -643,19 +663,65 @@ async function init(activeIndex = 0, isSearchFlag?: boolean) {
           id,
           number,
           orderDetailList,
-          // 常见时间字段兼容：orderTime/createTime/createdAt/expectedtime/pickuppoint/dropofpoint
-          orderTime:
-            safeFormat(it.orderTime ?? it.createTime ?? it.createdAt ?? it.created_at ?? it.create_time ?? it.expectedtime ?? it.expectedTime),
-          cancelTime: safeFormat(it.cancelTime ?? it.cancel_time ?? it.cancelAt),
-          deliveryTime: safeFormat(it.deliveryTime ?? it.delivery_time ?? it.deliveredAt),
-          estimatedDeliveryTime: safeFormat(it.estimatedDeliveryTime ?? it.estimatedDeliveryTime ?? it.expectedtime ?? it.expectedTime),
-          checkoutTime: safeFormat(it.checkoutTime ?? it.paidAt ?? it.paymentTime),
-          // 保证 amount 是数字或 0，避免模板中 toFixed 报错
-          amount: typeof rawAmount === 'number' ? rawAmount : rawAmount ? Number(rawAmount) : 0,
-          // 打包费兼容
-          packAmount: it.packAmount ?? it.pack_amount ?? it.packageFee ?? it.packFee ?? '',
+
+          orderTime: safeFormat(
+            it.orderTime ??
+            it.order_time ??
+            it.createTime ??
+            it.create_time ??
+            it.createdAt ??
+            it.CreatedAt ??
+            it.created_at
+          ),
+
+          cancelTime: safeFormat(
+            it.cancelTime ??
+            it.cancel_time ??
+            it.cancelAt ??
+            it.CancelAt
+          ),
+
+          deliveryTime: safeFormat(
+            it.deliveryTime ??
+            it.delivery_time ??
+            it.deliveredAt ??
+            it.DeliveredAt
+          ),
+
+          estimatedDeliveryTime: safeFormat(
+            it.estimatedDeliveryTime ??
+            it.estimated_delivery_time ??
+            it.expectedtime ??
+            it.Expectedtime ??
+            it.expectedTime ??
+            it.ExpectedTime
+          ),
+
+          checkoutTime: safeFormat(
+            it.checkoutTime ??
+            it.checkout_time ??
+            it.paidAt ??
+            it.PaidAt ??
+            it.paymentTime
+          ),
+
+          amount:
+            typeof rawAmount === 'number'
+              ? rawAmount
+              : rawAmount
+              ? Number(rawAmount)
+              : 0,
+
+          packAmount:
+            it.packAmount ??
+            it.pack_amount ??
+            it.packageFee ??
+            it.packFee ??
+            ''
         }
+
       })
+      console.log("valueTime = ", valueTime.value)
       orderStatus.value = activeIndex
       counts.value = Number(data.total || data.totalCount || tableData.value.length || 0)
       getOrderListBy3Status()
@@ -669,6 +735,9 @@ async function init(activeIndex = 0, isSearchFlag?: boolean) {
         const r = tableData.value[0]
         goDetail(r.id, r.status, r)
       }
+      console.log("后端返回原始数据:", raw)
+      console.log("格式化后的数据:", tableData.value)
+
     } else {
       ElMessage.error(res?.data?.msg || '获取订单列表失败')
     }
@@ -687,15 +756,27 @@ async function goDetail(id: any, status: number, r?: any) {
     const raw = data.data || {}
 
     const safeFormat = (v: any) => {
-      if (v === null || v === undefined || v === '') return ''
-      try {
-        const d = new Date(v)
-        if (!d || isNaN(d.getTime())) return String(v)
-        return d.toLocaleString()
-      } catch (e) {
-        return String(v)
-      }
-    }
+  if (!v) return ''
+
+  // 过滤无效时间
+  if (v === '0001-01-01T00:00:00Z' || v.startsWith('0001-01-01')) {
+    return ''
+  }
+
+  // 修正非 ISO 格式（空格改为 T）
+  let s = v
+  if (s.includes(' ') && !s.includes('T')) {
+    s = s.replace(' ', 'T')
+  }
+
+  const d = new Date(s)
+  if (isNaN(d.getTime())) return ''
+
+  // 返回 ElementPlus 可识别格式：yyyy-MM-dd HH:mm:ss
+  const pad = (n: number) => String(n).padStart(2, '0')
+
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
 
     const idVal = raw.id ?? raw.ID ?? raw.orderId ?? raw.orderID ?? raw.orderid ?? raw.OrderID
     const numberVal = raw.number ?? raw.orderNumber ?? raw.orderNo ?? raw.orderid ?? raw.orderId ?? idVal
@@ -851,17 +932,17 @@ function handleCurrentChange(val: any) {
           border-right: solid 1px $gray-4;
         }
       }
+      .tableBar .el-input {
+  height: 40px;
+}
+
+.tableBar .el-input__wrapper {
+  height: 40px;
+  border-radius: 6px;
+  padding: 0 12px;
+}
 
       /* Ensure inputs have consistent height so placeholder text isn't clipped */
-      .tableBar ::v-deep .el-input__inner,
-      .tableBar ::v-deep .el-select .el-input__inner,
-      .tableBar ::v-deep .el-date-editor--daterange .el-input__inner {
-        height: 40px;
-        line-height: 40px;
-        padding: 8px 12px;
-        border-radius: 6px;
-      }
-
       .tableBox {
         width: 100%;
         border: 1px solid $gray-5;
@@ -1128,9 +1209,6 @@ function handleCurrentChange(val: any) {
     }
   }
 }
-</style>
-
-<style lang="scss">
 .dashboard-container {
   .cancelReason {
     padding-left: 40px;
@@ -1207,4 +1285,8 @@ function handleCurrentChange(val: any) {
     margin-top: 0 !important;
   }
 }
+.date-range {
+  width: 320px;
+}
+
 </style>
