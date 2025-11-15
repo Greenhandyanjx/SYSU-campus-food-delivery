@@ -8,13 +8,13 @@ import (
 
 type Order struct {
 	gorm.Model
-	OrderID uint `json:"orderid" gorm:"not null;unique"`
-	Username string `json:"username" gorm:"not null"`
-	Phone string `json:"phonenumber" gorm:"not null"`
-	Location string `json:"location" gorm:"not null"`
-	PickupPoint time.Time `json:"pickuppoint" gorm:"not null"`
-	DropofPoint time.Time `json:"dropofpoint" gorm:"not null"`
-	ExpectedTime time.Time `json:"expectedtime" gorm:"not null"`
+	
+	Consignee string `json:"consignee" gorm:"not null"`
+	Phone string `json:"phone" gorm:"not null"`
+	Address string `json:"address" gorm:"not null"`
+	PickupPoint time.Time `json:"pickuppoint" gorm:"type:datetime;not null;default:current_timestamp"`
+	DropofPoint time.Time `json:"dropofpoint" gorm:"type:datetime;not null;default:current_timestamp"`
+	ExpectedTime time.Time `json:"expectedtime" gorm:"type:datetime;not null;default:current_timestamp"`
 	Status int `json:"status" gorm:"not null default:'1'"`
 	TotalPrice float64 `json:"totalprice" gorm:"not null"`
 	MerchantID uint `json:"merchantid" gorm:"not null"`

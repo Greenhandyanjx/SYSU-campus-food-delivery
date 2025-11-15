@@ -39,10 +39,8 @@ func SetRouter() *gin.Engine {
 		noAuth.GET("/merchant/orders/page",controller.GetOrderPage)
 		noAuth.GET("/merchant/order/detail",controller.GetOrderDetail)
 		noAuth.POST("/merchant/order/add",controller.Orderadd)
-        noAuth.GET("/merchant/businessData",controller.GetBusinessData)
-		noAuth.GET("/merchant/orderData", controller.GetOrderData)
-		noAuth.GET("/merchant/overviewDishes",controller.GetOverviewDishes)
-		noAuth.GET("/merchant/setMealStatistics",controller.GetOverviewMeals)
+
+       
 	}
 	// 创建一个需要中间件的组
 	auth := fe.Group("/api")
@@ -65,9 +63,17 @@ func SetRouter() *gin.Engine {
 		auth.POST("merchant/meal/edit", controller.Meal_Edit)
 		auth.GET("/merchant/meal/query", controller.Get_Meal_ById)
 		auth.GET("/merchant/meal/page", controller.GetMealsPage)
+
 		auth.POST("/merchant/order/accept",controller.OrderAccept)
 		auth.POST("/merchant/order/reject",controller.OrderReject)
+		auth.POST("/merchant/order/delivery",controller.OrderDelivery)
+		auth.POST("/merchant/order/complete",controller.OrderComplete)
 		// 其他需要中间件保护的路由可以添加在这里
+		//需要中间件读取的信息
+		 auth.GET("/merchant/businessData",controller.GetBusinessData)
+	     auth.GET("/merchant/orderData", controller.GetOrderData)
+		  auth.GET("/merchant/overviewDishes",controller.GetOverviewDishes)
+		auth.GET("/merchant/setMealStatistics",controller.GetOverviewMeals)
 	}
 	return fe
 }

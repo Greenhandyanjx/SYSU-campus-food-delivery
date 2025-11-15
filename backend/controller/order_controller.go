@@ -53,6 +53,8 @@ func GetOrderPage(c *gin.Context) {
     sizeStr := c.Query("size")
     beginStr := c.Query("begin")
     endStr := c.Query("end")
+    phonestr:= c.Query("phone")
+    numberstr:= c.Query("number")
     page, err := strconv.Atoi(pageStr)
     if err != nil || page < 1 {
         page = 1
@@ -77,6 +79,7 @@ func GetOrderPage(c *gin.Context) {
             return
         }
     }
+    
     var orders []models.Order
     var count int64
     // 计算分页偏移量
@@ -88,6 +91,17 @@ func GetOrderPage(c *gin.Context) {
     }
     if !endTime.IsZero() {
         query = query.Where("created_at <= ?", endTime)
+    }
+     if numberstr != "" {
+        num, err := strconv.Atoi(numberstr)
+        if err != nil {
+            c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid number format", "data": nil})
+            return
+        }
+        query = query.Where("ID= ?", num)
+    }
+    if phonestr != "" {
+        query = query.Where("phone = ?", phonestr)
     }
     // 查询订单列表
     result := query.Limit(size).Offset(offset).Find(&orders)
@@ -145,8 +159,7 @@ func GetOrderDetail(c *gin.Context) {
 
 func OrderAccept(c *gin.Context) {
 	type OrderAcceptRequest struct {
-       OrderID   string `json:"orderId" binding:"required"`
-       AcceptBy  string `json:"acceptBy" binding:"required"`
+       OrderID   int `json:"id" binding:"required"`
     }
     var request OrderAcceptRequest
     if err := c.ShouldBindJSON(&request); err != nil {
@@ -170,8 +183,8 @@ func OrderAccept(c *gin.Context) {
     }
     // 更新订单状态为 'accepted'
     order.Status = 3
-    updateResult := global.Db.Save(&order)
-    if updateResult.Error != nil {
+  
+    if err:=global.Db.Model(&models.Order{}).Where("id=?",order.ID).Update("status",3).Error;err!= nil {
         c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to update order status", "data": nil})
         return
     }
@@ -186,7 +199,7 @@ func OrderAccept(c *gin.Context) {
 
 func triggerDeliveryProcess(order models.Order) {
     // 这里可以实现具体的配送流程逻辑，例如发送消息到配送员
-    fmt.Printf("Delivery process triggered for order ID: %d\n", order.OrderID)
+    fmt.Printf("Delivery process triggered for order ID: %d\n", order.ID)
     // 实际应用中可能需要调用其他服务或发送消息
 }
 
@@ -203,7 +216,7 @@ func OrderReject(c *gin.Context) {
         return
     }
      var order models.Order
-    result := global.Db.First(&order, "order_id = ?", request.OrderID)
+    result := global.Db.First(&order, "ID = ?", request.OrderID)
     if result.Error != nil {
         if result.Error == gorm.ErrRecordNotFound {
             c.JSON(http.StatusNotFound, gin.H{"code": 0, "message": "order not found", "data": nil})
@@ -235,9 +248,86 @@ func OrderReject(c *gin.Context) {
 
 func notifyUser(order models.Order, reason string) {
     // 这里可以实现具体的用户通知逻辑，例如发送消息或邮件
-    fmt.Printf("Notifying user of order ID: %d with reason: %s\n", order.OrderID, reason)
+    fmt.Printf("Notifying user of order ID: %d with reason: %s\n", order.ID, reason)
     // 实际应用中可能需要调用其他服务或发送消息
 }
+
+func OrderDelivery(c *gin.Context) {
+	type OrderAcceptRequest struct {
+       OrderID   int `json:"id" binding:"required"`
+    }
+    var request OrderAcceptRequest
+    if err := c.ShouldBindJSON(&request); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid request body", "data": nil})
+        return
+    }
+    var order models.Order
+    result := global.Db.First(&order, request.OrderID)
+    if result.Error != nil {
+        if result.Error == gorm.ErrRecordNotFound {
+            c.JSON(http.StatusNotFound, gin.H{"code": 0, "message": "order not found", "data": nil})
+            return
+        }
+        c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get order", "data": nil})
+        return
+    }
+    // 检查订单状态是否可以接受
+    if order.Status != 3 {
+        c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "order is not in right state", "data": nil})
+        return
+    }
+  
+    if err:=global.Db.Model(&models.Order{}).Where("id=?",order.ID).Update("status",4).Error;err!= nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to update order status", "data": nil})
+        return
+    }
+    // 触发配送流程（这里假设配送流程是一个简单的消息通知）
+    triggerDeliveryProcess(order)
+    // 返回结果
+    c.JSON(http.StatusOK, gin.H{
+        "code": 1,
+        "data": gin.H{"success": true},
+    })
+}
+
+func OrderComplete(c *gin.Context) {
+	type OrderAcceptRequest struct {
+       OrderID   int `json:"id" binding:"required"`
+    }
+    var request OrderAcceptRequest
+    if err := c.ShouldBindJSON(&request); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid request body", "data": nil})
+        return
+    }
+    var order models.Order
+    result := global.Db.First(&order, request.OrderID)
+    if result.Error != nil {
+        if result.Error == gorm.ErrRecordNotFound {
+            c.JSON(http.StatusNotFound, gin.H{"code": 0, "message": "order not found", "data": nil})
+            return
+        }
+        c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get order", "data": nil})
+        return
+    }
+    // 检查订单状态是否可以接受
+    if order.Status != 4 {
+        c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "order is not in right state", "data": nil})
+        return
+    }
+  
+    if err:=global.Db.Model(&models.Order{}).Where("id=?",order.ID).Update("status",5).Error;err!= nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to update order status", "data": nil})
+        return
+    }
+    // 触发配送流程（这里假设配送流程是一个简单的消息通知）
+    triggerDeliveryProcess(order)
+    // 返回结果
+    c.JSON(http.StatusOK, gin.H{
+        "code": 1,
+        "data": gin.H{"success": true},
+    })
+}
+
 
 func Orderadd(c *gin.Context) {
 		var newOrder models.Order

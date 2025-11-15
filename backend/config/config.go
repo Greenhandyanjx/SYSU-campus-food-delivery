@@ -1,10 +1,6 @@
 package config
 
 import (
-	"backend/global"
-	"backend/models"
-	"fmt"
-
 	"github.com/spf13/viper"
 )
 
@@ -40,10 +36,10 @@ func InitConfig(){
 
 	AppConfig = &cfg
 	InitDB()
-    if err := global.Db.Table("revenues").AutoMigrate(&models.Revenue{}); err != nil {
-		fmt.Println("orders table create fail")
-		panic(err)
-	}
+    // if err := global.Db.Table("orders").AutoMigrate(&models.Order{}); err != nil {
+	// 	fmt.Println("orders table create fail")
+	// 	panic(err)
+	// }
 	//只运行一次
 	// err:= Initalldb()
 	// if(err!=nil){

@@ -3,26 +3,28 @@ package controller
 import (
 	"backend/global"
 	"backend/models"
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
 // GetBusinessData 获取店铺的经营概览
 func GetBusinessData(c *gin.Context) {
-    var request models.BusinessDataRequest
-
+    baseid,ok:= c.Get("baseUserID");
     // 解析请求体
-    if err := c.ShouldBindJSON(&request); err != nil {
+    if !ok {
         c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "请求参数错误"})
         return
     }    
     // 查询状态为 1 的订单，并确保 merchantid 符合 baseid
     var count int64
     var totalRevenue float64
+     currentDate := time.Now().Format("2006-01-02")
 	 // 查询 revenue 表，获取对应日期的营业额
     if err := global.Db.Model(&models.Revenue{}).
-        Where("merchant_id = ? AND date = ?",request.BaseID, request.Date).
+        Where("merchant_id = ? AND date = ?", baseid, currentDate).
         Select("revenue").
         Scan(&totalRevenue).Error; err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "查询失败"})
@@ -31,7 +33,7 @@ func GetBusinessData(c *gin.Context) {
 
   // 查询状态为 1 的订单数量
     if err := global.Db.Model(&models.Order{}).
-        Where("status = ? AND merchant_id = ? AND DATE(pickup_point) = ?", request.BaseID,request.Date).
+        Where("status = ? AND merchant_id = ? AND DATE(pickup_point) = ?",1,baseid,currentDate).
         Count(&count).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 0, 
@@ -59,20 +61,18 @@ func GetBusinessData(c *gin.Context) {
 
 // GetOrderData 获取当日订单统计
 func GetOrderData(c *gin.Context) {
-    var request models.BusinessDataRequest
-
+     value,err := c.Get("baseUserID");
     // 解析请求体
-    if err := c.ShouldBindJSON(&request); err != nil {
+    if !err {
         c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "请求参数错误"})
         return
-    }
-
+    }    
     // 统计各类订单数量
     var pendingCount, deliveringCount, completedCount int64
 
     // 查询订单状态
     if err := global.Db.Model(&models.Order{}).
-        Where("merchant_id = ? AND DATE(pickup_point) = ?", request.BaseID, request.Date).
+        Where("merchant_id = ? AND DATE(pickup_point) = ?", value, time.Now().Format("2006-01-02")).
         Select("status, COUNT(*) as count").
         Group("status").
         Scan(&[]struct {
@@ -100,33 +100,38 @@ func GetOrderData(c *gin.Context) {
 
 // GetOverviewDishes 获取菜品一览
 func GetOverviewDishes(c *gin.Context) {
-    var id uint
-
+   value,err := c.Get("baseUserID");
     // 解析请求体
-    if err := c.ShouldBindJSON(&id); err != nil {
+    if !err {
         c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "请求参数错误"})
         return
-    }
-
+    }    
+     
     // 统计启售和停售的数量
     var soldCount, discontinuedCount int64
-
     // 查询 dish 表，统计启售和停售的数量
+    type statusCount struct {
+        Status int64 `json:"status"`
+        Count  int64 `json:"count"`
+    }
+    var statusCounts []statusCount
     if err := global.Db.Model(&models.Dish{}).
-        Where("merchantid = ?", id).
+        Where("merchant_id = ?",value ).
         Select("status, COUNT(*) as count").
         Group("status").
-        Scan(&[]struct {
-            Status int64 `json:"status"`
-            Count  int64 `json:"count"`
-        }{
-            {Status: 1, Count: soldCount},        // 假设 1 为启售状态
-            {Status: 0, Count: discontinuedCount}, // 假设 0 为停售状态
-        }).Error; err != nil {
+        Scan(&statusCounts).Error; err != nil {
+        fmt.Println(err)
         c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "查询失败"})
         return
     }
-
+    // 遍历结果，统计启售和停售的数量
+    for _, sc := range statusCounts {
+        if sc.Status == 1 {
+            soldCount = sc.Count
+        } else if sc.Status == 0 {
+            discontinuedCount = sc.Count
+        }
+    }
     // 返回结果
     c.JSON(http.StatusOK, gin.H{
         "code": 1,
@@ -139,20 +144,18 @@ func GetOverviewDishes(c *gin.Context) {
 
 // GetOverviewDishes 获取菜品一览
 func GetOverviewMeals(c *gin.Context) {
-    var id uint
-
+   value,err := c.Get("baseUserID");
     // 解析请求体
-    if err := c.ShouldBindJSON(&id); err != nil {
+    if !err {
         c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "请求参数错误"})
         return
-    }
-
+    }    
     // 统计启售和停售的数量
     var soldCount, discontinuedCount int64
 
     // 查询 dish 表，统计启售和停售的数量
     if err := global.Db.Model(&models.Meal{}).
-        Where("merchantid = ?", id).
+        Where("merchant_id = ?", value).
         Select("status, COUNT(*) as count").
         Group("status").
         Scan(&[]struct {
