@@ -154,7 +154,12 @@ onBeforeUnmount(()=> document.removeEventListener('click', onDocClick))
 .sugg{ padding: 10px 14px; cursor:pointer; display:flex; flex-direction:column; gap:4px }
 .sugg + .sugg{ border-top:1px solid rgba(0,0,0,0.06) }
 .sugg:hover, .sugg.active { background:#fff9e6 }
-.sugg-name strong{ background: rgba(255,235,59,0.5); padding:0 2px }
+.sugg-name strong{ 
+  color: #faad14 !important; 
+  font-weight: 600 !important;
+  background: none !important;
+  padding: 0 !important;
+}
 .sugg-desc{ font-size:12px; color:#888 }
 .search-input.compact :deep(.el-input__inner){ padding:6px 36px 6px 8px; font-size:14px }
 </style>

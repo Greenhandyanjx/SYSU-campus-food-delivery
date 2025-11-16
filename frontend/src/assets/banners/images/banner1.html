@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>中珠外卖 · 今日特惠（纯Pexels美式版）</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body,
+    html {
+      width: 100%;
+      height: 100%;
+      background: #111;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: 'Microsoft YaHei', sans-serif;
+    }
+
+    .banner {
+      width: 800px;
+      height: 400px;
+      position: relative;
+      overflow: hidden;
+      border-radius: 16px;
+      box-shadow: 0 15px 40px rgba(0, 0, 0, 0.35);
+    }
+
+    /* 背景：麻辣烫全景（Pexels） */
+    .bg-image {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: url('https://images.pexels.com/photos/1279330/pexels-photo-1279330.jpeg?auto=compress&cs=tinysrgb&w=800&h=400&fit=crop') center/cover no-repeat;
+      filter: brightness(0.80) contrast(1.08);
+      z-index: 1;
+    }
+
+    /* 右侧商品图：小笼包特写（Pexels） */
+    .food-image {
+      position: absolute;
+      right: 40px;
+      top: 55px;
+      width: 240px;
+      height: 200px;
+      border-radius: 15px;
+      background: url('https://images.pexels.com/photos/2347311/pexels-photo-2347311.jpeg?auto=compress&cs=tinysrgb&w=240&h=200&fit=crop') center/cover no-repeat;
+      background-color: #fff7e6;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+      z-index: 3;
+      overflow: hidden;
+      border: 4px solid #fff;
+    }
+
+    /* 热销徽章 */
+    .hot-badge {
+      position: absolute;
+      right: 105px;
+      top: 205px;
+      width: 50px;
+      height: 50px;
+      background: linear-gradient(135deg, #ff9a56, #ff6b35);
+      border-radius: 50%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      color: #8b2e00;
+      font-size: 13px;
+      line-height: 1.2;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      z-index: 4;
+      border: 2px solid #fff;
+    }
+
+    svg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 2;
+      pointer-events: none;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="banner">
+    <!-- 背景图：麻辣烫 -->
+    <div class="bg-image"></div>
+
+    <!-- 右侧商品图：小笼包 -->
+    <div class="food-image"></div>
+    <div class="hot-badge">
+      <div>热销</div>
+      <div style="font-size:10px;">NO.1</div>
+    </div>
+
+    <!-- 原SVG文字层 -->
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400" width="800" height="400">
+      <defs>
+        <linearGradient id="g1" x1="0" x2="1">
+          <stop offset="0" stop-color="#ffecd2" />
+          <stop offset="1" stop-color="#fcb69f" />
+        </linearGradient>
+      </defs>
+      <rect width="800" height="400" fill="url(#g1)" opacity="0.88" />
+      <g transform="translate(40,30)" font-family="sans-serif, 'Microsoft YaHei', Arial">
+        <text x="0" y="60" font-size="38" fill="#8b2e00" font-weight="700">中珠外卖 · 今日特惠</text>
+        <text x="0" y="100" font-size="18" fill="#5a2b0b">满30减5 · 30分钟极速送达</text>
+        <text x="550" y="90" font-size="16" fill="#ff6b00" font-weight="700">限时抢购</text>
+      </g>
+    </svg>
+  </div>
+
+</body>
+
+</html>
