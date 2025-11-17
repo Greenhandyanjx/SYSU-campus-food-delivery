@@ -228,6 +228,8 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router'
+import riderApi from '@/api/rider'
 // import {
 //   Signal,
 //   Wifi,
@@ -248,6 +250,9 @@ import { ElMessage } from 'element-plus'
 //   SuccessFilled
 // } from '@element-plus/icons-vue'
 
+// 路由
+const router = useRouter()
+
 // 基础状态
 const currentTime = ref('')
 const currentLocation = ref('中山大学珠海校区')
@@ -255,6 +260,7 @@ const weather = ref(25)
 const isOnline = ref(true)
 const activeOrderTab = ref('new-orders')
 const activeNav = ref('home')
+const loading = ref(false)
 
 // 骑手信息
 const riderInfo = ref({
@@ -316,6 +322,41 @@ const deliveringOrders = ref([
   }
 ])
 
+// 初始化数据
+const initRiderData = async () => {
+  try {
+    loading.value = true
+
+    // 获取骑手信息
+    const riderData = await riderApi.getRiderInfoWithDemo()
+    if (riderData.code === 1 && riderData.data) {
+      riderInfo.value = riderData.data
+      isOnline.value = riderData.data.isOnline
+    }
+
+    // 获取收入统计
+    const incomeData = await riderApi.getIncomeStatsWithDemo()
+    if (incomeData.code === 1 && incomeData.data) {
+      dailyIncome.value = incomeData.data.dailyIncome || 0
+      weeklyIncome.value = incomeData.data.weeklyIncome || 0
+      estimatedIncome.value = incomeData.data.estimatedIncome || 0
+      weeklyOrders.value = incomeData.data.completedOrders || 0
+    }
+
+    // 获取新订单
+    const ordersData = await riderApi.getNewOrdersWithDemo()
+    if (ordersData.code === 1 && ordersData.data) {
+      newOrders.value = ordersData.data
+    }
+
+  } catch (error) {
+    console.error('初始化骑手数据失败:', error)
+    ElMessage.error('获取数据失败，请刷新重试')
+  } finally {
+    loading.value = false
+  }
+}
+
 // 更新时间
 let timer = null
 const updateTime = () => {
@@ -326,6 +367,7 @@ const updateTime = () => {
 onMounted(() => {
   updateTime()
   timer = setInterval(updateTime, 1000)
+  initRiderData()
 })
 
 onUnmounted(() => {
@@ -333,8 +375,15 @@ onUnmounted(() => {
 })
 
 // 方法
-const toggleOnlineStatus = (status) => {
-  ElMessage.success(status ? '已上线，开始接单' : '已下线，停止接单')
+const toggleOnlineStatus = async (status) => {
+  try {
+    await riderApi.updateOnlineStatus(status)
+    ElMessage.success(status ? '已上线，开始接单' : '已下线，停止接单')
+  } catch (error) {
+    ElMessage.error('状态更新失败，请重试')
+    // 回滚状态
+    isOnline.value = !status
+  }
 }
 
 const formatTime = (milliseconds) => {
@@ -343,64 +392,121 @@ const formatTime = (milliseconds) => {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`
 }
 
-const acceptOrder = (order) => {
-  ElMessage.success(`抢单成功！订单号：${order.id}`)
-  // 从新订单中移除，添加到待取货
-  newOrders.value = newOrders.value.filter(o => o.id !== order.id)
-  pickupOrders.value.push({
-    ...order,
-    pickupCode: 'A' + order.id,
-    shopPhone: '138' + order.id.toString().padStart(8, '0'),
-    remainingTime: 15 * 60 * 1000
-  })
+const acceptOrder = async (order) => {
+  try {
+    loading.value = true
+    await riderApi.acceptOrder(order.id)
+    ElMessage.success(`抢单成功！订单号：${order.id}`)
+
+    // 从新订单中移除，添加到待取货
+    newOrders.value = newOrders.value.filter(o => o.id !== order.id)
+    pickupOrders.value.push({
+      ...order,
+      pickupCode: 'A' + order.id,
+      shopPhone: '138' + order.id.toString().padStart(8, '0'),
+      remainingTime: 15 * 60 * 1000
+    })
+  } catch (error) {
+    ElMessage.error('接单失败，请重试')
+  } finally {
+    loading.value = false
+  }
 }
 
-const confirmPickup = (order) => {
-  ElMessage.success(`取货确认！订单号：${order.id}`)
-  // 从待取货中移除，添加到配送中
-  pickupOrders.value = pickupOrders.value.filter(o => o.id !== order.id)
-  deliveringOrders.value.push({
-    ...order,
-    customer: order.customer || '张同学',
-    customerPhone: order.customerPhone || '13666666666',
-    customerAvatar: 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
-    remainingTime: 30 * 60 * 1000
-  })
+const confirmPickup = async (order) => {
+  try {
+    loading.value = true
+    await riderApi.confirmPickup(order.id)
+    ElMessage.success(`取货确认！订单号：${order.id}`)
+
+    // 从待取货中移除，添加到配送中
+    pickupOrders.value = pickupOrders.value.filter(o => o.id !== order.id)
+    deliveringOrders.value.push({
+      ...order,
+      customer: order.customer || '张同学',
+      customerPhone: order.customerPhone || '13666666666',
+      customerAvatar: 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
+      remainingTime: 30 * 60 * 1000
+    })
+  } catch (error) {
+    ElMessage.error('取货确认失败，请重试')
+  } finally {
+    loading.value = false
+  }
 }
 
-const completeDelivery = (order) => {
-  ElMessage.success(`配送完成！订单号：${order.id}`)
-  // 从配送中移除
-  deliveringOrders.value = deliveringOrders.value.filter(o => o.id !== order.id)
-  // 更新收入和订单数
-  dailyIncome.value += order.estimatedFee
-  weeklyOrders.value += 1
-  riderInfo.value.completedOrders += 1
+const completeDelivery = async (order) => {
+  try {
+    loading.value = true
+    const result = await riderApi.completeDelivery(order.id)
+    ElMessage.success(`配送完成！订单号：${order.id}`)
+
+    // 从配送中移除
+    deliveringOrders.value = deliveringOrders.value.filter(o => o.id !== order.id)
+
+    // 更新收入和订单数
+    const actualFee = result?.data?.actualFee || order.estimatedFee
+    dailyIncome.value += actualFee
+    weeklyOrders.value += 1
+    riderInfo.value.completedOrders += 1
+  } catch (error) {
+    ElMessage.error('配送完成失败，请重试')
+  } finally {
+    loading.value = false
+  }
 }
 
 const callCustomer = (order) => {
   ElMessage.info(`正在联系顾客：${order.customerPhone}`)
+  // 这里可以集成实际的电话拨打功能
 }
 
 const switchNav = (nav) => {
   activeNav.value = nav
-  ElMessage.info(`切换到${nav === 'home' ? '首页' : nav === 'orders' ? '订单' : nav === 'stats' ? '统计' : '我的'}`)
+
+  // 根据导航项跳转到不同页面
+  const routes = {
+    home: '/rider',
+    orders: '/rider/orders',
+    stats: '/rider/stats',
+    mine: '/rider/profile'
+  }
+
+  if (nav === 'home') {
+    ElMessage.info('当前已在首页')
+  } else if (routes[nav]) {
+    router.push(routes[nav])
+  } else {
+    ElMessage.info(`切换到${nav === 'orders' ? '订单' : nav === 'stats' ? '统计' : '我的'}`)
+  }
 }
 
 const goToHistory = () => {
-  ElMessage.info('跳转到历史订单页面')
+  router.push('/rider/orders')
 }
 
 const goToWallet = () => {
-  ElMessage.info('跳转到我的钱包页面')
+  router.push('/rider/wallet')
 }
 
 const goToRewards = () => {
-  ElMessage.info('跳转到奖励中心页面')
+  ElMessage.info('奖励中心功能开发中...')
 }
 
 const goToHelp = () => {
-  ElMessage.info('跳转到帮助中心页面')
+  ElMessage.info('帮助中心功能开发中...')
+}
+
+// 刷新订单数据
+const refreshOrders = async () => {
+  try {
+    const ordersData = await riderApi.getNewOrdersWithDemo()
+    if (ordersData.code === 1 && ordersData.data) {
+      newOrders.value = ordersData.data
+    }
+  } catch (error) {
+    console.error('刷新订单数据失败:', error)
+  }
 }
 </script>
 
