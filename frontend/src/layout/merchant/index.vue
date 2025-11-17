@@ -7,7 +7,9 @@
     <div class="main-container">
       <Navbar />
       <div class="content">
-        <router-view />
+        <div class="page-center-wrapper">
+          <router-view />
+        </div>
       </div>
     </div>
   </div>
@@ -58,6 +60,18 @@ export default {
   flex: 1;
   padding: 20px;
   overflow-y: auto;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+.page-center-wrapper {
+  width: 100%;
+  max-width: 1100px;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  min-height: calc(100vh - 120px);
 }
 .app-wrapper {
   position: relative;

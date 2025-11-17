@@ -16,12 +16,14 @@
                       placeholder="请填写菜品名称"
                       maxlength="20" />
           </el-form-item>
-          <el-form-item label="菜品分类:"
-                        prop="categoryId">
-            <el-select v-model="ruleForm.categoryId"
-                       placeholder="请选择菜品分类">
-              <el-option v-for="(item, index) in dishList"
-                         :key="index"
+          <el-form-item label="菜品分类:" prop="categoryIds">
+            <!-- 支持多分类选择 -->
+            <el-select v-model="ruleForm.categoryIds"
+                       placeholder="请选择菜品分类"
+                       multiple
+                       clearable>
+              <el-option v-for="item in dishList"
+                         :key="item.id"
                          :label="item.name"
                          :value="item.id" />
             </el-select>
@@ -34,6 +36,12 @@
                       placeholder="请设置菜品价格" />
           </el-form-item>
         </div>
+        <!-- 标签（可选）：多标签、可输入新标签 -->
+        <el-form-item label="标签:" prop="tags">
+          <el-select v-model="ruleForm.tags" multiple filterable allow-create placeholder="输入或选择标签">
+            <el-option v-for="t in dishTagList" :key="t" :label="t" :value="t" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="口味做法配置:">
           <el-form-item>
             <div class="flavorBox">
@@ -54,8 +62,8 @@
                     <div class="itTit">
                       <!-- :dish-flavors-data="filterDishFlavorsData()" -->
 <SelectInput
-  v-model:value="selectedFlavors"
   :dishFlavorsData="leftDishFlavors"
+  :index="index"
   @select="selectHandle"
 />
 
@@ -152,6 +160,8 @@ const actionType = ref('')
 const dishList = ref<any[]>([])
 const dishFlavorsData = ref<any[]>([])
 const dishFlavors = ref<any[]>([])
+// 本地标签池（示例），可改为从后端获取
+const dishTagList = ref<any[]>(['推荐', '新品', '促销'])
 // const leftDishFlavors = ref<any[]>([])
 const leftDishFlavors = ref<any[]>([
   { name: '甜味', value: ['无糖', '少糖', '半糖', '多糖', '全糖'] },
@@ -165,7 +175,7 @@ const inputStyle = { flex: 1 }
 // headers removed
 const ruleFormRef = ref<any>(null)
 
-const selectedFlavors = ref([])
+// removed shared selectedFlavors binding; each SelectInput manages its own selections
 
 // function selectHandle(type, index, val) {
 //   console.log('选中口味:', type, val)
@@ -176,11 +186,13 @@ const ruleForm = reactive<any>({
   id: '',
   price: '',
   code: '',
-  image: 'http://localhost:3000/images/meal_1761722574.png',
+  image: '',
   description: '',
   dishFlavors: [],
   status: true,
-  categoryId: ''
+  // 新数据结构：支持多分类与标签
+  categoryIds: [] as number[],
+  tags: [] as string[]
 })
 
 const rules = reactive({
@@ -203,7 +215,7 @@ const rules = reactive({
     }
   ],
   categoryId: [{ required: true, message: '请选择菜品分类', trigger: 'change' }],
-  image: { required: false, message: '菜品图片不能为空' },
+  image: { required: true, message: '菜品图片不能为空' },
   price: [
     {
       required: true,
@@ -242,24 +254,38 @@ function getLeftDishFlavors() {
   leftDishFlavors.value = arr
 }
 
-function selectHandle(...args: any[]) {
-  const [val, key, ind] = args
-  const arrDate = [...dishFlavors.value]
-  const idx = dishFlavorsData.value.findIndex((item: any) => item.name === val)
-  arrDate[key] = JSON.parse(JSON.stringify(dishFlavorsData.value[idx]))
-  dishFlavors.value = arrDate
+function selectHandle(type: string, idx: number, val: string) {
+  // type: flavor group name, idx: index of the current flavor item, val: option toggled
+  if (typeof idx !== 'number' || idx < 0) return
+  const arr = [...dishFlavors.value]
+  if (!arr[idx]) arr[idx] = { name: '', value: [] }
+  // set the flavor group name
+  arr[idx].name = type
+  if (!Array.isArray(arr[idx].value)) arr[idx].value = []
+  const pos = arr[idx].value.indexOf(val)
+  if (pos === -1) arr[idx].value.push(val)
+  else arr[idx].value.splice(pos, 1)
+  dishFlavors.value = arr
 }
 
 async function init() {
   try {
     const res = await queryDishById(route.query.id)
-    if (res && res.data && res.data.code === 1) {
-      Object.assign(ruleForm, res.data.data)
-      ruleForm.price = String(res.data.data.price)
-      ruleForm.status = res.data.data.status == '1'
-      dishFlavors.value = (res.data.data.flavors || []).map((obj: any) => ({ ...obj, value: JSON.parse(obj.value) }))
-      getLeftDishFlavors()
-      imageUrl.value = res.data.data.image
+    if (res && res.data && Number(res.data.code) === 1) {
+        const data = res.data.data
+        // 兼容后端老字段或新字段（categoryId 或 categories）
+        Object.assign(ruleForm, data)
+        ruleForm.price = String(data.price)
+        ruleForm.status = data.status == '1'
+        // categories 可能为数组或单值 id
+        if (Array.isArray(data.categories)) ruleForm.categoryIds = data.categories
+        else if (data.categoryId) ruleForm.categoryIds = [data.categoryId]
+        // tags 可能为数组或逗号分隔字符串
+        if (Array.isArray(data.tags)) ruleForm.tags = data.tags
+        else if (typeof data.tags === 'string' && data.tags) ruleForm.tags = data.tags.split(',')
+        dishFlavors.value = (data.flavors || []).map((obj: any) => ({ ...obj, value: JSON.parse(obj.value) }))
+        getLeftDishFlavors()
+        imageUrl.value = data.image
     } else {
       ElMessage.error(res.data.msg)
     }
@@ -317,7 +343,7 @@ function getFlavorListHand() {
     { name: '忌口', value: ['不要葱', '不要蒜', '不要香菜', '不要辣'] },
     { name: '辣度', value: ['不辣', '微辣', '中辣', '重辣'] }
   ]
-  console.log('口味数据:', dishFlavorsData.value)
+  // console.log('口味数据:', dishFlavorsData.value)
 }
 
 function imageChange(value: any) {
@@ -328,12 +354,20 @@ async function submitForm(formRefName: string, st?: any) {
   const formRef = ruleFormRef.value
   if (formRef) {
     formRef.validate(async (valid: any) => {
-      if (valid) {
+        if (valid) {
         if (!ruleForm.image) return ElMessage.error('菜品图片不能为空')
-        const params: any = { ...ruleForm }
-        params.status = actionType.value === 'add' ? 0 : ruleForm.status ? 1 : 0
-        params.categoryId = ruleForm.categoryId
-        params.flavors = dishFlavors.value.map((obj: any) => ({ ...obj, value: JSON.stringify(obj.value) }))
+        // 构造符合新后端的数据结构：dish + categories + tags
+        const params: any = {
+          ...ruleForm,
+          status: actionType.value === 'add' ? 0 : ruleForm.status ? 1 : 0,
+          // categories 提交为数组（后端会把它映射到中间表）
+          categories: ruleForm.categoryIds || [],
+          // 保持向后兼容：提交第一个 categoryId 到旧接口字段
+          categoryId: (ruleForm.categoryIds && ruleForm.categoryIds[0]) || undefined,
+          // tags 可以作为字符串数组提交
+          tags: ruleForm.tags || [],
+          flavors: dishFlavors.value.map((obj: any) => ({ ...obj, value: JSON.stringify(obj.value) }))
+        }
         delete params.dishFlavors
         try {
           if (actionType.value === 'add') {
@@ -355,7 +389,7 @@ async function submitForm(formRefName: string, st?: any) {
             delete params.createTime
             delete params.updateTime
             const res = await editDish(params)
-            if (res && res.data && res.data.code === 1) {
+            if (res && res.data && Number(res.data.code) === 1) {
               router.push({ path: '/menu' })
               ElMessage.success('菜品修改成功！')
             } else {
@@ -420,14 +454,14 @@ async function submitForm(formRefName: string, st?: any) {
   width: 777px;
 
   .addBut {
-    background: #ffc200;
+    background: $blue;
     display: inline-block;
     padding: 0px 20px;
     border-radius: 3px;
     line-height: 40px;
     cursor: pointer;
     border-radius: 4px;
-    color: #333333;
+    color:white;
     font-weight: 500;
   }
 

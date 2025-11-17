@@ -2,6 +2,8 @@
   <rect width="800" height="400" fill="#f0f8ff"/>
   <text x="40" y="75" font-family="sans-serif" font-size="32" fill="#0b4f6c" font-weight="700">外卖新体验 · 立减配送费</text>
   <text x="40" y="110" font-size="14" fill="#1a6b84">全天可用 · 优质骑手</text>
-  <rect x="500" y="55" width="220" height="160" rx="12" fill="#fff" opacity="0.9"/>
+  <!-- 添加外卖配送场景图 -->
+  <image x="500" y="55" width="220" height="160" href="images/delivery_scene.jpg" preserveAspectRatio="xMidYMid slice"/>
+  <rect x="500" y="55" width="220" height="160" rx="12" fill="#fff" opacity="0.2"/>
   <text x="550" y="120" font-size="18" fill="#0b4f6c">立即下单</text>
 </svg>

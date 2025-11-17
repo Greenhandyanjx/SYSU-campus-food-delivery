@@ -1,12 +1,16 @@
 package midware
 
 import (
+	"log"
 	"net/http"
 	"strings"
 
+	"backend/global"
+	"backend/models"
 	"backend/utils"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // AuthMiddleware 提取请求头中的 authorization token 并解析它
@@ -40,11 +44,26 @@ func AuthMiddleware() gin.HandlerFunc {
 				"msg": "Invalid token"})
 			return
 		}
-
-		// 将解析后的用户名存储在上下文中
-		c.Set("username", username)
-
-		// 调用下一个处理程序
+        // 根据用户名查找用户ID
+		var baseUser models.BaseUser
+		if err := global.Db.Where("username = ?", username).First(&baseUser).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"code": "401",
+					"msg":  "用户未找到",
+				})
+			} else {
+				log.Printf("数据库查询错误: %v", err)
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"code": "500",
+					"msg":  "服务器内部错误，请稍后再试",
+				})
+			}
+			c.Abort()
+			return
+		}
+		// 将用户ID存入上下文
+		c.Set("baseUserID", baseUser.ID)
 		c.Next()
 	}
 }

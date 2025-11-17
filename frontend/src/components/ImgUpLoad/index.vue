@@ -1,7 +1,7 @@
 <!--  -->
 <template>
   <div class="upload-item">
-  <el-upload ref="uploadfiles"
+  <!-- <el-upload ref="uploadfiles"
          :accept="type"
          :class="{ borderNone: imageUrl }"
          class="avatar-uploader"
@@ -11,7 +11,16 @@
          :on-remove="handleRemove"
          :on-error="handleError"
          :before-upload="beforeAvatarUpload"
-         :headers="headers">
+         :headers="headers"> -->
+      <el-upload
+      ref="uploadfiles"
+      :accept="type"
+      class="avatar-uploader"
+      :show-file-list="false"
+      :http-request="httpRequest"
+      :before-upload="beforeAvatarUpload"
+      :headers="headers"
+    >
       <img v-if="imageUrl"
            :src="imageUrl"
            class="avatar">
@@ -68,12 +77,12 @@ const headers = computed(() => {
 
 
 
-watch(
-  () => props.propImageUrl,
-  (val) => {
-    imageUrl.value = val || ''
-  }
-)
+// watch(
+//   () => props.propImageUrl,
+//   (val) => {
+//     imageUrl.value = val || ''
+//   }
+// )
 
 function handleRemove() {
   // placeholder for remove hook if needed
@@ -84,43 +93,43 @@ function handleError(err: any, file: any, fileList: any) {
   ElMessage.error('图片上传失败')
 }
 
-function handleAvatarSuccess(response: any, file: any, fileList: any) {
-  // Normalize response from different backend shapes into a URL string
-  // Accepts:
-  // - raw string: '/uploads/xxx.jpg'
-  // - AxiosResponse: { data: ... }
-  // - { code:1, data: '/uploads/xxx.jpg' }
-  // - { code:1, data: { url: '/uploads/xxx.jpg' } }
-  // - { url: '/uploads/xxx.jpg' }
+// function handleAvatarSuccess(response: any, file: any, fileList: any) {
+//   console.log('✅ 上传返回：', response)
+//   let url = ''
+
+//   if (typeof response === 'string') {
+//     url = response
+//   } else if (response?.data && typeof response.data === 'string') {
+//     url = response.data
+//   } else if (response?.data?.url) {
+//     url = response.data.url
+//   } else if (response?.url) {
+//     url = response.url
+//   } else if (response?.path) {
+//     url = response.path
+//   }
+
+//   // ✅ 自动补全 baseURL（替换为你的后端地址）
+//   if (url && !/^https?:\/\//.test(url)) {
+//     url = import.meta.env.VITE_API_BASE_URL + url
+//   }
+
+//   imageUrl.value = url
+//   emit('imageChange', imageUrl.value)
+//   console.log('✅ 最终图片地址：', imageUrl.value)
+// }
+function handleAvatarSuccess(response: any) {
+  console.log('✅ 上传返回：', response)
   let url = ''
-  try {
-    const body = response && response.data !== undefined ? response.data : response
+  const body = response?.data ?? response
 
-    if (!body) {
-      url = ''
-    } else if (typeof body === 'string') {
-      url = body
-    } else if (body.url && typeof body.url === 'string') {
-      url = body.url
-    } else if (body.data && typeof body.data === 'string') {
-      url = body.data
-    } else if (body.data && body.data.url && typeof body.data.url === 'string') {
-      url = body.data.url
-    } else if (body.code && body.data && typeof body.data === 'object') {
-      // e.g. { code: 1, data: { url: '...' } } or { code:1, data: '/...'}
-      if (typeof body.data === 'string') url = body.data
-      else if (body.data.url) url = body.data.url
-      else if (body.data.path) url = body.data.path
-    } else {
-      // fallback: try common keys
-      url = (body.url || body.path || '') as string
-    }
-  } catch (e) {
-    url = ''
-  }
+  if (typeof body?.url === 'string') url = body.url
+  else if (typeof body?.data === 'string') url = body.data
+  else if (typeof body?.data?.url === 'string') url = body.data.url
 
+  console.log('✅ 最终图片地址：', url)
   imageUrl.value = url
-  emit('imageChange', imageUrl.value)
+  emit('imageChange', url)
 }
 
 function oploadImgDel() {
@@ -139,33 +148,32 @@ function beforeAvatarUpload(file: File) {
 }
 
 // custom http request handler so we use the project's axios instance (request)
-async function httpRequest({ file, onProgress, onSuccess, onError }: any) {
+async function httpRequest({ file, onProgress, onError }: any) {
   try {
     const form = new FormData()
     form.append('file', file)
     const resp = await request.post('/common/upload', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
       onUploadProgress: (e: any) => {
-        try {
-          const loaded = e.loaded || (e.detail && e.detail.loaded) || 0
-          const total = e.total || (e.detail && e.detail.total) || 0
-          if (total && typeof onProgress === 'function') {
-            onProgress({ percent: Math.round((loaded / total) * 100) })
-          }
-        } catch (e) {
-          // ignore progress calc errors
+        const loaded = e.loaded || (e.detail && e.detail.loaded) || 0
+        const total = e.total || (e.detail && e.detail.total) || 0
+        if (total && typeof onProgress === 'function') {
+          onProgress({ percent: Math.round((loaded / total) * 100) })
         }
       }
     })
-    // call element-plus success handler
-    if (typeof onSuccess === 'function') onSuccess(resp)
+
+    // ✅ 不再调用 onSuccess，而是自己手动调用 handleAvatarSuccess 一次
+    handleAvatarSuccess(resp)
+
   } catch (err: any) {
     if (typeof onError === 'function') onError(err)
     ElMessage.error('图片上传失败：' + (err.message || ''))
   }
 }
+
 </script>
-<style lang='scss'>
+<style scoped lang="scss">
 .borderNone {
   .el-upload {
     border: 1px solid #d9d9d9 !important;
@@ -173,18 +181,22 @@ async function httpRequest({ file, onProgress, onSuccess, onError }: any) {
 }
 </style>
 <style scoped lang="scss">
+.avatar-uploader .el-icon-plus {
+  position: relative;
+}
+
 .avatar-uploader .el-icon-plus:after {
   position: absolute;
-  display: inline-block;
-  content: ' ' !important;
-  left: calc(50% - 20px);
-  top: calc(50% - 40px);
+  content: '';
+  left: calc(100% - 20px);
+  top: calc(100% - 20px);
   width: 40px;
   height: 40px;
-  background: url('./../../assets/icons/icon_upload@2x.png') center center
-    no-repeat;
+  background: url('./../../assets/icons/icon_upload@2x.png') center center no-repeat;
   background-size: 20px;
+  transform: translate(-50%, -50%); /* ✅ 永远居中，无论容器大小 */
 }
+
 
 .el-upload-list__item-actions:hover .upload-icon {
   display: inline-block;
@@ -207,7 +219,7 @@ async function httpRequest({ file, onProgress, onSuccess, onError }: any) {
 }
 .upload-tips {
   font-size: 12px;
-  color: #666666;
+  color: #6c6b6b;
   display: inline-block;
   line-height: 17px;
   margin-left: 36px;
