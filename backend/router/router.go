@@ -37,6 +37,9 @@ func SetRouter() *gin.Engine {
 		noAuth.GET("/merchant/common/download", controller.CommonDownload)
 		// 允许未登录用户上传图片（用于注册页面等）
 		noAuth.POST("/common/upload", controller.UploadImage)
+		// 短信验证码（开发环境）：发送与校验（不需要登录）
+		noAuth.POST("/sms/send", controller.SendCode)
+		noAuth.POST("/sms/verify", controller.VerifyCode)
 
 		noAuth.GET("/merchant/orders/status", controller.GetOrderListByStatus)
 		noAuth.GET("/merchant/orders/page", controller.GetOrderPage)

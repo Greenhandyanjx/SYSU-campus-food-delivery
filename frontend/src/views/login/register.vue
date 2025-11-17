@@ -201,7 +201,7 @@ import { ref, computed, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import { User, Lock, Check, Phone, Location, Document, Shop } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
-import { registerApi, registerUser, registerRider, registerMerchant } from '@/api/auth'
+import { registerApi, registerUser, registerRider, registerMerchant, sendSmsCode } from '@/api/auth'
 import ImageUpload from '@/components/ImgUpLoad/index.vue'
 
 const router = useRouter()
@@ -245,20 +245,33 @@ function sendCode() {
   if (!phoneValid.value) { ElMessage.warning('请输入有效的手机号'); return }
   if (sending.value) return
   sending.value = true
-  // 生成 6 位随机验证码（演示用）
-  const code = Math.floor(100000 + Math.random() * 900000).toString()
-  sentCode.value = code
-  sentPhone.value = form.value.phone
-  countdown.value = 60
-  ElMessage.success('验证码已发送（演示）: ' + code)
-  _codeTimer = setInterval(() => {
-    countdown.value -= 1
-    if (countdown.value <= 0) {
-      clearInterval(_codeTimer)
+  // 请求后端生成验证码并返回（开发环境直接返回验证码以便展示）
+  sendSmsCode({ phone: form.value.phone, purpose: 'register' })
+    .then((res: any) => {
+      const data = res?.data || {}
+      const code = data?.data?.code || data?.code || ''
+      if (code) {
+        sentCode.value = String(code)
+        sentPhone.value = form.value.phone
+        countdown.value = 60
+        ElMessage.success('验证码已发送（演示）: ' + sentCode.value)
+        _codeTimer = setInterval(() => {
+          countdown.value -= 1
+          if (countdown.value <= 0) {
+            clearInterval(_codeTimer)
+            sending.value = false
+            countdown.value = 0
+          }
+        }, 1000)
+      } else {
+        sending.value = false
+        ElMessage.error('获取验证码失败')
+      }
+    })
+    .catch((err: any) => {
       sending.value = false
-      countdown.value = 0
-    }
-  }, 1000)
+      ElMessage.error(err?.message || '获取验证码失败')
+    })
 }
 
 onBeforeUnmount(() => {
