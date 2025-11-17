@@ -32,7 +32,6 @@ func SetRouter() *gin.Engine {
 
 		noAuth.GET("/merchant/category/list", controller.Get_category)
 		noAuth.GET("/merchant/dish/categories", controller.Get_category)
-		noAuth.GET("/merchant/dishes/page", controller.Get_dishes)
 
 		noAuth.GET("/merchant/common/download", controller.CommonDownload)
 		// 允许未登录用户上传图片（用于注册页面等）
@@ -59,6 +58,7 @@ func SetRouter() *gin.Engine {
 		auth.GET("/merchant/dish/list", controller.QueryDishList)
 		auth.GET("/merchant/dish/query", controller.Get_Dish_ById)
 		auth.POST("/merchant/dish/status", controller.Edit_DishStatus_By_Status)
+        auth.GET("/merchant/dishes/page", controller.Get_dishes)
 
 		auth.POST("/merchant/meal/add", controller.Meal_add)
 		auth.POST("/merchant/meal/status", controller.Edit_Meal_Status)

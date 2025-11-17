@@ -48,11 +48,30 @@ func Get_dishes(ctx *gin.Context) {
 		})
 		return
 	}
+	 // 获取上下文中的 baseUserID
+    baseUserID, exists := ctx.Get("baseUserID")
+	fmt.Println("id",baseUserID)
+    if !exists {
+        ctx.JSON(http.StatusUnauthorized, gin.H{
+            "code": "401",
+            "msg":  "未找到商户ID",
+        })
+        return
+    }
+    // 确保 baseUserID 是 uint 类型
+    merchantID, ok := baseUserID.(uint)
+    if !ok {
+        ctx.JSON(http.StatusUnauthorized, gin.H{
+            "code": "401",
+            "msg":  "商户ID类型错误",
+        })
+        return
+    }
 	// 计算分页参数
 	offset := (params.Page - 1) * params.Size
 	limit := params.Size
 	// 构建查询条件
-	var query = global.Db.Model(&models.Dish{}).Preload("Flavors")
+    var query = global.Db.Model(&models.Dish{}).Preload("Flavors").Where("merchant_id = ?", merchantID)
 	if params.Name != "" {
 		query = query.Where("dish_name LIKE ?", "%"+params.Name+"%")
 	}
@@ -199,7 +218,7 @@ func Delete_dish(c *gin.Context) {
 func Edit_DishStatus_By_Status(c *gin.Context) {
 	// 绑定请求体到 Dish 结构体
 	var request struct {
-		ID     string `json:"id" form:"id"`
+		ID     int `json:"id" form:"id"`
 		Status string `json:"status" form:"status"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil {
@@ -209,12 +228,10 @@ func Edit_DishStatus_By_Status(c *gin.Context) {
 	// 根据前端传递的 status 字段转换为数据库中的整数值
 	var status int
 	switch request.Status {
-	case "on":
+	case "1":
 		status = 1
-	case "off":
+	case "0":
 		status = 0
-	case "recommended":
-		status = 1 // 假设推荐状态对应的值为 2
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "状态值无效", "data": nil})
 		return
@@ -226,12 +243,11 @@ func Edit_DishStatus_By_Status(c *gin.Context) {
 		return
 	}
 	// 更新菜品状态
-	if err := global.Db.Model(&existingDish).Updates(models.Dish{
-		Status: status,
-	}).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "更新菜品状态失败", "data": nil})
-		return
-	}
+	fmt.Println("status",status)
+	if err := global.Db.Model(&existingDish).Update("status", status).Error; err != nil {
+       c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "更新菜品状态失败", "data": nil})
+       return
+   }
 	// 返回成功响应
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"success": true}})
 }
