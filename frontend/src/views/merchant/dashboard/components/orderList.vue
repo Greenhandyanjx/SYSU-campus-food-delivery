@@ -29,7 +29,7 @@
             style="width: 100%"
             @row-click="handleTable"
           >
-            <el-table-column prop="number" label="订单号"> </el-table-column>
+            <el-table-column prop="ID" label="订单号"> </el-table-column>
             <el-table-column label="订单菜品">
               <template v-slot="scope">
                 <div class="ellipsisHidden">
@@ -65,14 +65,14 @@
             </el-table-column>
 
             <el-table-column
-              prop="estimatedDeliveryTime"
+              prop="expectedtime"
               label="预计送达时间"
               sortable
               class-name="orderTime"
               min-width="130"
             >
             </el-table-column>
-            <el-table-column prop="amount" label="实收金额"> </el-table-column>
+            <el-table-column prop="totalprice" label="实收金额"> </el-table-column>
             <el-table-column label="备注">
               <template v-slot="scope">
                 <div class="ellipsisHidden">
@@ -563,20 +563,22 @@ async function getOrderListData(s: number) {
   try {
     const data = await getOrderDetailPage(params)
     // 保持原始响应结构的使用方式（和之前一致）
-    orderData.value = data?.data?.data?.records || []
+    orderData.value = data?.data?.data?.items || []
     counts.value = data?.data?.data?.total || 0
     emit('getOrderListBy3Status')
 
-    const recordsForAuto = data?.data?.records || []
+const recordsForAuto = data?.data?.data?.items || []
+console.log('recordsForAuto', recordsForAuto)
     if (
       dialogOrderStatus.value === 2 &&
       status.value === 2 &&
       isAutoNext.value &&
       !isTableOperateBtn.value &&
-      recordsForAuto.length > 1
+      recordsForAuto.length >= 1
     ) {
+      console.log('自动跳转下一条')
       const r = recordsForAuto[0]
-      goDetail(r.id, r.status, r, r)
+      goDetail(r.ID, r.status, r, r)
     }
   } catch (err: any) {
     proxy.$message && proxy.$message.error('请求出错了：' + err?.message)

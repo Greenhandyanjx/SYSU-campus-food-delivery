@@ -148,6 +148,95 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StandardResponse'
+  /merchant/dashboard/overview:
+      get:
+        summary: 商家后台 - 今日数据概览（用于 `overview.vue`）
+        responses:
+          '200':
+            description: 当日概览数据
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    code:
+                      type: integer
+                    data:
+                      $ref: '#/components/schemas/OverviewData'
+                  example:
+                    code: 1
+                    data:
+                      turnover: 1234.56
+                      validOrderCount: 78
+                      orderCompletionRate: 0.95
+                      unitPrice: 15.82
+                      newUsers: 12
+
+  /merchant/dashboard/orderview:
+      get:
+        summary: 商家后台 - 订单概览卡片数据（用于 `orderview.vue`）
+        responses:
+          '200':
+            description: 订单概览统计
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    code:
+                      type: integer
+                    data:
+                      $ref: '#/components/schemas/OrderviewData'
+                  example:
+                    code: 1
+                    data:
+                      waitingOrders: 5
+                      deliveredOrders: 12
+                      completedOrders: 230
+                      cancelledOrders: 3
+                      allOrders: 250
+
+  /merchant/dashboard/dishes-stats:
+      get:
+        summary: 商家后台 - 菜品统计（用于 `cuisineStatistics.vue`）
+        responses:
+          '200':
+            description: 菜品统计数据
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    code:
+                      type: integer
+                    data:
+                      $ref: '#/components/schemas/DishesStats'
+                  example:
+                    code: 1
+                    data:
+                      sold: 128
+                      discontinued: 5
+
+  /merchant/dashboard/setmeals-stats:
+      get:
+        summary: 商家后台 - 套餐统计（用于 `setMealStatistics.vue`）
+        responses:
+          '200':
+            description: 套餐统计数据
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    code:
+                      type: integer
+                    data:
+                      $ref: '#/components/schemas/SetMealStats'
+                  example:
+                    code: 1
+                    data:
+                      sold: 42
+                      discontinued: 2
   /merchant/orders/status:
     get:
       summary: 按订单状态查询（分页/筛选）
@@ -798,4 +887,85 @@ components:
         code: 1
         data:
           success: true
-    
+        OverviewData:
+      type: object
+      description: 商家后台概览数据（`overview.vue` 使用）
+      properties:
+        turnover:
+          type: number
+          format: float
+          description: 当日营业额（单位: 元）
+        validOrderCount:
+          type: integer
+          description: 当日有效订单数
+        orderCompletionRate:
+          type: number
+          format: float
+          description: 订单完成率（0-1 之间）
+        unitPrice:
+          type: number
+          format: float
+          description: 平均客单价（元）
+        newUsers:
+          type: integer
+          description: 新增用户数
+      example:
+        turnover: 1234.56
+        validOrderCount: 78
+        orderCompletionRate: 0.95
+        unitPrice: 15.82
+        newUsers: 12
+
+    OrderviewData:
+      type: object
+      description: 仪表卡片的订单统计（`orderview.vue` 使用）
+      properties:
+        waitingOrders:
+          type: integer
+          description: 待接单数量
+        deliveredOrders:
+          type: integer
+          description: 待派送数量
+        completedOrders:
+          type: integer
+          description: 已完成订单数量
+        cancelledOrders:
+          type: integer
+          description: 已取消订单数量
+        allOrders:
+          type: integer
+          description: 总订单数
+      example:
+        waitingOrders: 5
+        deliveredOrders: 12
+        completedOrders: 230
+        cancelledOrders: 3
+        allOrders: 250
+
+    DishesStats:
+      type: object
+      description: 菜品统计（`cuisineStatistics.vue` 使用）
+      properties:
+        sold:
+          type: integer
+          description: 已售出菜品数（或启售菜品数量，根据后台定义）
+        discontinued:
+          type: integer
+          description: 已停售菜品数量
+      example:
+        sold: 128
+        discontinued: 5
+
+    SetMealStats:
+      type: object
+      description: 套餐统计（`setMealStatistics.vue` 使用）
+      properties:
+        sold:
+          type: integer
+          description: 已售出套餐数（或启售套餐数量）
+        discontinued:
+          type: integer
+          description: 已停售套餐数量
+      example:
+        sold: 42
+        discontinued: 2
