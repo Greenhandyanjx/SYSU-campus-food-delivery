@@ -106,7 +106,7 @@ const getSetMealStatisticsData = async () => {
 const getOrderListBy3Status = async () => {
   try {
     const res = await getOrderListBy({})
-    if (res.data.code === 1) {
+    if (Number(res.data.code) === 1) {
       orderStatics.value = res.data.data
     } else {
       ElMessage.error(res.data.msg)
