@@ -4,6 +4,7 @@ import (
 	"backend/global"
 	"backend/models"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -31,9 +32,9 @@ func GetBusinessData(c *gin.Context) {
         return
     }
 
-  // 查询状态为 1 的订单数量
+  // 查询状态为 5的订单数量
     if err := global.Db.Model(&models.Order{}).
-        Where("status = ? AND merchant_id = ? AND DATE(pickup_point) = ?",1,baseid,currentDate).
+        Where("status = ? AND merchant_id = ? AND DATE(pickup_point) = ?",5,baseid,currentDate).
         Count(&count).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code": 0, 
@@ -42,7 +43,7 @@ func GetBusinessData(c *gin.Context) {
         return
     }
 
-    // 计算平均价格
+    //计算平均价格
     var avgTicket float64
     if count > 0 {
         avgTicket = totalRevenue / float64(count)
@@ -52,48 +53,61 @@ func GetBusinessData(c *gin.Context) {
     c.JSON(http.StatusOK, gin.H{
         "code": 1,
         "data": gin.H{
-            "revenue":   totalRevenue,
-            "orders":    count,
-            "avgTicket": avgTicket,
+            "turnover": totalRevenue,
+            "validOrderCount":count,
+            "orderCompletionRate":0,
+            "unitPrice": avgTicket,
+            "newUsers":0,
         },
     })
 }
 
 // GetOrderData 获取当日订单统计
 func GetOrderData(c *gin.Context) {
-     value,err := c.Get("baseUserID");
+     merchantID,err := c.Get("baseUserID");
     // 解析请求体
     if !err {
         c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "请求参数错误"})
         return
     }    
-    // 统计各类订单数量
-    var pendingCount, deliveringCount, completedCount int64
-
-    // 查询订单状态
+   // 查询订单状态
+    var orderStatusCounts []struct {
+        Status int `json:"status"`
+        Count  int `json:"count"`
+    }
     if err := global.Db.Model(&models.Order{}).
-        Where("merchant_id = ? AND DATE(pickup_point) = ?", value, time.Now().Format("2006-01-02")).
+        Where("merchant_id = ? AND DATE(pickup_point) = ?", merchantID, time.Now().Format("2006-01-02")).
         Select("status, COUNT(*) as count").
         Group("status").
-        Scan(&[]struct {
-            Status int64 `json:"status"`
-            Count  int64 `json:"count"`
-        }{
-            {Status: 1, Count: pendingCount}, // 假设 1 为待处理状态
-            {Status: 2, Count: deliveringCount}, // 假设 2 为配送中状态
-            {Status: 3, Count: completedCount}, // 假设 3 为已完成状态
-        }).Error; err != nil {
+        Scan(&orderStatusCounts).Error; err != nil {
+        log.Printf("查询订单状态失败: %v", err)
         c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "查询失败"})
         return
     }
-
+    // 初始化计数变量
+    var waitingCount, deliveringCount, completedCount, cancelledCount int
+    // 遍历查询结果并设置计数变量
+    for _, orderStatusCount := range orderStatusCounts {
+        switch orderStatusCount.Status {
+        case 2:
+            waitingCount = orderStatusCount.Count
+        case 3:
+            deliveringCount = orderStatusCount.Count
+        case 5:
+            completedCount = orderStatusCount.Count
+        case 6:
+            cancelledCount = orderStatusCount.Count
+        }
+    }
     // 返回结果
     c.JSON(http.StatusOK, gin.H{
         "code": 1,
         "data": gin.H{
-            "pending":   pendingCount,
-            "delivering": deliveringCount,
-            "completed":  completedCount,
+          "waitingOrders": waitingCount,
+          "deliveredOrders": deliveringCount,
+          "completedOrders": completedCount,
+          "cancelledOrders": cancelledCount,
+          "allOrders": waitingCount + deliveringCount + completedCount + cancelledCount,
         },
     })
 }
@@ -134,7 +148,7 @@ func GetOverviewDishes(c *gin.Context) {
     })
 }
 
-// GetOverviewDishes 获取菜品一览
+// GetOverviewDishes 获取套餐一览
 func GetOverviewMeals(c *gin.Context) {
    value,err := c.Get("baseUserID");
     // 解析请求体
@@ -142,25 +156,34 @@ func GetOverviewMeals(c *gin.Context) {
         c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "请求参数错误"})
         return
     }    
-    // 统计启售和停售的数量
-    var soldCount, discontinuedCount int64
 
-    // 查询 dish 表，统计启售和停售的数量
+    // 查询 meal 表，统计启售和停售的数量
+    // 查询订单状态
+    var mealStatusCounts []struct {
+        Status int `json:"status"`
+        Count  int `json:"count"`
+    }
     if err := global.Db.Model(&models.Meal{}).
         Where("merchant_id = ?", value).
         Select("status, COUNT(*) as count").
         Group("status").
-        Scan(&[]struct {
-            Status int64 `json:"status"`
-            Count  int64 `json:"count"`
-        }{
-            {Status: 1, Count: soldCount},        // 假设 1 为启售状态
-            {Status: 0, Count: discontinuedCount}, // 假设 0 为停售状态
-        }).Error; err != nil {
+        Scan(&mealStatusCounts).Error; err != nil {
+        log.Printf("查询订单状态失败: %v", err)
         c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "查询失败"})
         return
     }
-
+    // 初始化计数变量
+    var soldCount,discontinuedCount int
+    // 遍历查询结果并设置计数变量
+    for _, mealStatusCount := range mealStatusCounts {
+        switch mealStatusCount.Status {
+        case 1:
+            soldCount = mealStatusCount.Count
+        case 0:
+            discontinuedCount = mealStatusCount.Count
+        }
+    }
+    
     // 返回结果
     c.JSON(http.StatusOK, gin.H{
         "code": 1,
