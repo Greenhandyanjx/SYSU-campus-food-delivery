@@ -112,11 +112,11 @@
                 <el-option label="自行车" value="bike" />
               </el-select>
             </el-form-item> -->
-
+<!-- 
             <label>上传身份证照片</label>
             <el-form-item prop="idPhoto">
               <ImageUpload v-model="form.idPhoto" />
-            </el-form-item>
+            </el-form-item> -->
           </template>
 
           <!-- ===== 动态表单：商家端 ===== -->
@@ -304,7 +304,7 @@ async function handleRegister() {
       if (!form.value.idNumber) { ElMessage.warning('请填写身份证号'); return }
       if (!form.value.phone) { ElMessage.warning('请填写联系电话'); return }
       // if (!form.value.vehicle) { ElMessage.warning('请选择交通工具'); return }
-      if (!form.value.idPhoto) { ElMessage.warning('请上传身份证照片'); return }
+      // if (!form.value.idPhoto) { ElMessage.warning('请上传身份证照片'); return }
     }
     if (form.value.role === 'merchant') {
       if (!form.value.shopName) { ElMessage.warning('请填写店铺名称'); return }
@@ -334,6 +334,7 @@ async function handleRegister() {
           phone: form.value.phone,
           address: form.value.address,
           code: form.value.code,
+          role: "user",
         })
       } else if (form.value.role === 'rider') {
         res = await registerRider({
@@ -345,6 +346,7 @@ async function handleRegister() {
           vehicle: form.value.vehicle,
           idPhotoUrl: form.value.idPhoto,
           code: form.value.code,
+          role: "rider",
         })
       } else if (form.value.role === 'merchant') {
         res = await registerMerchant({
@@ -357,6 +359,7 @@ async function handleRegister() {
           licenseUrl: form.value.license,
           logoUrl: form.value.logo,
           code: form.value.code,
+          role: "merchant",
         })
       } else {
         // fallback to generic

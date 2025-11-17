@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>中珠外卖 · 午餐推荐 ¥9.9</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body,
+    html {
+      width: 100%;
+      height: 100%;
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: 'Microsoft YaHei', -apple-system, sans-serif;
+    }
+
+    .banner {
+      width: 800px;
+      height: 400px;
+      position: relative;
+      overflow: hidden;
+      border-radius: 20px;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.45);
+      background: linear-gradient(135deg, #fff7e6 0%, #fdf1e0 100%);
+    }
+
+    /* 全屏背景图：热气牛肉盖饭 */
+    .bg-image {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: url('https://images.pexels.com/photos/2313686/pexels-photo-2313686.jpeg?auto=compress&cs=tinysrgb&w=800&h=400&fit=crop') center/cover no-repeat;
+      filter: brightness(0.75) contrast(1.12);
+      z-index: 1;
+    }
+
+    /* 渐变蒙版层（提升文字可读性） */
+    .overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(45deg, rgba(255, 247, 230, 0.9) 0%, rgba(255, 220, 180, 0.7) 100%);
+      z-index: 2;
+    }
+
+    svg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 3;
+      pointer-events: none;
+    }
+
+    /* 文字发光描边 */
+    .text-glow {
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="banner">
+    <!-- 全屏背景图 -->
+    <div class="bg-image"></div>
+    <!-- 渐变蒙版 -->
+    <div class="overlay"></div>
+
+    <!-- SVG 内容（重构布局 + 高端美化） -->
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400" width="800" height="400">
+      <defs>
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="3" result="blur" />
+          <feFlood flood-color="#fff" flood-opacity="0.6" />
+          <feComposite in2="blur" operator="in" />
+          <feMerge>
+            <feMergeNode />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <linearGradient id="title-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#d1495b" />
+          <stop offset="100%" stop-color="#e63f3f" />
+        </linearGradient>
+      </defs>
+
+      <!-- 主标题：更大、更醒目、渐变色 -->
+      <text x="50" y="85" font-size="42" fill="url(#title-grad)" font-weight="800" class="text-glow"
+        filter="url(#glow)">
+        午餐推荐 · 低至¥9.9
+      </text>
+
+      <!-- 左边：招牌牛肉饭（更大、更靠左） -->
+      <g transform="translate(50,115)">
+        <image x="0" y="0" width="320" height="180"
+          href="https://images.pexels.com/photos/2313686/pexels-photo-2313686.jpeg?auto=compress&cs=tinysrgb&w=320&h=180&fit=crop"
+          preserveAspectRatio="xMidYMid slice" filter="url(#glow)" />
+        <rect x="0" y="0" width="320" height="180" rx="18" fill="#000" opacity="0.22" />
+        <text x="20" y="38" font-size="20" fill="#fff" font-weight="700" filter="url(#glow)">招牌牛肉饭</text>
+        <text x="20" y="68" font-size="15" fill="#fffbe6" filter="url(#glow)">香辣入味 · 超值套餐</text>
+      </g>
+
+      <!-- 右边：热销菜品组合（更靠右、更大标签） -->
+      <g transform="translate(460,60)">
+        <image x="0" y="0" width="260" height="190"
+          href="https://images.pexels.com/photos/958545/pexels-photo-958545.jpeg?auto=compress&cs=tinysrgb&w=260&h=190&fit=crop"
+          preserveAspectRatio="xMidYMid slice" filter="url(#glow)" />
+        <rect x="0" y="0" width="260" height="190" rx="16" fill="#ffd89b" opacity="0.3" />
+
+        <!-- 热销标签（立体爆闪） -->
+        <!-- <g transform="translate(20,25)">
+          <ellipse cx="35" cy="35" rx="35" ry="35" fill="#ff3b30" filter="url(#glow)" />
+          <text x="80" y="42" font-size="20" fill="#fff" font-weight="800">热销</text>
+        </g> -->
+      </g>
+    </svg>
+  </div>
+
+</body>
+
+</html>

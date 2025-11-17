@@ -50,30 +50,43 @@ import request from '@/api/merchant/request'
 
 const props = withDefaults(
   defineProps<{
-    type?: string
-    size?: number
-    propImageUrl?: string
+    modelValue?: string;   // ← 新增
+    type?: string;
+    size?: number;
+    propImageUrl?: string; // ← 老的不删，但不推荐继续用
   }>(),
   {
     type: '.jpg,.jpeg,.png',
     size: 2,
-    propImageUrl: ''
+    propImageUrl: '',
+    modelValue: ''   // 默认值
   }
 )
 
+
 const emit = defineEmits<{
-  (e: 'imageChange', value: string): void
+  (e: 'update:modelValue', value: string): void;
+  (e: 'imageChange', value: string): void;  // 保留你的旧事件（可选）
 }>()
 
+
 const uploadfiles = ref<any>(null)
-const imageUrl = ref<string>(props.propImageUrl || '')
+const imageUrl = ref<string>(props.modelValue || props.propImageUrl || '')
+
+watch(() => props.modelValue, val => {
+  imageUrl.value = val || ''
+})
 
 const headers = computed(() => {
-  console.log('上传token：', getToken())  // ✅ 在 return 之前打印
-  return {
-    Authorization: `Bearer ${getToken()}`
+  const token = getToken()
+  if (token) {
+    return {
+      Authorization: `Bearer ${token}`
+    }
   }
+  return {}   // 没登录 → 不带 token（注册页）
 })
+
 
 
 
@@ -129,12 +142,14 @@ function handleAvatarSuccess(response: any) {
 
   console.log('✅ 最终图片地址：', url)
   imageUrl.value = url
+  emit('update:modelValue', url)  
   emit('imageChange', url)
 }
 
 function oploadImgDel() {
   imageUrl.value = ''
-  emit('imageChange', imageUrl.value)
+  emit('update:modelValue', '')
+  emit('imageChange', '')
 }
 
 function beforeAvatarUpload(file: File) {
@@ -152,8 +167,12 @@ async function httpRequest({ file, onProgress, onError }: any) {
   try {
     const form = new FormData()
     form.append('file', file)
+
     const resp = await request.post('/common/upload', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      headers: {
+        ...headers.value,  // ⭐ 动态是否附带 token
+        'Content-Type': 'multipart/form-data'
+      },
       onUploadProgress: (e: any) => {
         const loaded = e.loaded || (e.detail && e.detail.loaded) || 0
         const total = e.total || (e.detail && e.detail.total) || 0
@@ -163,7 +182,6 @@ async function httpRequest({ file, onProgress, onError }: any) {
       }
     })
 
-    // ✅ 不再调用 onSuccess，而是自己手动调用 handleAvatarSuccess 一次
     handleAvatarSuccess(resp)
 
   } catch (err: any) {
@@ -171,6 +189,7 @@ async function httpRequest({ file, onProgress, onError }: any) {
     ElMessage.error('图片上传失败：' + (err.message || ''))
   }
 }
+
 
 </script>
 <style scoped lang="scss">

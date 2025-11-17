@@ -25,6 +25,17 @@ func GenerateJWT(username string) (string, error) {
 	return "Bearer " + signedtoken, err
 }
 
+// GenerateJWTWithRole 生成包含 role 的 JWT
+func GenerateJWTWithRole(username, role string) (string, error) {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"username": username,
+		"role":     role,
+		"exp":      time.Now().Add(time.Hour * 72).Unix(),
+	})
+	signedtoken, err := token.SignedString([]byte("secret"))
+	return "Bearer " + signedtoken, err
+}
+
 func CheckPassword(password string, hash string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err == nil
@@ -53,9 +64,9 @@ func ParseJWT(tokenstring string) (string, error) {
 	return "", errors.New("invalid token")
 }
 
-//get hashpassword
-func GetUserHashByUsernameuser(username string )(string,error){
-    var user models.BaseUser
+// get hashpassword
+func GetUserHashByUsernameuser(username string) (string, error) {
+	var user models.BaseUser
 	result := global.Db.Where("username = ?", username).First(&user)
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {

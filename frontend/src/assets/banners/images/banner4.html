@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>中珠外卖 · 甜品下午茶 买二送一</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body,
+    html {
+      width: 100%;
+      height: 100%;
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: 'Microsoft YaHei', -apple-system, sans-serif;
+    }
+
+    .banner {
+      width: 800px;
+      height: 400px;
+      position: relative;
+      overflow: hidden;
+      border-radius: 28px;
+      box-shadow: 0 35px 90px rgba(0, 0, 0, 0.52);
+      background: #fff8f5;
+    }
+
+    /* 全屏背景图：梦幻草莓奶油下午茶（暖粉金光） */
+    .bg-image {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: url('https://cdn.esence.travel/2023/01/Ts0UVvcm-%E6%9C%AC%E8%B3%AA%E6%97%85%E8%A1%8C-%E6%95%85%E4%BA%8B%E6%96%87%E7%AB%A0%E9%A6%96%E5%9C%96-1200737-2.jpg') center/cover no-repeat;
+      filter: brightness(0.92) contrast(1.1) saturate(1.15);
+      z-index: 1;
+    }
+
+    /* 暖粉渐变蒙版（统一色调） */
+    .overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, rgba(255, 248, 245, 0.94) 0%, rgba(255, 228, 220, 0.85) 100%);
+      z-index: 2;
+    }
+
+    svg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 3;
+      pointer-events: none;
+    }
+
+    .text-glow {
+      filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.38));
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="banner">
+    <!-- 背景图：暖光下午茶 -->
+    <div class="bg-image"></div>
+    <!-- 暖粉蒙版 -->
+    <div class="overlay"></div>
+
+    <!-- SVG 内容（三图独立 + 统一暖甜色调） -->
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400" width="800" height="400">
+      <defs>
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="3.2" result="blur" />
+          <feFlood flood-color="#fff" flood-opacity="0.75" />
+          <feComposite in2="blur" operator="in" />
+          <feMerge>
+            <feMergeNode />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <linearGradient id="title-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#ff6b35" />
+          <stop offset="100%" stop-color="#ff4500" />
+        </linearGradient>
+      </defs>
+
+      <!-- 主标题：更饱满橙红渐变 -->
+      <text x="50" y="88" font-size="40" fill="url(#title-grad)" font-weight="800" class="text-glow"
+        filter="url(#glow)">
+        甜品下午茶 · 买二送一
+      </text>
+
+      <!-- 左边：草莓奶油蛋糕（高饱和暖光） -->
+      <g transform="translate(50,110)">
+        <image x="0" y="0" width="245" height="160"
+          href="https://d2y8lrt1ygofia.cloudfront.net/nx5yppd75q8oz2azy5xpp5qykzng" preserveAspectRatio="xMidYMid slice"
+          filter="url(#glow)" />
+        <rect x="0" y="0" width="245" height="160" rx="16" fill="#fff3f0" opacity="0.3" stroke="#ffb4a2"
+          stroke-width="2" />
+        <text x="20" y="38" font-size="19" fill="#b84a2a" font-weight="700" filter="url(#glow)">草莓蛋糕</text>
+      </g>
+
+      <!-- 右边：焦糖马卡龙拼盘（金光甜蜜） -->
+      <g transform="translate(535,42)">
+        <image x="0" y="0" width="215" height="215"
+          href="https://images.pexels.com/photos/808941/pexels-photo-808941.jpeg?auto=compress&cs=tinysrgb&w=215&h=215&fit=crop"
+          preserveAspectRatio="xMidYMid slice" filter="url(#glow)" />
+        <circle cx="107.5" cy="107.5" r="108" fill="#ffd6e0" opacity="0.5" filter="url(#glow)" />
+        <!-- <text x="68" y="122" font-size="38" fill="#b84a2a" font-weight="800" filter="url(#glow)">甜</text> -->
+      </g>
+    </svg>
+  </div>
+
+</body>
+
+</html>
