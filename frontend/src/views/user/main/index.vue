@@ -126,11 +126,11 @@ import Carousel from '@/components/Carousel.vue'
 import SearchSuggest from '@/components/SearchSuggest.vue'
 import { Search } from '@element-plus/icons-vue'
 import CategoryItem from '@/components/CategoryItem.vue'
-import banner1 from '@/assets/banners/banner1.svg'
-import banner2 from '@/assets/banners/banner2.svg'
-import banner3 from '@/assets/banners/banner3.svg'
-import banner4 from '@/assets/banners/banner4.svg'
-import banner5 from '@/assets/banners/banner5.svg'
+import banner1 from '@/assets/banners/images/banner1.png'
+import banner2 from '@/assets/banners/images/banner2.png'
+import banner3 from '@/assets/banners/images/banner3.png'
+import banner4 from '@/assets/banners/images/banner4.png'
+import banner5 from '@/assets/banners/images/banner5.png'
 
 const images = [
   {

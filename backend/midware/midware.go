@@ -16,12 +16,17 @@ import (
 // AuthMiddleware 提取请求头中的 authorization token 并解析它
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// 放行不需要鉴权的路径（例如注册页的图片上传）
+		if c.Request.Method == "OPTIONS" || c.Request.URL.Path == "/api/common/upload" || c.Request.URL.Path == "/api/sms/send" || c.Request.URL.Path == "/api/sms/verify" {
+			c.Next()
+			return
+		}
 		// 提取 authorization 头
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"code":"401",
-				"msg": "no token provided",
+				"code": "401",
+				"msg":  "no token provided",
 			})
 			return
 		}
@@ -30,8 +35,8 @@ func AuthMiddleware() gin.HandlerFunc {
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 		if tokenString == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"code":"401",
-				"msg": "Invalid Authorization header format",
+				"code": "401",
+				"msg":  "Invalid Authorization header format",
 			})
 			return
 		}
@@ -40,11 +45,11 @@ func AuthMiddleware() gin.HandlerFunc {
 		username, err := utils.ParseJWT(tokenString)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-	            "code":"401",		
-				"msg": "Invalid token"})
+				"code": "401",
+				"msg":  "Invalid token"})
 			return
 		}
-        // 根据用户名查找用户ID
+		// 根据用户名查找用户ID
 		var baseUser models.BaseUser
 		if err := global.Db.Where("username = ?", username).First(&baseUser).Error; err != nil {
 			if err == gorm.ErrRecordNotFound {

@@ -24,23 +24,24 @@ func SetRouter() *gin.Engine {
 	noAuth := fe.Group("/api")
 	{
 		noAuth.POST("/login", controller.Login)
-		noAuth.POST("/register", controller.Register_Base_User_temp)
-		noAuth.POST("/user/register", controller.Register_User)
-		noAuth.POST("/rider/register", controller.Register_Rider)
-		noAuth.POST("/merchant/register", controller.Register_Merchant)
+		noAuth.POST("/register", controller.Register)
+		// 兼容以前的单独注册路由，指向统一的 Register
+		noAuth.POST("/register/user", controller.Register)
+		noAuth.POST("/register/rider", controller.Register)
+		noAuth.POST("/register/merchant", controller.Register)
 
 		noAuth.GET("/merchant/category/list", controller.Get_category)
 		noAuth.GET("/merchant/dish/categories", controller.Get_category)
-		noAuth.GET("/merchant/dishes/page", controller.Get_dishes)
 
 		noAuth.GET("/merchant/common/download", controller.CommonDownload)
+		// 允许未登录用户上传图片（用于注册页面等）
+		noAuth.POST("/common/upload", controller.UploadImage)
 
-		noAuth.GET("/merchant/orders/status",controller.GetOrderListByStatus)
-		noAuth.GET("/merchant/orders/page",controller.GetOrderPage)
-		noAuth.GET("/merchant/order/detail",controller.GetOrderDetail)
-		noAuth.POST("/merchant/order/add",controller.Orderadd)
+		noAuth.GET("/merchant/orders/status", controller.GetOrderListByStatus)
+		noAuth.GET("/merchant/orders/page", controller.GetOrderPage)
+		noAuth.GET("/merchant/order/detail", controller.GetOrderDetail)
+		noAuth.POST("/merchant/order/add", controller.Orderadd)
 
-       
 	}
 	// 创建一个需要中间件的组
 	auth := fe.Group("/api")
@@ -54,8 +55,7 @@ func SetRouter() *gin.Engine {
 		auth.GET("/merchant/dish/list", controller.QueryDishList)
 		auth.GET("/merchant/dish/query", controller.Get_Dish_ById)
 		auth.POST("/merchant/dish/status", controller.Edit_DishStatus_By_Status)
-
-		auth.POST("/common/upload", controller.UploadImage)
+        auth.GET("/merchant/dishes/page", controller.Get_dishes)
 
 		auth.POST("/merchant/meal/add", controller.Meal_add)
 		auth.POST("/merchant/meal/status", controller.Edit_Meal_Status)
@@ -64,16 +64,20 @@ func SetRouter() *gin.Engine {
 		auth.GET("/merchant/meal/query", controller.Get_Meal_ById)
 		auth.GET("/merchant/meal/page", controller.GetMealsPage)
 
-		auth.POST("/merchant/order/accept",controller.OrderAccept)
-		auth.POST("/merchant/order/reject",controller.OrderReject)
-		auth.POST("/merchant/order/delivery",controller.OrderDelivery)
-		auth.POST("/merchant/order/complete",controller.OrderComplete)
+		auth.POST("/merchant/order/accept", controller.OrderAccept)
+		auth.POST("/merchant/order/reject", controller.OrderReject)
+		auth.POST("/merchant/order/delivery", controller.OrderDelivery)
+		auth.POST("/merchant/order/complete", controller.OrderComplete)
 		// 其他需要中间件保护的路由可以添加在这里
 		//需要中间件读取的信息
-		 auth.GET("/merchant/businessData",controller.GetBusinessData)
-	     auth.GET("/merchant/orderData", controller.GetOrderData)
-		  auth.GET("/merchant/overviewDishes",controller.GetOverviewDishes)
-		auth.GET("/merchant/setMealStatistics",controller.GetOverviewMeals)
+		auth.GET("/merchant/businessData", controller.GetBusinessData)
+		auth.GET("/merchant/orderData", controller.GetOrderData)
+		auth.GET("/merchant/overviewDishes", controller.GetOverviewDishes)
+		auth.GET("/merchant/setMealStatistics", controller.GetOverviewMeals)
+
+		auth.GET("/merchant/statistics/turnover",controller.GetDataOverView)
+		auth.GET("/merchant/statistics/user",controller.GetUserData)
+		auth.GET("/merchant/statistics/order",controller.GetOrderStatistics)
 	}
 	return fe
 }

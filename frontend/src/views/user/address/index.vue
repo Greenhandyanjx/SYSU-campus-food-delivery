@@ -127,9 +127,9 @@
               class="map-search-input"
               @input="onKeywordInput"
             >
-              <template #prefix>
-                <el-icon><Search /></el-icon>
-              </template>
+              <!-- <template #prefix>
+                <el-icon ><Search /></el-icon>
+              </template> -->
             </el-input>
             
             <!-- 候选项 -->
@@ -929,6 +929,25 @@ watch(activeTab, (v) => {
 }
 
 .map-search-input {
+  .el-input__inner {
+    height: 42px;              /* 自定义输入框高度 */
+    padding-left: 34px !important; /* 给 prefix 腾出空间 */
+    box-sizing: border-box;
+  }
+  .prefix-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #999;
+    margin-left: 4px;
+  }
+
+  .el-input__prefix {
+    left: 8px !important; /* 图标位置 */
+    display: flex;
+    align-items: center;
+  }
   width: 100%;
 }
 

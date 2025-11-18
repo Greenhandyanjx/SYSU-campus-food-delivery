@@ -50,6 +50,7 @@ export const registerUser = (data: {
   phone?: string;
   address?: string;
   code?: string;
+  role: "user";
 }) => {
   return request({
     url: "/register/user",
@@ -68,6 +69,7 @@ export const registerRider = (data: {
   // 身份证照片通常通过单独的文件上传接口返回 URL，后端期望传递图片 URL 或直接接收 multipart 表单
   idPhotoUrl?: string;
   code?: string;
+  role: "rider";
 }) => {
   return request({
     url: "/register/rider",
@@ -86,6 +88,7 @@ export const registerMerchant = (data: {
   licenseUrl?: string;
   logoUrl?: string;
   code?: string;
+  role: "merchant";
 }) => {
   return request({
     url: "/register/merchant",

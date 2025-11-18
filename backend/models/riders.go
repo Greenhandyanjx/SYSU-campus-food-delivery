@@ -1,8 +1,9 @@
 package models
 
 type Rider struct {
-	BaseID   uint   `gorm:"primary_key"`
-	Username string `gorm:"not null;unique" json:"username"`
-	Password string `gorm:"not null" json:"password"`
-	Phone    string `gorm:"not null;unique" json:"phone"`
+	ID       uint   `gorm:"primaryKey" json:"id"`
+	BaseID   uint   `gorm:"uniqueIndex;not null" json:"base_id"`
+	RealName string `gorm:"column:realname" json:"realname"`
+	IDNumber string `gorm:"column:idnumber" json:"idnumber"`
+	Phone    string `gorm:"type:VARCHAR(20);unique" json:"phone"`
 }

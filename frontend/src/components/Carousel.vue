@@ -287,7 +287,7 @@ watch(() => props.images.length, () => {
   transition: all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   cursor: pointer;
   user-select: none;
-  border-radius: 12px;
+  border-radius: 28px;
   overflow: hidden;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
 }

@@ -412,6 +412,8 @@ onUnmounted(() => { window.removeEventListener('scroll', onScroll); window.remov
   position: absolute;
   /* right: -10px;
   top: -3px; */
+  right: 4px;
+  top: 2px; 
   height: 38px;
   width: 38px;
   border-radius: 50%;
