@@ -67,7 +67,7 @@ export const registerRider = (data: {
   phone?: string;
   vehicle?: string;
   // 身份证照片通常通过单独的文件上传接口返回 URL，后端期望传递图片 URL 或直接接收 multipart 表单
-  idPhotoUrl?: string;
+  // idPhotoUrl?: string;
   code?: string;
   role: "rider";
 }) => {

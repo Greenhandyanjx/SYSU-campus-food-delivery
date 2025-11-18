@@ -55,7 +55,7 @@ func SetRouter() *gin.Engine {
 		auth.GET("/merchant/dish/list", controller.QueryDishList)
 		auth.GET("/merchant/dish/query", controller.Get_Dish_ById)
 		auth.POST("/merchant/dish/status", controller.Edit_DishStatus_By_Status)
-        auth.GET("/merchant/dishes/page", controller.Get_dishes)
+		auth.GET("/merchant/dishes/page", controller.Get_dishes)
 
 		auth.POST("/merchant/meal/add", controller.Meal_add)
 		auth.POST("/merchant/meal/status", controller.Edit_Meal_Status)
@@ -75,9 +75,13 @@ func SetRouter() *gin.Engine {
 		auth.GET("/merchant/overviewDishes", controller.GetOverviewDishes)
 		auth.GET("/merchant/setMealStatistics", controller.GetOverviewMeals)
 
-		auth.GET("/merchant/statistics/turnover",controller.GetDataOverView)
-		auth.GET("/merchant/statistics/user",controller.GetUserData)
-		auth.GET("/merchant/statistics/order",controller.GetOrderStatistics)
+		auth.GET("/merchant/statistics/turnover", controller.GetDataOverView)
+		auth.GET("/merchant/statistics/user", controller.GetUserData)
+		auth.GET("/merchant/statistics/order", controller.GetOrderStatistics)
+		// ====== Rider APIs ======
+		auth.GET("/rider/info", controller.GetRiderInfo)
+		auth.POST("/rider/status", controller.UpdateRiderStatus)
+
 	}
 	return fe
 }
