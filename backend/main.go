@@ -8,10 +8,22 @@ import (
 )
 
 func main() {
+	// 1. 加载配置
 	config.InitConfig()
-	r := router.SetRouter() // 初始化路由
+
+	// 2. 初始化数据库连接
+	config.InitDB()
+
+	// 3. 执行自动建表
+	config.Initalldb()
+
+	// 4. 初始化路由
+	r := router.SetRouter()
+
+	// 5. 启动服务
 	if err := r.Run(":" + config.AppConfig.App.Port); err != nil {
 		log.Fatalf("Server startup failed: %v", err)
 	}
+
 	fmt.Println("server start at port 3000")
 }
