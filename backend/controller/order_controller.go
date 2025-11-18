@@ -4,6 +4,7 @@ import (
 	"backend/global"
 	"backend/models"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -48,6 +49,19 @@ func GetOrderListByStatus(c *gin.Context) {
 }
 
 //获取order列表，时间划分
+//定义新的结构体，包含原有的 order 属性和 dishnames 字段
+type OrderWithDishnames struct {
+    ID     uint      `json:"order_id"`
+    Dropofpoint   time.Time `json:"dropof_point"`
+    Expected_time time.Time `json:"expected_time"`
+    Phone       string    `json:"phone"`
+    Status      int       `json:"status"`
+    Numberoftableware    int       `json:"quantity"`
+    TotalPrice  float64   `json:"total_price"`
+    Dishnames   string    `json:"dishnames"`
+    Notes string `json:"notes"`
+    Consignee string `json:"consignee"` 
+}
 func GetOrderPage(c *gin.Context) {
     pageStr := c.Query("page")
     sizeStr := c.Query("size")
@@ -83,7 +97,7 @@ func GetOrderPage(c *gin.Context) {
         }
     }
     
-    var orders []models.Order
+    var orders []OrderWithDishnames
     var count int64
     // 计算分页偏移量
     offset := (page - 1) * size
@@ -118,12 +132,41 @@ func GetOrderPage(c *gin.Context) {
     }
 
     // 查询订单列表
-    result := query.Limit(size).Offset(offset).Find(&orders)
-    if result.Error != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get order page", "data": nil})
-        return
-    }
 
+result := query.Limit(size).Offset(offset).Find(&orders)
+if result.Error != nil {
+    c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get order page", "data": nil})
+    return
+}
+// 提取订单ID列表
+var orderIDs []uint
+for _, order := range orders {
+    orderIDs = append(orderIDs, order.ID)
+}
+// 查询 orderdish 表以获取每个订单的菜品名
+var orderDishnames []struct {
+    OrderID   uint     `gorm:"column:order_id"`
+    Dishnames string   `gorm:"column:dishnames"` // 修改为 string 类型，因为 GROUP_CONCAT 返回的是一个字符串
+}
+if err := global.Db.Table("orderdish").
+    Select("order_id, GROUP_CONCAT(dishname) as dishnames").
+    Where("order_id IN ?", orderIDs).
+    Find(&orderDishnames).Error; err != nil {
+    log.Printf("查询订单菜品名失败: %v", err)
+    c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "查询订单菜品名失败", "data": nil})
+    return
+}
+// 构建订单和菜品名的映射
+dishnamesMap := make(map[uint]string)
+for _, od := range orderDishnames {
+    dishnamesMap[od.OrderID] = od.Dishnames
+}
+   // 将映射中的数据赋值给结构体表
+        for i, order := range orders {
+            if dishnames, exists := dishnamesMap[order.ID]; exists {
+                orders[i].Dishnames = dishnames
+            }
+        }
     // 查询总订单数
 	countQuery := global.Db.Model(&models.Order{})
 	if !beginTime.IsZero() {
@@ -334,8 +377,28 @@ func OrderComplete(c *gin.Context) {
         c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to update order status", "data": nil})
         return
     }
-    // 触发配送流程（这里假设配送流程是一个简单的消息通知）
+    // 触发后续流程（这里假设后续流程是一个简单的消息通知）
     triggerDeliveryProcess(order)
+    //修改销量表
+    // 查找对应的 dishId和num
+    var orderDishes []models.OrderDish
+    if err := global.Db.Model(&models.Order{}).Where("orderid = ?",request.OrderID).Find(&orderDishes).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get order dishes", "data": nil})
+        return
+    }
+
+    // 更新 sales_stats 表中的 quantity
+    for _, od := range orderDishes {
+        if err := global.Db.Model(&models.SalesStat{}).
+            Where("merchant_id = ? AND item_type = ? AND item_id = ? AND date = ?", 
+                order.MerchantID, "dish", od.DishID, order.CreatedAt.Format("2006-01-02")).
+            Updates(map[string]interface{}{"quantity": gorm.Expr("quantity + ?", od.Num)}).Error; err != nil {
+            c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to update sales stats", "data": nil})
+            return
+        }
+    }
+
+    c.JSON(http.StatusOK, gin.H{"code": 1, "message": "sales stats updated successfully"})
     // 返回结果
     c.JSON(http.StatusOK, gin.H{
         "code": 1,

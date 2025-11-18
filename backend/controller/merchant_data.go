@@ -355,3 +355,104 @@ func intSliceToStringSlice(ints []int) []string {
     }
     return strSlice
 }
+
+
+// GetTopSales 返回 top N 销量项
+// 请求参数：type=dish|meal, date=YYYY-MM-DD, limit=10
+func GetTopSales(c *gin.Context) {
+    // typ := c.Query("type")
+    // if typ != "dish" && typ != "meal" {
+    //     c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "type must be 'dish' or 'meal'"})
+    //     return
+    // }
+    typ:="dish"
+    // 绑定请求参数
+    var params GetStatisticsParams
+    if err := c.ShouldBindQuery(&params); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{
+            "code": "400",
+            "msg":  "请求参数错误",
+        })
+        return
+    }
+
+    // 解析 begin 和 end 参数为时间格式
+    beginTime, err := time.Parse("2006-01-02", params.Begin)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{
+            "code": "400",
+            "msg":  "begin 参数格式错误",
+        })
+        return
+    }
+
+    endTime, err := time.Parse("2006-01-02", params.End)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{
+            "code": "400",
+            "msg":  "end 参数格式错误",
+        })
+        return
+    }
+
+    // 确保 endTime 不早于 beginTime
+    if endTime.Before(beginTime) {
+        c.JSON(http.StatusBadRequest, gin.H{
+            "code": "400",
+            "msg":  "end 参数不能早于 begin 参数",
+        })
+        return
+    }
+
+    // limitStr := c.DefaultQuery("limit", "10")
+    limitStr:="10"
+    limit, err := strconv.Atoi(limitStr)
+    if err != nil || limit <= 0 {
+        limit = 10
+    }
+
+    // merchant id 优先从中间件获取
+    var merchantID uint
+    if v, ok := c.Get("baseUserID"); ok {
+        switch id := v.(type) {
+        case uint:
+            merchantID = id
+        case int:
+            merchantID = uint(id)
+        }
+    }
+    if merchantID == 0 {
+        c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "merchant id required"})
+        return
+    }
+
+    var stats []models.SalesStat
+    if err := global.Db.Model(&models.SalesStat{}).
+        Where("merchant_id = ? AND item_type = ? AND date BETWEEN  ? AND ?", merchantID, typ,beginTime,endTime).
+        Order("quantity desc").
+        Limit(limit).
+        Find(&stats).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "query failed"})
+        return
+    }
+
+    // 返回 item_id, item_name,quantity, revenue 列表
+       // 提取菜品名和销量列表
+    nameList := make([]string, len(stats))
+    numberList := make([]int, len(stats))
+    for i, s := range stats {
+        nameList[i] = s.Itemname
+        numberList[i] = s.Quantity
+    }
+    // 将切片转换为字符串
+    nameListStr := strings.Join(nameList, ",")
+    numberListStr := strings.Join(intSliceToStringSlice(numberList), ",")
+    // 返回结果
+    c.JSON(http.StatusOK, gin.H{
+        "code": 1,
+        "data": gin.H{
+            "nameList":   nameListStr,
+            "numberList": numberListStr,
+        },
+    })
+}
