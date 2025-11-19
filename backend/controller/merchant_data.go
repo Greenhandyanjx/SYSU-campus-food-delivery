@@ -3,6 +3,7 @@ package controller
 import (
 	"backend/global"
 	"backend/models"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -427,12 +428,13 @@ func GetTopSales(c *gin.Context) {
     }
 
     var stats []models.SalesStat
-    if err := global.Db.Model(&models.SalesStat{}).
+    if err := global.Db.Table("sales-stats").
         Where("merchant_id = ? AND item_type = ? AND date BETWEEN  ? AND ?", merchantID, typ,beginTime,endTime).
         Order("quantity desc").
         Limit(limit).
         Find(&stats).Error; err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "query failed"})
+        fmt.Println("error:",err)
         return
     }
 

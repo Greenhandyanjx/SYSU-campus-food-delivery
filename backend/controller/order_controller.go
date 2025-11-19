@@ -51,8 +51,8 @@ func GetOrderListByStatus(c *gin.Context) {
 //获取order列表，时间划分
 //定义新的结构体，包含原有的 order 属性和 dishnames 字段
 type OrderWithDishnames struct {
-    ID     uint      `json:"order_id"`
-    Dropofpoint   time.Time `json:"dropof_point"`
+    ID     uint      `json:"orderid"`
+    Dropofpoint   time.Time `json:"orderTime"`
     Expected_time time.Time `json:"expected_time"`
     Phone       string    `json:"phone"`
     Status      int       `json:"status"`
@@ -213,7 +213,7 @@ for _, od := range orderDishnames {
 
 // 根据orderId获取订单详情
 func GetOrderDetail(c *gin.Context) {
-    orderIdStr := c.Query("orderId")
+    orderIdStr := c.Query("orderid")
     if orderIdStr == "" {
         c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "orderId is required", "data": nil})
         return
