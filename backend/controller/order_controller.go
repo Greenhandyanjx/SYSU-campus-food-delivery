@@ -62,6 +62,18 @@ type OrderWithDishnames struct {
     Notes string `json:"notes"`
     Consignee string `json:"consignee"` 
 }
+//赋值函数
+func copyOrderFields(src *models.Order, dst *OrderWithDishnames) {
+    dst.ID = src.ID
+    dst.Dropofpoint = src.DropofPoint
+    dst.Expected_time = src.ExpectedTime
+    dst.Phone = src.Phone
+    dst.Status = src.Status
+    dst.Numberoftableware = src.Numberoftableware
+    dst.TotalPrice = src.TotalPrice
+    dst.Notes = src.Notes
+    dst.Consignee = src.Consignee
+}
 func GetOrderPage(c *gin.Context) {
     pageStr := c.Query("page")
     sizeStr := c.Query("size")
@@ -98,6 +110,8 @@ func GetOrderPage(c *gin.Context) {
     }
     
     var orders []OrderWithDishnames
+    var Orders []models.Order
+    var orderIDs []uint
     var count int64
     // 计算分页偏移量
     offset := (page - 1) * size
@@ -133,13 +147,20 @@ func GetOrderPage(c *gin.Context) {
 
     // 查询订单列表
 
-result := query.Limit(size).Offset(offset).Find(&orders)
+result := query.Limit(size).Offset(offset).Find(&Orders)
 if result.Error != nil {
     c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get order page", "data": nil})
     return
 }
+// 将查询结果复制到新的结构体切片
+for _, srcOrder := range Orders {
+        var dstOrder OrderWithDishnames
+        copyOrderFields(&srcOrder, &dstOrder)
+        orders = append(orders, dstOrder)
+}
+
 // 提取订单ID列表
-var orderIDs []uint
+
 for _, order := range orders {
     orderIDs = append(orderIDs, order.ID)
 }
@@ -148,9 +169,10 @@ var orderDishnames []struct {
     OrderID   uint     `gorm:"column:order_id"`
     Dishnames string   `gorm:"column:dishnames"` // 修改为 string 类型，因为 GROUP_CONCAT 返回的是一个字符串
 }
-if err := global.Db.Table("orderdish").
+if err := global.Db.Table("order-dish").
     Select("order_id, GROUP_CONCAT(dishname) as dishnames").
     Where("order_id IN ?", orderIDs).
+    Group("order_id").
     Find(&orderDishnames).Error; err != nil {
     log.Printf("查询订单菜品名失败: %v", err)
     c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "查询订单菜品名失败", "data": nil})
