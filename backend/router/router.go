@@ -72,6 +72,10 @@ func SetRouter() *gin.Engine {
 		auth.POST("/merchant/order/delivery", controller.OrderDelivery)
 		auth.POST("/merchant/order/complete", controller.OrderComplete)
 		// 其他需要中间件保护的路由可以添加在这里
+		// WebSocket 聊天（需要登录）
+		auth.GET("/chat/ws", controller.ChatWS)
+		// 聊天历史
+		auth.GET("/chat/history", controller.ChatHistory)
 		//需要中间件读取的信息
 		auth.GET("/merchant/businessData", controller.GetBusinessData)
 		auth.GET("/merchant/orderData", controller.GetOrderData)
