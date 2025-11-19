@@ -66,6 +66,11 @@ func Initalldb() error {
 		fmt.Println("orders table create fail")
 		return err
 	}
+	// 聊天消息表
+	if err := global.Db.Table("chat_messages").AutoMigrate(&models.ChatMessage{}); err != nil {
+		fmt.Println("chat_messages table create fail")
+		return err
+	}
 	if err := global.Db.Table("rider_profiles").AutoMigrate(&models.RiderProfile{}); err != nil {
 		fmt.Println("rider_profiles table create fail")
 		return err

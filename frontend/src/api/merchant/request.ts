@@ -21,7 +21,11 @@ service.interceptors.request.use(
   (config) => {
     // 这里可以统一加 token
     const token = localStorage.getItem("token");
-    if (token) config.headers.Authorization = `Bearer ${token}`;
+    if (token) {
+      // token may already include the 'Bearer ' prefix (backend returns it that way).
+      // Avoid duplicating 'Bearer ' (which would produce 'Bearer Bearer ...').
+      config.headers.Authorization = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+    }
     return config;
   },
   (error) => Promise.reject(error)
