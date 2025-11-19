@@ -70,6 +70,17 @@ func Initalldb() error {
 		fmt.Println("rider_profiles table create fail")
 		return err
 	}
-
+     if err := global.Db.Table("order-dish").AutoMigrate(&models.OrderDish{}); err != nil {
+	 	fmt.Println("orderdish table create fail")
+	 	panic(err)
+	}
+	 if err := global.Db.Table("order-meal").AutoMigrate(&models.OrderMeal{}); err != nil {
+	 	fmt.Println("ordermeal table create fail")
+	 	panic(err)
+	}
+	 if err := global.Db.Table("sales-stats").AutoMigrate(&models.SalesStat{}); err != nil {
+	 	fmt.Println("salesstats table create fail")
+	 	panic(err)
+	}
 	return nil
 }
