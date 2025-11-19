@@ -6,6 +6,7 @@ import (
 	"backend/utils"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -31,22 +32,41 @@ type ChatMessagePayload struct {
 
 // ChatWS 处理 websocket 连接
 func ChatWS(c *gin.Context) {
-	// 先从 header 或 query 中解析 token，确认用户身份
+	// 握手鉴权：优先使用 token；若无 token 则尝试使用 query uid（仅作开发/兼容）
 	token := c.Query("token")
 	if token == "" {
-		// 也可以从 Authorization 头里读取
 		token = c.GetHeader("Authorization")
 	}
-	username, err := utils.ParseJWT(token)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "invalid token"})
-		return
-	}
-	// 根据 username 查 base_user 获取 base_id
+
 	var base models.BaseUser
-	if err := global.Db.Where("username = ?", username).First(&base).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "user not found"})
-		return
+	if token != "" {
+		username, err := utils.ParseJWT(token)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "invalid token"})
+			return
+		}
+		if err := global.Db.Where("username = ?", username).First(&base).Error; err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "user not found"})
+			return
+		}
+	} else {
+		// 尝试从 query 参数读取 uid（不推荐用于生产）
+		uidStr := c.Query("uid")
+		if uidStr == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "no token or uid provided"})
+			return
+		}
+		// 把 uid 转为 uint 并查询 base user
+		var uid uint64
+		uid, _ = strconv.ParseUint(uidStr, 10, 64)
+		if uid == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "invalid uid"})
+			return
+		}
+		if err := global.Db.First(&base, uid).Error; err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "user not found"})
+			return
+		}
 	}
 
 	ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
@@ -149,10 +169,31 @@ func ChatWS(c *gin.Context) {
 func ChatHistory(c *gin.Context) {
 	merchantId := c.Query("merchantId")
 	userBaseId := c.Query("userBaseId")
-	if merchantId == "" || userBaseId == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "merchantId and userBaseId required"})
+	if merchantId == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "merchantId required"})
 		return
 	}
+
+	// 若未提供 userBaseId，则尝试从 Authorization token 推断
+	if userBaseId == "" {
+		token := c.GetHeader("Authorization")
+		if token == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "userBaseId required or provide Authorization token"})
+			return
+		}
+		username, err := utils.ParseJWT(token)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "invalid token"})
+			return
+		}
+		var base models.BaseUser
+		if err := global.Db.Where("username = ?", username).First(&base).Error; err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "user not found"})
+			return
+		}
+		userBaseId = strconv.FormatUint(uint64(base.ID), 10)
+	}
+
 	var msgs []models.ChatMessage
 	// 简单分页参数
 	page := 1

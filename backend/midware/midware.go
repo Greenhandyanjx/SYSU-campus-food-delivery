@@ -21,22 +21,23 @@ func AuthMiddleware() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		// 提取 authorization 头
+		// 提取 authorization 头或 query token（支持 websocket 使用 query token）
 		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"code": "401",
-				"msg":  "no token provided",
-			})
-			return
+		tokenString := ""
+		if authHeader != "" {
+			tokenString = strings.TrimPrefix(authHeader, "Bearer ")
+		} else {
+			// 支持把 token 放在查询参数 token 中（供 WebSocket 握手或特殊客户端使用）
+			tokenQuery := c.Query("token")
+			if tokenQuery != "" {
+				tokenString = tokenQuery
+			}
 		}
 
-		// 提取 token
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 		if tokenString == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"code": "401",
-				"msg":  "Invalid Authorization header format",
+				"msg":  "no token provided",
 			})
 			return
 		}

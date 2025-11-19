@@ -91,8 +91,7 @@ func Register(ctx *gin.Context) {
 		}
 	case "rider":
 		r := models.Rider{
-			BaseID: base.ID,
-			// Username: base.Username,
+			BaseID:   base.ID,
 			RealName: getString("realname", "real_name"),
 			IDNumber: getString("idNumber", "id_number"),
 			// IDPhoto:  getString("idPhoto", "id_photo"),
