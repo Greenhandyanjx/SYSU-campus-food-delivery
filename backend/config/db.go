@@ -11,8 +11,6 @@ import (
 	"gorm.io/gorm"
 )
 
-
-
 func InitDB() {
 	dsn := AppConfig.Database.DSN
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
@@ -30,8 +28,8 @@ func InitDB() {
 	global.Db = db
 }
 
-func Initalldb() error{
-	if err := global.Db.AutoMigrate(&models.Dish{},&models.Flavor{}); err != nil {
+func Initalldb() error {
+	if err := global.Db.AutoMigrate(&models.Dish{}, &models.Flavor{}); err != nil {
 		fmt.Println("dish,flavor table create fail")
 		return err
 	}
@@ -43,11 +41,11 @@ func Initalldb() error{
 		fmt.Println("user table create fail")
 		return err
 	}
-    if err := global.Db.Table("riders").AutoMigrate(&models.Rider{});err != nil {
+	if err := global.Db.Table("riders").AutoMigrate(&models.Rider{}); err != nil {
 		fmt.Println("riders table create fail")
 		return err
 	}
-	if err := global.Db.Table("merchants").AutoMigrate(&models.Merchant{});err!=nil{
+	if err := global.Db.Table("merchants").AutoMigrate(&models.Merchant{}); err != nil {
 		fmt.Println("merchants table create fail")
 		return err
 	}
@@ -55,11 +53,11 @@ func Initalldb() error{
 		fmt.Println("categories table create fail")
 		return err
 	}
-	 if err := global.Db.Table("meal_dishes").AutoMigrate(&models.MealDish{}); err != nil {
-        fmt.Println("mealdish table create fail")
-        return err
-    }
-	 // 创建 meal
+	if err := global.Db.Table("meal_dishes").AutoMigrate(&models.MealDish{}); err != nil {
+		fmt.Println("mealdish table create fail")
+		return err
+	}
+	// 创建 meal
 	if err := global.Db.Table("meals").AutoMigrate(&models.Meal{}); err != nil {
 		fmt.Println("mealdish table create fail")
 		return err
@@ -73,5 +71,10 @@ func Initalldb() error{
 		fmt.Println("chat_messages table create fail")
 		return err
 	}
+	if err := global.Db.Table("rider_profiles").AutoMigrate(&models.RiderProfile{}); err != nil {
+		fmt.Println("rider_profiles table create fail")
+		return err
+	}
+
 	return nil
 }

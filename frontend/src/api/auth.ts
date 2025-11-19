@@ -67,7 +67,7 @@ export const registerRider = (data: {
   phone?: string;
   vehicle?: string;
   // 身份证照片通常通过单独的文件上传接口返回 URL，后端期望传递图片 URL 或直接接收 multipart 表单
-  idPhotoUrl?: string;
+  // idPhotoUrl?: string;
   code?: string;
   role: "rider";
 }) => {
@@ -122,20 +122,3 @@ export const changePassword = (data: { username?: string; oldPassword: string; n
     data,
   });
 };
-
-// 短信验证码（开发环境）：请求发送并返回验证码（供注册页面显示）
-export const sendSmsCode = (data: { phone: string; purpose?: string }) => {
-  return request({
-    url: "/sms/send",
-    method: "POST",
-    data,
-  });
-}
-
-export const verifySmsCode = (data: { phone: string; code: string; purpose?: string }) => {
-  return request({
-    url: "/sms/verify",
-    method: "POST",
-    data,
-  });
-}

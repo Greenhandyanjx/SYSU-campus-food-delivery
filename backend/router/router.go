@@ -36,9 +36,6 @@ func SetRouter() *gin.Engine {
 		noAuth.GET("/merchant/common/download", controller.CommonDownload)
 		// 允许未登录用户上传图片（用于注册页面等）
 		noAuth.POST("/common/upload", controller.UploadImage)
-		// 短信验证码（开发环境）：发送与校验（不需要登录）
-		noAuth.POST("/sms/send", controller.SendCode)
-		noAuth.POST("/sms/verify", controller.VerifyCode)
 
 		noAuth.GET("/merchant/orders/status", controller.GetOrderListByStatus)
 		noAuth.GET("/merchant/orders/page", controller.GetOrderPage)
@@ -58,7 +55,7 @@ func SetRouter() *gin.Engine {
 		auth.GET("/merchant/dish/list", controller.QueryDishList)
 		auth.GET("/merchant/dish/query", controller.Get_Dish_ById)
 		auth.POST("/merchant/dish/status", controller.Edit_DishStatus_By_Status)
-        auth.GET("/merchant/dishes/page", controller.Get_dishes)
+		auth.GET("/merchant/dishes/page", controller.Get_dishes)
 
 		auth.POST("/merchant/meal/add", controller.Meal_add)
 		auth.POST("/merchant/meal/status", controller.Edit_Meal_Status)
@@ -72,10 +69,6 @@ func SetRouter() *gin.Engine {
 		auth.POST("/merchant/order/delivery", controller.OrderDelivery)
 		auth.POST("/merchant/order/complete", controller.OrderComplete)
 		// 其他需要中间件保护的路由可以添加在这里
-		// WebSocket 聊天（需要登录）
-		auth.GET("/chat/ws", controller.ChatWS)
-		// 聊天历史
-		auth.GET("/chat/history", controller.ChatHistory)
 		//需要中间件读取的信息
 		auth.GET("/merchant/businessData", controller.GetBusinessData)
 		auth.GET("/merchant/orderData", controller.GetOrderData)

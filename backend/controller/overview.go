@@ -19,8 +19,6 @@ func GetBusinessData(c *gin.Context) {
         c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "请求参数错误"})
         return
     }    
-    // 查询状态为 1 的订单，并确保 merchantid 符合 baseid
-    var count int64
     var totalRevenue float64
      currentDate := time.Now().Format("2006-01-02")
 	 // 查询 revenue 表，获取对应日期的营业额
@@ -31,31 +29,44 @@ func GetBusinessData(c *gin.Context) {
         c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "查询失败"})
         return
     }
-
-  // 查询状态为 5的订单数量
+  // 初始化计数变量
+    var countBetween2And6, countForStatus5 int64
+   // 查询状态为大于2小于6的订单数量
     if err := global.Db.Model(&models.Order{}).
-        Where("status = ? AND merchant_id = ? AND DATE(pickup_point) = ?",5,baseid,currentDate).
-        Count(&count).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code": 0, 
-		    "message": "查询失败",
-	    })
+        Where("status > ? AND status < ? AND merchant_id = ? AND DATE(pickup_point) = ?", 2, 6, baseid, currentDate).
+        Count(&countBetween2And6).Error; err != nil {
+        log.Printf("查询状态为大于2小于6的订单数量失败: %v", err)
+        c.JSON(http.StatusInternalServerError, gin.H{
+            "code":    0,
+            "message": "查询失败",
+        })
+        return
+    }
+    // 查询状态为5的订单数量
+    if err := global.Db.Model(&models.Order{}).
+        Where("status = ? AND merchant_id = ? AND DATE(pickup_point) = ?", 5, baseid, currentDate).
+        Count(&countForStatus5).Error; err != nil {
+        log.Printf("查询状态为5的订单数量失败: %v", err)
+        c.JSON(http.StatusInternalServerError, gin.H{
+            "code":    0,
+            "message": "查询失败",
+        })
         return
     }
 
     //计算平均价格
     var avgTicket float64
-    if count > 0 {
-        avgTicket = totalRevenue / float64(count)
+    if countBetween2And6 > 0 {
+        avgTicket = totalRevenue / float64(countBetween2And6)
     }
-
+     fmt.Println(countForStatus5,countBetween2And6)
     // 返回结果
     c.JSON(http.StatusOK, gin.H{
         "code": 1,
         "data": gin.H{
             "turnover": totalRevenue,
-            "validOrderCount":count,
-            "orderCompletionRate":0,
+            "validOrderCount":countBetween2And6,
+            "orderCompletionRate":float64(countForStatus5)/float64(countBetween2And6),
             "unitPrice": avgTicket,
             "newUsers":0,
         },
