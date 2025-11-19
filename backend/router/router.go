@@ -81,6 +81,11 @@ func SetRouter() *gin.Engine {
 		auth.GET("/merchant/orderData", controller.GetOrderData)
 		auth.GET("/merchant/overviewDishes", controller.GetOverviewDishes)
 		auth.GET("/merchant/setMealStatistics", controller.GetOverviewMeals)
+        //数据统计页面
+		auth.GET("/merchant/statistics/turnover",controller.GetDataOverView)
+		auth.GET("/merchant/statistics/user",controller.GetUserData)
+		auth.GET("/merchant/statistics/order",controller.GetOrderStatistics)
+		auth.GET("merchant/statistics/top",controller.GetTopSales)
 	}
 	return fe
 }
