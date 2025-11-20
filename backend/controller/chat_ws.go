@@ -5,6 +5,7 @@ import (
 	"backend/models"
 	"backend/utils"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"sync"
@@ -24,7 +25,10 @@ var (
 
 // ChatMessagePayload 用于 WS 收发的消息结构
 type ChatMessagePayload struct {
-	MerchantID   uint   `json:"merchant_id"`
+	MerchantID uint `json:"merchant_id"`
+	// 兼容：客户端可能发送 `user_base_id`（user 作为发送者或作为目标时）
+	// 或者发送 `to_user_base_id`（商家端可能使用此名字）。两者之一可能为 0。
+	UserBaseID   uint   `json:"user_base_id"`
 	ToUserBaseID uint   `json:"to_user_base_id"` // 可选，当 merchant 作为发送者时指定
 	Content      string `json:"content"`
 	Type         string `json:"type"` // text/image
@@ -71,73 +75,118 @@ func ChatWS(c *gin.Context) {
 
 	ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
+		log.Println("❌ WS Upgrade failed:", err)
 		return
 	}
-
+	log.Println("✔ WS connected: base_id =", base.ID)
 	// 注册连接
 	connMu.Lock()
 	connStore[base.ID] = ws
 	connMu.Unlock()
-
+	log.Println("✔ Registered WS conn for base_id =", base.ID)
 	// 简单的读循环：接收消息并处理
 	for {
 		_, message, err := ws.ReadMessage()
+		log.Println("📩 Incoming WS message from base_id =", base.ID, "raw =", string(message))
 		if err != nil {
 			break
 		}
 		var payload ChatMessagePayload
 		if err := json.Unmarshal(message, &payload); err != nil {
 			// 忽略错误消息
+			log.Println("❌ Unmarshal failed:", err)
+
 			continue
 		}
+		// 兼容各种客户端字段名：优先使用 user_base_id，其次使用 to_user_base_id
+		var effectiveUserBaseID uint
+		if payload.UserBaseID != 0 {
+			effectiveUserBaseID = payload.UserBaseID
+		} else {
+			effectiveUserBaseID = payload.ToUserBaseID
+		}
+		log.Println("➡ Parsed payload:", payload, "effectiveUserBaseID=", effectiveUserBaseID)
+		// 保存消息到 DB：更稳健地解析 merchant_id / user_base_id
+		log.Println("📝 Preparing to store message: payloadMerchant=", payload.MerchantID, "from_base_id=", base.ID)
 
-		// 保存消息到 DB
 		chat := models.ChatMessage{
 			FromBaseID: base.ID,
-			MerchantID: payload.MerchantID,
 			Content:    payload.Content,
 			Type:       payload.Type,
 			Status:     "sent",
 			CreatedAt:  time.Now(),
 		}
 
-		// 如果发送者是 merchant，则 userBaseId 需要从 payload.ToUserBaseID 获取
-		// 如果发送者是 user，则 userBaseId = base.ID
-		// 尝试检查发送者角色
-		var merchant models.Merchant
-		if err := global.Db.Where("base_id = ?", base.ID).First(&merchant).Error; err == nil {
-			// 发送者是商家
-			chat.UserBaseID = payload.ToUserBaseID
+		// 检查发送者是否为商家（通过 base_id 关联）
+		var senderMerchant models.Merchant
+		senderIsMerchant := false
+		if err := global.Db.Where("base_id = ?", base.ID).First(&senderMerchant).Error; err == nil {
+			senderIsMerchant = true
+			// 发送者是商家，确保 chat.MerchantID 为该商家的 id
+			chat.MerchantID = senderMerchant.ID
+			// user id 从 effectiveUserBaseID 取得（必须由前端提供）
+			chat.UserBaseID = effectiveUserBaseID
 		} else {
-			// 发送者被视为用户
+			// 发送者被视为用户：userBaseId = 发送者 base id
 			chat.UserBaseID = base.ID
+			// merchant id 需要从 payload.MerchantID 解析：支持两种情况：
+			// 1) 前端传入的是商家主键 id（merchant.id）
+			// 2) 前端错误地传入了商家对应的 base_id（merchant.base_id），作为回退我们按 base_id 查找
+			if payload.MerchantID != 0 {
+				var targetMerchant models.Merchant
+				// 先按主键查找
+				if err := global.Db.First(&targetMerchant, payload.MerchantID).Error; err == nil {
+					chat.MerchantID = targetMerchant.ID
+				} else {
+					// 回退：尝试按 base_id 查找
+					if err := global.Db.Where("base_id = ?", payload.MerchantID).First(&targetMerchant).Error; err == nil {
+						chat.MerchantID = targetMerchant.ID
+					}
+				}
+			}
+		}
+
+		// 若 merchant id 仍然为 0（无法解析），记录并继续（消息仍会被存储但无法转发）
+		if chat.MerchantID == 0 {
+			log.Println("⚠️ merchant id unresolved for message from base_id=", base.ID, "payloadMerchant=", payload.MerchantID)
 		}
 
 		if err := global.Db.Create(&chat).Error; err != nil {
-			// 存储失败，忽略
+			log.Println("❌ failed to persist chat message:", err)
 		}
 
-		// 发送到接收方（商家或用户）如果在线
-		// 对于用户发送者：接收方是商家 — 我们需要把消息推给商家端（商家连接存为其 base_id）
-		// 对于商家发送者：接收方是用户（payload.ToUserBaseID）
+		// 发送到接收方（商家或用户）如果在线：
+		// 对于用户发送者（senderIsMerchant == false）：接收方是商家对应的 base_id
+		// 对于商家发送者：接收方是用户（chat.UserBaseID）
 
 		// 查找目标 base_id
 		var targetBaseID uint
-		if chat.UserBaseID == base.ID {
+		if !senderIsMerchant {
 			// 发送者是用户，目标为商家对应的 base_id
-			var targetMerchant models.Merchant
-			if err := global.Db.First(&targetMerchant, chat.MerchantID).Error; err == nil {
-				targetBaseID = targetMerchant.BaseID
+			if chat.MerchantID != 0 {
+				var targetMerchant models.Merchant
+				// 先按 merchant.id 查找
+				if err := global.Db.First(&targetMerchant, chat.MerchantID).Error; err == nil {
+					targetBaseID = targetMerchant.BaseID
+				} else {
+					// 回退：merchant.MerchantID 可能本身是 base_id 的情况（防御性）
+					var fallbackMerchant models.Merchant
+					if err := global.Db.Where("base_id = ?", chat.MerchantID).First(&fallbackMerchant).Error; err == nil {
+						targetBaseID = fallbackMerchant.BaseID
+					}
+				}
 			}
 		} else {
 			// 发送者是商家，目标为用户的 base_id
 			targetBaseID = chat.UserBaseID
 		}
+		log.Println("🎯 targetBaseID =", targetBaseID)
 
 		if targetBaseID != 0 {
 			connMu.RLock()
 			targetConn, ok := connStore[targetBaseID]
 			connMu.RUnlock()
+			log.Println("🔍 Find targetConn:", ok, "targetBaseID =", targetBaseID)
 			if ok && targetConn != nil {
 				// 转发原始消息（可扩展为带时间戳、id 等）
 				out := map[string]interface{}{
@@ -148,7 +197,13 @@ func ChatWS(c *gin.Context) {
 					"type":         chat.Type,
 					"created_at":   chat.CreatedAt,
 				}
-				_ = targetConn.WriteJSON(out)
+				log.Println("📤 Sending to", targetBaseID, "content =", chat.Content)
+				if err := targetConn.WriteJSON(out); err != nil {
+					log.Println("❌ WS WriteJSON failed:", err)
+				} else {
+					log.Println("✔ WS message delivered to", targetBaseID)
+				}
+
 				// 更新状态为 delivered
 				now := time.Now()
 				chat.Status = "delivered"
@@ -204,4 +259,15 @@ func ChatHistory(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": msgs})
+}
+
+// DebugConnections 返回当前活跃的 base_user id 列表，便于调试
+func DebugConnections(c *gin.Context) {
+	connMu.RLock()
+	ids := make([]uint, 0, len(connStore))
+	for k := range connStore {
+		ids = append(ids, k)
+	}
+	connMu.RUnlock()
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": ids})
 }

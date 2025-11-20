@@ -16,12 +16,12 @@
         v-for="m in messages"
         :key="m.id"
         class="message-row"
-        :class="{ 'me': m.from_base_id === userBaseIdLocal }"
+        :class="{ 'me': isMyMessage(m) }"
       >
         <!-- 头像 -->
         <img 
           class="msg-avatar" 
-          :src="m.from_base_id === userBaseIdLocal ? userAvatarLocal : merchantAvatar" 
+          :src="isMyMessage(m) ? merchantAvatar : userAvatarLocal"
         />
 
         <!-- 气泡 -->
@@ -60,6 +60,9 @@ const input = ref('')
 let ws = null
 const msgWrap = ref(null)
 
+// 当前登录者 base_user id（用于判断消息方向：来自当前者 = 我）
+const currentBaseId = ref(null)
+
 // reactive local display fields (initialized from props)
 const merchantName = ref(props.merchantName || '商家')
 const merchantAvatar = ref(props.merchantAvatar || '/imgs/merchant.png')
@@ -84,6 +87,14 @@ async function loadHistory() {
 }
 
 async function ensureNames() {
+  // 先尝试推断当前登录者 base id（用于判断消息的“我”）
+  try {
+    const cur = await getBaseUserDetail()
+    if (cur && cur.data && cur.data.data) {
+      currentBaseId.value = cur.data.data.id
+    }
+  } catch (e) {}
+
   // merchant info
   if ((!props.merchantName || props.merchantName === '商家') && props.merchantId) {
     try {
@@ -94,17 +105,20 @@ async function ensureNames() {
       }
     } catch (e) {}
   }
-
-  // user info
+  // user info: 若没有传入 props.userBaseId，则默认把当前登录者视为 user（普通用户打开聊天）
   if (!props.userBaseId) {
-    try {
-      const u = await getBaseUserDetail()
-      if (u && u.data && u.data.data) {
-        userBaseIdLocal.value = u.data.data.id
-        userAvatarLocal.value = userAvatarLocal.value || '/imgs/user.png'
-        userNameLocal.value = u.data.data.username || userNameLocal.value
-      }
-    } catch (e) {}
+    if (currentBaseId.value) {
+      userBaseIdLocal.value = currentBaseId.value
+    } else {
+      try {
+        const u = await getBaseUserDetail()
+        if (u && u.data && u.data.data) {
+          userBaseIdLocal.value = u.data.data.id
+          userAvatarLocal.value = userAvatarLocal.value || '/imgs/user.png'
+          userNameLocal.value = u.data.data.username || userNameLocal.value
+        }
+      } catch (e) {}
+    }
   } else {
     try {
       const u = await getBaseUserDetail(props.userBaseId)
@@ -145,24 +159,41 @@ function handleGlobalMessage(msg) {
 
 function send() {
   if (!input.value) return
-  const payload = {
-    merchant_id: props.merchantId,
-    content: input.value,
-    type: 'text',
-    from_base_id: userBaseIdLocal.value,
+
+const payload = {
+  merchant_id: Number(props.merchantId),
+  user_base_id: userBaseIdLocal.value,  // ⭐⭐ 必须加
+  content: input.value,
+  type: 'text'
+}
+
+
+  console.log('[ChatWindow] send payload', payload)
+
+  // 只发送一次，并且只发送对象，让 chatClient 来 stringify
+  const ok = chatClient.send(payload)
+
+  if (!ok) {
+    console.warn('[ChatWindow] chatClient failed, fallback to local ws')
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(payload))
+    }
+  }
+
+  // 本地立即显示一条消息
+  messages.value.push({
+    from_base_id: currentBaseId.value || userBaseIdLocal.value,
+    user_base_id: userBaseIdLocal.value,
+    merchant_id: payload.merchant_id,
+    content: payload.content,
+    type: payload.type,
     created_at: new Date().toISOString()
-  }
+  })
 
-  messages.value.push(payload)   // <-- 立即渲染
   nextTick(scrollBottom)
-
-  const sent = chatClient.send(payload)
-  if (!sent && ws && ws.readyState === WebSocket.OPEN) {
-    try { ws.send(JSON.stringify(payload)) } catch (e) {}
-  }
-
   input.value = ''
 }
+
 
 
 function scrollBottom() {
@@ -170,15 +201,35 @@ function scrollBottom() {
     msgWrap.value.scrollTop = msgWrap.value.scrollHeight
   }
 }
+const isMerchantSide = ref(false)
+
+async function detectRole() {
+  try {
+    const cur = await getBaseUserDetail()
+    if (cur?.data?.data) {
+      currentBaseId.value = cur.data.data.id
+      if (Number(currentBaseId.value) === Number(props.merchantId)) {
+        isMerchantSide.value = true
+      }
+    }
+  } catch (e) {}
+}
+
+const isMyMessage = (msg) => {
+  if (isMerchantSide.value) {
+    return Number(msg.from_base_id) === Number(props.merchantId)
+  }
+  return Number(msg.from_base_id) === Number(currentBaseId.value)
+}
 
 onMounted(async () => {
-  // ensure we know current user id and merchant display info first
+  await detectRole()
   await ensureNames()
   await loadHistory()
   connectWs()
-  // subscribe to global client so messages delivered while dialog closed still appear
   chatClient.onMessage(handleGlobalMessage)
 })
+
 onBeforeUnmount(() => {
   ws?.close()
   chatClient.offMessage(handleGlobalMessage)

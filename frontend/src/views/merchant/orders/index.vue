@@ -218,6 +218,13 @@
               >
                 查看
               </el-button>
+              <el-button
+                type="text"
+                class="blueBug non"
+                @click="openChatForOrder(row)"
+              >
+                聊天
+              </el-button>
               
             </div>
           </template>
@@ -675,6 +682,15 @@ async function goDetail(id: any, status: number, r?: any) {
   const pad = (n: number) => String(n).padStart(2, '0')
 
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
+function openChatForOrder(row: any) {
+  const uid = row.user_base_id || row.userBaseId || row.userId || row.user_id || row.buyerId || row.buyer_id || row.base_user_id
+  if (!uid) {
+    ElMessage.error('无法定位订单对应的用户 ID')
+    return
+  }
+  window.dispatchEvent(new CustomEvent('chat:open', { detail: { merchantId: null, userBaseId: uid } }))
 }
 
     const idVal = raw.id ?? raw.ID ?? raw.orderId ?? raw.orderID ?? raw.orderid ?? raw.OrderID
