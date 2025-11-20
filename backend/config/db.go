@@ -87,5 +87,17 @@ func Initalldb() error {
 	 	fmt.Println("salesstats table create fail")
 	 	panic(err)
 	}
+	 if err := global.Db.Table("consignees").AutoMigrate(&models.Consignee{}); err != nil {
+	 	fmt.Println("consignees table create fail")
+	 	panic(err)
+	}
+	if err := global.Db.Table("addresses").AutoMigrate(&models.Address{}); err != nil {
+	 	fmt.Println("addressees table create fail")
+	 	panic(err)
+	}
+	if err := global.Db.Table("orders").AutoMigrate(&models.Order{}); err != nil {
+	 	fmt.Println("orders table create fail")
+	 	panic(err)
+	}
 	return nil
 }
