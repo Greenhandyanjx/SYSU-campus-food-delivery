@@ -43,6 +43,8 @@ func SetRouter() *gin.Engine {
 		// lookup endpoints for frontend
 		noAuth.GET("/merchant/detail", controller.GetMerchantDetail)
 		noAuth.GET("/baseuser/detail", controller.GetBaseUserDetail)
+		// debug: list active websocket connections (base_user ids)
+		noAuth.GET("/debug/ws/connections", controller.DebugConnections)
 		// WebSocket 握手允许通过查询参数 token 或 uid 进行鉴权，放到无鉴权组以便控制器自行处理
 		noAuth.GET("/chat/ws", controller.ChatWS)
 		noAuth.POST("/merchant/order/add", controller.Orderadd)
@@ -76,16 +78,19 @@ func SetRouter() *gin.Engine {
 		// 其他需要中间件保护的路由可以添加在这里
 		// 聊天 WebSocket 与历史接口
 		auth.GET("/chat/history", controller.ChatHistory)
+		// 商家会话列表与已读标记
+		auth.GET("/merchant/chats", controller.GetMerchantChats)
+		auth.POST("/merchant/chats/mark_read", controller.MarkChatRead)
 		//需要中间件读取的信息
 		auth.GET("/merchant/businessData", controller.GetBusinessData)
 		auth.GET("/merchant/orderData", controller.GetOrderData)
 		auth.GET("/merchant/overviewDishes", controller.GetOverviewDishes)
 		auth.GET("/merchant/setMealStatistics", controller.GetOverviewMeals)
-        //数据统计页面
-		auth.GET("/merchant/statistics/turnover",controller.GetDataOverView)
-		auth.GET("/merchant/statistics/user",controller.GetUserData)
-		auth.GET("/merchant/statistics/order",controller.GetOrderStatistics)
-		auth.GET("merchant/statistics/top",controller.GetTopSales)
+		//数据统计页面
+		auth.GET("/merchant/statistics/turnover", controller.GetDataOverView)
+		auth.GET("/merchant/statistics/user", controller.GetUserData)
+		auth.GET("/merchant/statistics/order", controller.GetOrderStatistics)
+		auth.GET("merchant/statistics/top", controller.GetTopSales)
 	}
 	return fe
 }

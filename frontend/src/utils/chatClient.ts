@@ -20,13 +20,14 @@ class ChatClient {
     }
 
     this.ws.onopen = () => {
-      console.debug('chatClient connected')
+      console.log('[chatClient] connected to', url)
       if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null }
     }
 
     this.ws.onmessage = (ev) => {
       try {
         const data = JSON.parse(ev.data)
+        console.log('[chatClient] onmessage', data)
         this.handlers.forEach(h => h(data))
       } catch (e) {
         // ignore
@@ -34,11 +35,12 @@ class ChatClient {
     }
 
     this.ws.onclose = () => {
-      console.debug('chatClient closed, will reconnect')
+      console.log('[chatClient] closed, will reconnect')
       this.scheduleReconnect()
     }
 
     this.ws.onerror = () => {
+      console.log('[chatClient] error')
       // close will trigger reconnect
     }
   }

@@ -18,6 +18,10 @@
       :order-statics="orderStatics"
       @getOrderListBy3Status="getOrderListBy3Status"
     />
+    <div class="merchant-chat-area">
+      <MerchantChatList />
+    </div>
+    <MerchantChatWindow v-if="showChat" :merchantId="chatMerchantId" :userBaseId="chatUserBaseId" @close="showChat=false" />
   </div>
 </template>
 
@@ -40,6 +44,8 @@ import Orderview from './components/orderview.vue'
 import CuisineStatistics from './components/cuisineStatistics.vue'
 import SetMealStatistics from './components/setMealStatistics.vue'
 import OrderList from './components/orderList.vue'
+import MerchantChatList from '@/components/Chat/MerchantChatList.vue'
+import MerchantChatWindow from '@/components/Chat/MerchantChatWindow.vue'
 
 const overviewData = ref<any>({})
 const orderviewData = ref<any>({})
@@ -119,7 +125,19 @@ const getOrderListBy3Status = async () => {
 
 onMounted(() => {
   init()
+  window.addEventListener('chat:open', (e: Event) => {
+    const ev = e as CustomEvent
+    const d = (ev && ev.detail) || {}
+    if (!d.userBaseId) return
+    chatMerchantId.value = d.merchantId || null
+    chatUserBaseId.value = d.userBaseId || null
+    showChat.value = true
+  })
 })
+
+const showChat = ref(false)
+const chatMerchantId = ref<number | null>(null)
+const chatUserBaseId = ref<number | null>(null)
 </script>
 
 <style lang="scss" scoped>

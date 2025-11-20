@@ -107,7 +107,7 @@
               <div>营业时间：{{ store.openTime || '10:00 - 21:00' }}</div>
               <div>电话：{{ store.phone || '未填写' }}</div>
             </div>
-            <el-button size="small" type="primary" @click="openShop">进入店铺</el-button>
+            <ChatLauncher :merchant-id="store.id || store.merchantId" :merchant-name="store.name" />
           </div>
 
           <!-- <div class="cart-preview">
@@ -189,6 +189,7 @@
 
 <script setup lang="ts">
 import { reactive, ref, computed, onMounted,onBeforeUnmount } from 'vue'
+import ChatLauncher from '@/components/Chat/ChatLauncher.vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getStoreByName, getDishesByStore, addToCart, removeFromCart, getCart } from '@/api/user/store'
