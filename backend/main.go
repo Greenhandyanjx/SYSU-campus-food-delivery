@@ -17,8 +17,7 @@ func main() {
 
 	// 3. 执行自动建表
 	//不改动数据执行一次即可
-	// config.Initalldb()
-
+	//config.Initalldb()
 	// 4. 初始化路由
 	r := router.SetRouter()
 
