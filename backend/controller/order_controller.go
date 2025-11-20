@@ -3,8 +3,8 @@ package controller
 import (
 	"backend/global"
 	"backend/models"
+	"backend/utils"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -49,32 +49,6 @@ func GetOrderListByStatus(c *gin.Context) {
 }
 
 // 获取order列表，时间划分
-// 定义新的结构体，包含原有的 order 属性和 dishnames 字段
-type OrderWithDishnames struct {
-	ID                uint      `json:"orderid"`
-	Dropofpoint       time.Time `json:"orderTime"`
-	Expected_time     time.Time `json:"expected_time"`
-	Phone             string    `json:"phone"`
-	Status            int       `json:"status"`
-	Numberoftableware int       `json:"quantity"`
-	TotalPrice        float64   `json:"total_price"`
-	Dishnames         string    `json:"dishnames"`
-	Notes             string    `json:"notes"`
-	Consignee         string    `json:"consignee"`
-}
-
-// 赋值函数
-func copyOrderFields(src *models.Order, dst *OrderWithDishnames) {
-	dst.ID = src.ID
-	dst.Dropofpoint = src.DropofPoint
-	dst.Expected_time = src.ExpectedTime
-	dst.Phone = src.Phone
-	dst.Status = src.Status
-	dst.Numberoftableware = src.Numberoftableware
-	dst.TotalPrice = src.TotalPrice
-	dst.Notes = src.Notes
-	dst.Consignee = src.Consignee
-}
 func GetOrderPage(c *gin.Context) {
 	pageStr := c.Query("page")
 	sizeStr := c.Query("size")
@@ -83,132 +57,24 @@ func GetOrderPage(c *gin.Context) {
 	phonestr := c.Query("phone")
 	numberstr := c.Query("number")
 	status := c.Query("status")
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		page = 1
-	}
-	size, err := strconv.Atoi(sizeStr)
-	if err != nil || size < 1 {
-		size = 20
-	}
-
-	// 解析时间范围
-	var beginTime, endTime time.Time
-	if beginStr != "" {
-		beginTime, err = time.Parse("2006-01-02 15:04:05", beginStr)
-		if err != nil {
-			fmt.Println(err)
-			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid begin time format", "data": nil})
-			return
-		}
-	}
-	if endStr != "" {
-		endTime, err = time.Parse("2006-01-02 15:04:05", endStr)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid end time format", "data": nil})
-			return
-		}
-	}
-
-	var orders []OrderWithDishnames
-	var Orders []models.Order
-	var orderIDs []uint
-	var count int64
-	// 计算分页偏移量
-	offset := (page - 1) * size
-	// 构建查询条件
-	query := global.Db.Model(&models.Order{})
-	if !beginTime.IsZero() {
-		query = query.Where("created_at >= ?", beginTime)
-	}
-	if !endTime.IsZero() {
-		query = query.Where("created_at <= ?", endTime)
-	}
-	if numberstr != "" {
-		num, err := strconv.Atoi(numberstr)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid number format", "data": nil})
-			return
-		}
-		query = query.Where("ID= ?", num)
-	}
-
-	if phonestr != "" {
-		query = query.Where("phone = ?", phonestr)
-	}
-
-	if status != "" {
-		stat, err := strconv.Atoi(status)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid status format", "data": nil})
-			return
-		}
-		query = query.Where("status = ?", stat)
-	}
-
-	// 查询订单列表
-
-	result := query.Limit(size).Offset(offset).Find(&Orders)
-	if result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get order page", "data": nil})
+	page, size, beginTime, endTime := utils.ParsePaginationAndTime(c, pageStr, sizeStr, beginStr, endStr)
+	if page == 0 || size == 0 {
 		return
 	}
-	// 将查询结果复制到新的结构体切片
-	for _, srcOrder := range Orders {
-		var dstOrder OrderWithDishnames
-		copyOrderFields(&srcOrder, &dstOrder)
-		orders = append(orders, dstOrder)
-	}
-
-	// 提取订单ID列表
-
-	for _, order := range orders {
-		orderIDs = append(orderIDs, order.ID)
-	}
-	// 查询 orderdish 表以获取每个订单的菜品名
-	var orderDishnames []struct {
-		OrderID   uint   `gorm:"column:order_id"`
-		Dishnames string `gorm:"column:dishnames"` // 修改为 string 类型，因为 GROUP_CONCAT 返回的是一个字符串
-	}
-	if err := global.Db.Table("order-dish").
-		Select("order_id, GROUP_CONCAT(dishname) as dishnames").
-		Where("order_id IN ?", orderIDs).
-		Group("order_id").
-		Find(&orderDishnames).Error; err != nil {
-		log.Printf("查询订单菜品名失败: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "查询订单菜品名失败", "data": nil})
+	orders, count, err := utils.FetchOrders(c, page, size, beginTime, endTime, phonestr, numberstr, status)
+	if err != nil {
 		return
 	}
-	// 构建订单和菜品名的映射
-	dishnamesMap := make(map[uint]string)
-	for _, od := range orderDishnames {
-		dishnamesMap[od.OrderID] = od.Dishnames
-	}
-	// 将映射中的数据赋值给结构体表
-	for i, order := range orders {
-		if dishnames, exists := dishnamesMap[order.ID]; exists {
-			orders[i].Dishnames = dishnames
-		}
-	}
-	// 查询总订单数
-	countQuery := global.Db.Model(&models.Order{})
-	if !beginTime.IsZero() {
-		countQuery = countQuery.Where("created_at >= ?", beginTime)
-	}
-	if !endTime.IsZero() {
-		countQuery = countQuery.Where("created_at <= ?", endTime)
-	}
-	countQuery.Count(&count)
-
-	// 返回结果
+	consigneeMap, addressMap := utils.FetchConsigneesAndAddresses(c, orders)
+	ordersWithDetails := utils.CopyOrdersToOrderWithDishnames(orders, consigneeMap, addressMap)
+	utils.FetchDishnames(c, &ordersWithDetails)
 	c.JSON(http.StatusOK, gin.H{
 		"code": 1,
 		"data": gin.H{
-			"items": orders,
+			"items": ordersWithDetails,
 			"total": count,
 		},
 	})
-
 }
 
 // 根据orderId获取订单详情

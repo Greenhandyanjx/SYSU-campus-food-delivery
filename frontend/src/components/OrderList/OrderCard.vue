@@ -30,31 +30,37 @@
 
     <!-- 底部：操作按钮 -->
     <div class="card-footer">
-      <div class="left-meta">下单时间：{{ order.time }}</div>
+      <div class="left-meta" style="display: flex; align-items: center; gap: 16px;">下单时间：{{ order.time }}
+      <ChatLauncher :merchant-id="order.storeId || order.merchantId" :merchant-name="order.storeName" />
+      </div>
+
       <div class="actions">
+        
         <template v-if="order.status === 'pending'">
           <div class="countdown">剩余支付时间 <strong>{{ countdown }}</strong></div>
-          <el-button type="warning" round size="small" @click.stop="$emit('pay', order)">去付款</el-button>
-          <el-button round plain size="small" @click.stop="$emit('cancel', order)">取消订单</el-button>
+          <el-button type="warning" round size="default" @click.stop="$emit('pay', order)">去付款</el-button>
+          <el-button round plain size="default" @click.stop="$emit('cancel', order)">取消订单</el-button>
         </template>
 
         <template v-else-if="order.status === 'shipping'">
-          <el-button type="primary" round size="small" @click.stop="$emit('confirm', order)">确认收货</el-button>
-          <el-button round plain size="small" @click.stop="$emit('reorder', order)">再次购买</el-button>
+          <el-button type="primary" round size="default" @click.stop="$emit('confirm', order)">确认收货</el-button>
+          <el-button round plain size="default" @click.stop="$emit('reorder', order)">再次购买</el-button>
         </template>
 
         <template v-else-if="order.status === 'completed'">
-          <el-button type="primary" round size="small" @click.stop="$emit('review', order)">去评价</el-button>
-          <el-button round plain size="small" @click.stop="$emit('reorder', order)">再次购买</el-button>
+          <el-button type="primary" round size="default" @click.stop="$emit('review', order)">去评价</el-button>
+          <el-button round plain size="default" @click.stop="$emit('reorder', order)">再次购买</el-button>
         </template>
 
         <template v-else-if="order.status === 'refund'">
           <el-tag type="info" effect="plain">退款中</el-tag>
-          <el-button round plain size="small" @click.stop="$emit('view-refund', order)">查看详情</el-button>
+          <el-button round plain size="default" @click.stop="$emit('view-refund', order)">查看详情</el-button>
         </template>
 
         <template v-else>
-          <el-button round plain size="small" @click.stop="$emit('view', order)">查看订单</el-button>
+          <el-button round plain size="default" @click.stop="$emit('view', order)">查看订单</el-button>
+          <!-- 聊天入口，封装为组件 -->
+
         </template>
       </div>
     </div>
@@ -63,6 +69,7 @@
 
 <script setup>
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
+import ChatLauncher from '@/components/Chat/ChatLauncher.vue'
 const props = defineProps({ order: { type: Object, required: true } })
 const emit = defineEmits(['pay','cancel','confirm','reorder','review','view','view-refund','open-store','auto-cancel'])
 

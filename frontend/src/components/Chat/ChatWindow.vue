@@ -3,8 +3,11 @@
     
     <!-- 顶部标题栏 -->
     <div class="chat-header">
-      <img class="avatar" :src="merchantAvatar" alt="商家" />
-      <span class="title">{{ merchantName }} · 在线客服</span>
+      <div class="header-left">
+        <img class="avatar" :src="merchantAvatar" alt="商家" />
+        <span class="title">{{ merchantName }} · 在线客服</span>
+      </div>
+      <button class="local-close" @click="$emit('close')" aria-label="关闭聊天">✕</button>
     </div>
 
     <!-- 消息区域 -->
@@ -183,38 +186,49 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-/* ======================
-   外层布局
-====================== */
+/* ====================== 外层布局 ====================== */
 .chat-container {
   width: 100%;
   max-width: 450px;
-  height: 620px;
+  height: 100%; /* fill the parent modal height */
   border: 1px solid #e5e5e5;
   border-radius: 16px;
   display: flex;
   flex-direction: column;
   background: #fff;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+  overflow: hidden;                 /* 重点：防止子元素溢出遮挡 */
 }
 
-/* ======================
-   顶部栏
-====================== */
+/* ====================== 顶部栏 ====================== */
 .chat-header {
   height: 60px;
+  flex-shrink: 0;                   /* 禁止被压缩 */
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 0 16px;
   background: #ffd600;
-  border-bottom: 1px solid #f0f0f0;
+  color: #000;
 }
 
+.chat-header .header-left { display:flex; align-items:center }
+
+.local-close {
+  border: none;
+  background: transparent;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+.local-close:hover { background: rgba(0,0,0,0.06) }
+
 .chat-header .avatar {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
+  border: 2px solid #fff;
 }
 
 .chat-header .title {
@@ -223,94 +237,162 @@ onBeforeUnmount(() => {
   font-weight: bold;
 }
 
-/* ======================
-   消息列表
-====================== */
+/* ====================== 消息区域 ====================== */
 .messages {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
-  background: #fafafa;
+  padding: 16px 12px;
+  background: #f5f5f5;
+  /* 解决 iPhone 底部安全区被遮挡 */
+  padding-bottom: env(safe-area-inset-bottom, 20px);
+}
+
+/* 滚动条美化（可选） */
+.messages::-webkit-scrollbar {
+  width: 4px;
+}
+.messages::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.2);
+  border-radius: 2px;
 }
 
 .message-row {
   display: flex;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
+  align-items: flex-end;             /* 关键：让气泡底部对齐 */
 }
 
 .message-row.me {
   flex-direction: row-reverse;
 }
 
+/* 头像 */
 .msg-avatar {
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
-  margin: 0 10px;
+  flex-shrink: 0;
 }
 
+/* 气泡容器 */
 .bubble-wrapper {
-  max-width: 70%;
+  max-width: 72%;
+  position: relative;
 }
 
+/* 气泡主体 */
 .bubble {
   padding: 10px 14px;
-  border-radius: 14px;
-  font-size: 14px;
-  line-height: 1.4;
+  border-radius: 18px;
+  font-size: 15px;
+  line-height: 1.45;
   word-break: break-word;
+  position: relative;
   display: inline-block;
 }
 
-/* 商家气泡（灰） */
-.message-row .bubble {
+/* 左边（商家）气泡 - 白色 + 尖角 */
+.message-row:not(.me) .bubble {
   background: #ffffff;
-  border: 1px solid #e0e0e0;
+  border: 1px solid #e8e8e8;
+  margin-left: 8px;
 }
 
-/* 用户气泡（美团黄） */
+/* 右边（自己）气泡 - 美团黄 + 尖角 */
 .message-row.me .bubble {
-  background: #ffe980;
-  border: none;
+  background: #ffe563;
+  margin-right: 8px;
+}
+
+/* 气泡小尖角（纯 CSS 实现） */
+.message-row:not(.me) .bubble::before {
+  content: "";
+  position: absolute;
+  left: -7px;
+  bottom: 8px;
+  border: 8px solid transparent;
+  border-right-color: #ffffff;
+}
+.message-row:not(.me) .bubble::after {
+  content: "";
+  position: absolute;
+  left: -9px;
+  bottom: 8px;
+  border: 8px solid transparent;
+  border-right-color: #e8e8e8;
+}
+
+.message-row.me .bubble::before {
+  content: "";
+  position: absolute;
+  right: -7px;
+  bottom: 8px;
+  border: 8px solid transparent;
+  border-left-color: #ffe563;
 }
 
 /* 时间 */
 .time {
   font-size: 11px;
-  color: #a8a8a8;
+  color: #999;
   margin-top: 4px;
+  text-align: center;
+  padding: 0 8px;
 }
 
-/* ======================
-   底部输入框
-====================== */
+/* 我发的消息时间在左边 */
+.message-row.me .time {
+  text-align: right;
+}
+
+/* ====================== 输入栏（关键修复）====================== */
 .input-bar {
+  flex-shrink: 0;                   /* 禁止被压缩 */
   height: 64px;
-  display: flex;
   padding: 10px 12px;
   background: #fff;
   border-top: 1px solid #eee;
+  display: flex;
+  align-items: center;
+  /* 解决 iPhone 刘海屏底部被遮挡 */
+  padding-bottom: env(safe-area-inset-bottom, 10px);
 }
 
 .input-bar input {
   flex: 1;
+  height: 44px;
   border: 1px solid #ddd;
-  border-radius: 18px;
-  padding: 8px 12px;
+  border-radius: 22px;
+  padding: 0 16px;
+  font-size: 15px;
   outline: none;
+  background: #f9f9f9;
+}
+
+.input-bar input:focus {
+  border-color: #ffd600;
+  background: #fff;
 }
 
 .send-btn {
+  margin-left: 10px;
+  width: 72px;
+  height: 44px;
   background: #ffd600;
   border: none;
-  padding: 0 16px;
-  margin-left: 10px;
-  border-radius: 18px;
+  border-radius: 22px;
+  font-size: 15px;
   font-weight: bold;
+  color: #000;
   cursor: pointer;
+  transition: all 0.2s;
+}
+
+.send-btn:hover {
+  background: #ffeb3b;
 }
 
 .send-btn:active {
-  background: #f3c900;
+  transform: scale(0.95);
 }
 </style>

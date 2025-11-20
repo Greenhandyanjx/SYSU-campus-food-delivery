@@ -51,26 +51,14 @@
             @open-store="openStore"
             @auto-cancel="onAutoCancel"
           />
-          <div class="order-actions">
-            <el-button size="mini" type="primary" @click="openChat(o)">联系商家</el-button>
-          </div>
+          <!-- 聊天入口已迁移到 OrderCard（ChatLauncher），此处不再需要单独按钮 -->
         </div>
         <div v-if="filteredOrders.length === 0" class="empty">暂无订单</div>
       </div>
     </div>
   </div>
 
-  <el-dialog v-model="showChat">
-    <ChatWindow
-      v-if="showChat"
-      :merchantId="chatMerchantId"
-      :token="token"
-      :merchantName="chatMerchantName"
-      :merchantAvatar="chatMerchantAvatar"
-      :userBaseId="chatUserId"
-      :userAvatar="chatUserAvatar"
-    />
-  </el-dialog>
+  <!-- Chat modal moved into OrderCard via ChatLauncher -->
 </template>
 
 <script setup>
@@ -79,8 +67,7 @@ import { useRoute, useRouter } from 'vue-router'
 import OrderCard from '@/components/OrderList/OrderCard.vue'
 import orderApi from '@/api/user/order'
 import storeApi from '@/api/user/store'
-import ChatWindow from '@/components/Chat/ChatWindow.vue'
-import { getMerchantDetail, getBaseUserDetail } from '@/api/chat'
+// Chat handled inside OrderCard via ChatLauncher component
 
 const route = useRoute()
 const router = useRouter()
@@ -89,14 +76,7 @@ const searchMode = ref(false)
 const keyword = ref('')
 const activeTab = ref('all')
 
-const showChat = ref(false)
-const chatMerchantId = ref(null)
-const chatMerchantName = ref('')
-const chatMerchantAvatar = ref('')
-const chatUserId = ref(null)
-const chatUserName = ref('')
-const chatUserAvatar = ref('')
-const token = (typeof window !== 'undefined' && localStorage.getItem('token')) || ''
+// Chat state moved into OrderCard
 
 // mock orders data
 const rawOrders = ref([
@@ -194,19 +174,7 @@ function onViewRefund(order) { alert('查看退款详情: ' + order.id) }
 function openStore(id) { router.push({ name: 'userStore', params: { name: id } }) }
 function onAutoCancel(order) { order.status = 'cancelled'; alert('支付超时，订单已取消：' + order.id) }
 function onView(order) { router.push({ path: `/user/order/${order.id}` }) }
-async function openChat() {
-  // 固定商家 ID（必须是后端 merchants 表真实存在的）
-  chatMerchantId.value = 1;
-  chatMerchantName.value = "测试商家";
-  chatMerchantAvatar.value = "/imgs/default-merchant.png";
-
-  // 获取当前用户信息
-  const u = await getBaseUserDetail();
-  chatUserId.value = u.data.data.id;
-  chatUserName.value = u.data.data.username;
-
-  showChat.value = true;
-}
+// openChat moved to ChatLauncher inside OrderCard
 
 // async function openChat(order) {
 //   // 优先使用订单内的 merchantId 字段（后端真实字段）
