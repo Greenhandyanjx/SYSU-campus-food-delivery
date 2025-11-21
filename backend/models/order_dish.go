@@ -6,5 +6,6 @@ type OrderDish struct {
 	gorm.Model
 	OrderID int `gorm:"not null"`
 	DishID  int `gorm:"not null"`
+	Dishname string `gorm:"not null"`
 	Num int `gorm:"not null"`
 }

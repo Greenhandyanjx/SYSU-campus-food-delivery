@@ -38,43 +38,54 @@
 
       <!-- 列表 -->
       <div class="list">
-        <OrderCard
-          v-for="(o, idx) in filteredOrders"
-          :key="o.id"
-          :order="mapOrder(o)"
-          @pay="onPay"
-          @cancel="onCancel"
-          @confirm="onConfirm"
-          @reorder="onReorder"
-          @review="onReview"
-          @view="onView"
-          @view-refund="onViewRefund"
-          @open-store="openStore"
-          @auto-cancel="onAutoCancel"
-        />
+        <div v-for="(o, idx) in filteredOrders" :key="o.id" class="order-row">
+          <OrderCard
+            :order="mapOrder(o)"
+            @pay="onPay"
+            @cancel="onCancel"
+            @confirm="onConfirm"
+            @reorder="onReorder"
+            @review="onReview"
+            @view="onView"
+            @view-refund="onViewRefund"
+            @open-store="openStore"
+            @auto-cancel="onAutoCancel"
+          />
+          <!-- 聊天入口已迁移到 OrderCard（ChatLauncher），此处不再需要单独按钮 -->
+        </div>
         <div v-if="filteredOrders.length === 0" class="empty">暂无订单</div>
       </div>
     </div>
   </div>
-</template>
 
+  <!-- Chat modal moved into OrderCard via ChatLauncher -->
+</template>
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import OrderCard from '@/components/OrderList/OrderCard.vue'
-import { useRouter } from 'vue-router'
 import orderApi from '@/api/user/order'
 import storeApi from '@/api/user/store'
+// Chat handled inside OrderCard via ChatLauncher component
+
+const route = useRoute()
+const router = useRouter()
+
+const searchMode = ref(false)
+const keyword = ref('')
+const activeTab = ref('all')
+
+// Chat state moved into OrderCard
 
 // mock orders data
 const rawOrders = ref([
   {
     id: 'ORD20251027001',
-    storeId: 'S001',
+    storeId: '1',
     storeName: '川味小馆',
     storeLogo: '/src/assets/noImg.png',
-    status: 'pending', // pending, shipping, completed, refund
+    status: 'pending',
     statusText: '待付款',
     time: '2025-10-27 11:20',
     payDeadline: new Date(Date.now() + 1000 * 60 * 15).toISOString(),
@@ -82,7 +93,7 @@ const rawOrders = ref([
   },
   {
     id: 'ORD20251027002',
-    storeId: 'S002',
+    storeId: '2',
     storeName: '鲜甜水果',
     storeLogo: '/src/assets/noImg.png',
     status: 'shipping',
@@ -92,34 +103,17 @@ const rawOrders = ref([
   },
   {
     id: 'ORD20251026003',
-    storeId: 'S003',
+    storeId: '3',
     storeName: '芝士工坊',
     storeLogo: '/src/assets/noImg.png',
     status: 'completed',
     statusText: '已完成',
     time: '2025-10-25 12:10',
     items: [ { name: '披萨(大)', price: 88, count:1, img: '' } ]
-  },
-  {
-    id: 'ORD20251024004',
-    storeId: 'S004',
-    storeName: '退单示例店',
-    storeLogo: '/src/assets/noImg.png',
-    status: 'refund',
-    statusText: '退款/售后',
-    time: '2025-10-24 09:30',
-    items: [ { name: '示例商品', price: 10, count:2, img: '' } ]
   }
 ])
 
-const activeTab = ref('all')
-const searchMode = ref(false)
-const keyword = ref('')
-
-const route = useRoute()
-
 onMounted(()=>{
-  // 如果路由带 oq 查询参数，作为初始关键字
   const oq = route.query.oq
   if (oq && typeof oq === 'string') keyword.value = oq
 })
@@ -158,29 +152,16 @@ function mapStatusText(status) {
   }
 }
 
-const router = useRouter()
-
 // actions
-function onPay(order) {
-  // 跳转到支付页（占位），传递 orderId
-  router.push({ path: '/user/pay', query: { orderId: order.id } })
-}
+function onPay(order) { router.push({ path: '/user/pay', query: { orderId: order.id } }) }
 async function onCancel(order) {
-  try {
-    await orderApi.cancelOrder(order.id)
-  } catch (e) {
-    // 后端不存在时直接修改本地 mock
-  }
+  try { await orderApi.cancelOrder(order.id) } catch (e) {}
   order.status = 'cancelled'
   alert('已取消: ' + order.id)
 }
 function onConfirm(order) { order.status='completed'; alert('确认收货: ' + order.id) }
 async function onReorder(order) {
-  try {
-    // 尝试通过后端 reorder 接口
-    await orderApi.reorder(order)
-  } catch (e) {
-    // 如果后端不存在，使用 addToCart 逐条加入
+  try { await orderApi.reorder(order) } catch (e) {
     for (const it of order.items) {
       try { await storeApi.addToCart({ storeId: order.storeId, dishId: it.id || null, qty: it.count || 1 }) } catch(e){}
     }
@@ -192,14 +173,117 @@ function onReview(order) { alert('去评价: ' + order.id) }
 function onViewRefund(order) { alert('查看退款详情: ' + order.id) }
 function openStore(id) { router.push({ name: 'userStore', params: { name: id } }) }
 function onAutoCancel(order) { order.status = 'cancelled'; alert('支付超时，订单已取消：' + order.id) }
+function onView(order) { router.push({ path: `/user/order/${order.id}` }) }
+// openChat moved to ChatLauncher inside OrderCard
 
-function onView(order) {
-  // 跳转到订单详情页
-  router.push({ path: `/user/order/${order.id}` })
-}
+// async function openChat(order) {
+//   // 优先使用订单内的 merchantId 字段（后端真实字段）
+//     // helper: try to coerce/resolve a merchant id to a number
+//     async function resolveMerchantId(candidate) {
+//       if (!candidate && candidate !== 0) return null
+//       // numeric already?
+//       const n = Number(candidate)
+//       if (Number.isFinite(n) && String(n) !== 'NaN') return n
+//       // fallback: if candidate looks like a store code, try storeApi.getStoreById
+//       try {
+//         const s = await storeApi.getStoreById(candidate)
+//         const storeData = s && s.data && (s.data.data || s.data)
+//         if (storeData && (storeData.merchantid || storeData.merchantId)) {
+//           return Number(storeData.merchantid || storeData.merchantId)
+//         }
+//       } catch (e) {}
+//       return null
+//     }
 
-// 把 mock 数据暴露以便 detail 页面回退使用（development only）
-if (typeof window !== 'undefined') window.__RAW_ORDERS__ = rawOrders.value
+//     // 优先使用订单内的 merchantId 字段（后端真实字段）
+//     if (order.merchantId) {
+//       const resolved = await resolveMerchantId(order.merchantId)
+//       if (resolved == null) {
+//         // cannot resolve merchant numeric id — abort with notice
+//         alert('无法解析商家 ID，请联系管理员')
+//         return
+//       }
+//       chatMerchantId.value = resolved
+//     // 尝试把店铺/商家名传给聊天窗口
+//       try {
+//         const r = await getMerchantDetail(chatMerchantId.value)
+//         if (r && r.data && r.data.data) {
+//           chatMerchantName.value = r.data.data.shop_name || r.data.data.shopName || ''
+//           chatMerchantAvatar.value = r.data.data.logo || r.data.data.logoUrl || ''
+//         }
+//       } catch (e) {}
+//     // 获取当前用户信息以便传入 ChatWindow
+//       try {
+//         const u = await getBaseUserDetail()
+//         if (u && u.data && u.data.data) {
+//           chatUserId.value = u.data.data.id
+//           chatUserName.value = u.data.data.username
+//         }
+//       } catch (e) {}
+//     showChat.value = true
+//     return
+//   }
+
+//   // 如果订单没有 merchantId，尝试通过订单详情或 storeId 查询
+//     if (order.id) {
+//       try {
+//         const res = await orderApi.getOrderDetail(order.id)
+//         const data = res && res.data && res.data.data
+//         if (data && data.merchantid) {
+//           const resolved = await resolveMerchantId(data.merchantid)
+//           if (resolved == null) {
+//             alert('无法解析商家 ID，请联系管理员')
+//             return
+//           }
+//           chatMerchantId.value = resolved
+//           try {
+//             const r = await getMerchantDetail(chatMerchantId.value)
+//             if (r && r.data && r.data.data) {
+//               chatMerchantName.value = r.data.data.shop_name || r.data.data.shopName || ''
+//               chatMerchantAvatar.value = r.data.data.logo || r.data.data.logoUrl || ''
+//             }
+//           } catch (e) {}
+//         }
+//       } catch (e) {}
+//   }
+
+//   // 回退：尝试使用 storeId -> 通过 storeApi.getStoreById（如后端实现）
+//     if (order.storeId) {
+//       try {
+//         const s = await storeApi.getStoreById(order.storeId)
+//         const storeData = s && s.data && (s.data.data || s.data)
+//         if (storeData) {
+//           // 如果后端返回 merchantId，使用它
+//           if (storeData.merchantid || storeData.merchantId) {
+//             const resolved = await resolveMerchantId(storeData.merchantid || storeData.merchantId)
+//             if (resolved == null) {
+//               alert('无法解析商家 ID，请联系管理员')
+//               return
+//             }
+//             chatMerchantId.value = resolved
+//           }
+//           chatMerchantName.value = storeData.shop_name || storeData.name || ''
+//           chatMerchantAvatar.value = storeData.logo || storeData.logoUrl || ''
+//           try {
+//             const u = await getBaseUserDetail()
+//             if (u && u.data && u.data.data) {
+//               chatUserId.value = u.data.data.id
+//               chatUserName.value = u.data.data.username
+//             }
+//           } catch (e) {}
+//           showChat.value = true
+//           return
+//         }
+//       } catch (e) {}
+//     }
+
+//     // 最后回退：无法解析到 numeric merchant id，提示并返回
+//     alert('无法定位商家 ID，无法发起聊天')
+//     return
+//   }
+
+  // expose mock data in dev
+  if (typeof window !== 'undefined') window.__RAW_ORDERS__ = rawOrders.value
 
 </script>
 

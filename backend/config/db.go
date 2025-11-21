@@ -66,10 +66,38 @@ func Initalldb() error {
 		fmt.Println("orders table create fail")
 		return err
 	}
+	// 聊天消息表
+	if err := global.Db.Table("chat_messages").AutoMigrate(&models.ChatMessage{}); err != nil {
+		fmt.Println("chat_messages table create fail")
+		return err
+	}
 	if err := global.Db.Table("rider_profiles").AutoMigrate(&models.RiderProfile{}); err != nil {
 		fmt.Println("rider_profiles table create fail")
 		return err
 	}
-
+     if err := global.Db.Table("order-dish").AutoMigrate(&models.OrderDish{}); err != nil {
+	 	fmt.Println("orderdish table create fail")
+	 	panic(err)
+	}
+	 if err := global.Db.Table("order-meal").AutoMigrate(&models.OrderMeal{}); err != nil {
+	 	fmt.Println("ordermeal table create fail")
+	 	panic(err)
+	}
+	 if err := global.Db.Table("sales-stats").AutoMigrate(&models.SalesStat{}); err != nil {
+	 	fmt.Println("salesstats table create fail")
+	 	panic(err)
+	}
+	 if err := global.Db.Table("consignees").AutoMigrate(&models.Consignee{}); err != nil {
+	 	fmt.Println("consignees table create fail")
+	 	panic(err)
+	}
+	if err := global.Db.Table("addresses").AutoMigrate(&models.Address{}); err != nil {
+	 	fmt.Println("addressees table create fail")
+	 	panic(err)
+	}
+	if err := global.Db.Table("orders").AutoMigrate(&models.Order{}); err != nil {
+	 	fmt.Println("orders table create fail")
+	 	panic(err)
+	}
 	return nil
 }

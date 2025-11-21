@@ -9,9 +9,9 @@ import (
 type Order struct {
 	gorm.Model
 
-	Consignee    string    `json:"consignee" gorm:"not null"`
-	Phone        string    `json:"phone" gorm:"not null"`
-	Address      string    `json:"address" gorm:"not null"`
+	Consigneeid  int       `json:"consigneeid" gorm:"not null"`
+	Phone        string    `json:"phone" gorm:"type:VARCHAR(20);not null"`
+	Consignee    string    `json:"consignee" gorm:"type:VARCHAR(100);not null"`
 	PickupPoint  time.Time `json:"pickuppoint" gorm:"type:datetime;not null;default:current_timestamp"`  //接单时间
 	DropofPoint  time.Time `json:"dropofpoint" gorm:"type:datetime;not null;default:current_timestamp"`  //送达时间
 	ExpectedTime time.Time `json:"expectedtime" gorm:"type:datetime;not null;default:current_timestamp"` //期望时间

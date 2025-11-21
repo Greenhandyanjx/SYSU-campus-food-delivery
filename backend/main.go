@@ -12,11 +12,17 @@ func main() {
 	config.InitConfig()
 
 	// 2. 初始化数据库连接
-	config.InitDB()
+	// 这里注释掉了，因为已经在config.InitConfig()中初始化了
+	// config.InitDB()
 
 	// 3. 执行自动建表
+<<<<<<< HEAD
 	//config.Initalldb()
 
+=======
+	//不改动数据执行一次即可
+	//config.Initalldb()
+>>>>>>> dev
 	// 4. 初始化路由
 	r := router.SetRouter()
 
