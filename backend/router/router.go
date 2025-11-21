@@ -94,7 +94,6 @@ func SetRouter() *gin.Engine {
 		auth.GET("/merchant/statistics/turnover", controller.GetDataOverView)
 		auth.GET("/merchant/statistics/user", controller.GetUserData)
 		auth.GET("/merchant/statistics/order", controller.GetOrderStatistics)
-<<<<<<< HEAD
 		// ====== Rider APIs ======
 		auth.GET("/rider/info", controller.GetRiderInfo)
 		auth.POST("/rider/status", controller.UpdateRiderStatus)
@@ -105,9 +104,7 @@ func SetRouter() *gin.Engine {
 		auth.POST("/rider/orders/:orderId/complete", controller.CompleteOrder)
 		auth.GET("/rider/orders/history", controller.GetOrderHistory)
 
-=======
 		auth.GET("merchant/statistics/top", controller.GetTopSales)
->>>>>>> dev
 	}
 	return fe
 }
