@@ -4,7 +4,7 @@
     <ul>
       <li v-for="c in chats" :key="c.user_base_id" @click="open(c)" :class="{ active: active === c.user_base_id }">
         <div class="left">
-          <div class="name">用户 {{ c.user_base_id }}</div>
+          <div class="name">{{ c.userName || ('用户 ' + c.user_base_id) }}</div>
           <div class="last">{{ c.last_message }}</div>
         </div>
         <div class="right">
@@ -19,24 +19,56 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import request from '@/api/merchant/request'
+import { getBaseUserDetail } from '@/api/chat'
 
 const chats = ref([])
 const active = ref(null)
 
 function formatTime(s) {
   if (!s) return ''
-  const d = new Date(s)
-  return `${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`
+  const dt = new Date(s)
+  const now = new Date()
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const startOfYesterday = new Date(startOfToday.getTime() - 24 * 3600 * 1000)
+  const pad = (n) => String(n).padStart(2, '0')
+  const timePart = `${pad(dt.getHours())}:${pad(dt.getMinutes())}`
+  if (dt >= startOfToday) return `今天 ${timePart}`
+  if (dt >= startOfYesterday) return `昨天 ${timePart}`
+  if (dt.getFullYear() === now.getFullYear()) return `${dt.getMonth() + 1}月${dt.getDate()}日 ${timePart}`
+  return `${dt.getFullYear()}年${dt.getMonth() + 1}月${dt.getDate()}日 ${timePart}`
 }
 
 async function load() {
   try {
     const res = await request.get('/merchant/chats')
     if (res.data && res.data.code === 1) {
-      chats.value = res.data.data
+      const list = res.data.data || []
+      // enrich each chat with user display name (try to fetch base user detail)
+      await Promise.all(list.map(async (c) => {
+        try {
+          const r = await getBaseUserDetail(c.user_base_id)
+          const u = r?.data?.data
+          c.userName = u?.username || u?.nickname || null
+        } catch (e) { c.userName = null }
+      }))
+      // if empty, provide demo mock conversations for development
+      if (!list || list.length === 0) {
+        const now = Date.now()
+        chats.value = [
+          { user_base_id: 501, last_message: '您好，有什么可以帮到您？', last_at: new Date(now-1800*1000).toISOString(), unread_count: 3, merchant_id: null, userName: '张三' },
+          { user_base_id: 502, last_message: '请问订单可以合并吗？', last_at: new Date(now-3600*24*2).toISOString(), unread_count: 0, merchant_id: null, userName: '李四' },
+        ]
+      } else {
+        chats.value = list
+      }
     }
   } catch (e) {
     console.log('load chats failed', e)
+    // fallback mock data for development
+    const now = Date.now()
+    chats.value = [
+      { user_base_id: 601, last_message: '示例：请尽快处理订单', last_at: new Date(now-500000).toISOString(), unread_count: 1, merchant_id: null, userName: '示例用户' }
+    ]
   }
 }
 

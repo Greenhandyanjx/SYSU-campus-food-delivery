@@ -10,11 +10,49 @@ import { getBaseUserDetail } from '@/api/chat'
 import request from '@/api/merchant/request'
 
 let currentMerchantId = null
+let currentBaseUserId = null
 
-function handleIncoming(msg) {
+async function handleIncoming(msg) {
   // Expect msg to include merchant_id and content and from_base_id
   console.log('[MessageNotify] incoming', msg)
-  const title = msg.merchant_id ? `来自商家 ${msg.merchant_id}` : '新消息'
+  const from = msg.from_base_id || msg.fromBaseId
+  // don't notify for messages that originate from this client
+  if (from && currentBaseUserId && Number(from) === Number(currentBaseUserId)) {
+    console.debug('[MessageNotify] ignoring self message')
+    return
+  }
+
+  let title = '新消息'
+  try {
+    // If current client is a merchant, sender is likely a user -> fetch user name
+    if (currentMerchantId) {
+      const uid = msg.from_base_id || msg.user_base_id || msg.userBaseId
+      if (uid) {
+        const r = await getBaseUserDetail(uid)
+        const u = r?.data?.data
+        title = `来自 ${u?.username || u?.nickname || ('用户 ' + uid)}`
+      } else if (msg.user_base_id) {
+        title = `来自 用户 ${msg.user_base_id}`
+      }
+    } else {
+      // current client is a regular user: sender likely merchant -> fetch merchant name
+      const mid = msg.merchant_id || msg.merchantId
+      if (mid) {
+        try {
+          const mr = await request({ url: '/merchant/detail', method: 'get', params: { id: mid } })
+          const md = mr?.data?.data
+          title = `来自 ${md?.shop_name || md?.shopName || ('商家 ' + mid)}`
+        } catch (e) {
+          title = `来自 商家 ${mid}`
+        }
+      }
+    }
+  } catch (e) {
+    // fallback: use merchant id or user id
+    if (msg.merchant_id) title = `来自 商家 ${msg.merchant_id}`
+    else if (msg.user_base_id) title = `来自 用户 ${msg.user_base_id}`
+  }
+
   const body = msg.content || '[非文本消息]'
   ElNotification({
     title,
@@ -43,6 +81,7 @@ onMounted(() => {
   getBaseUserDetail().then(res => {
     const base = res?.data?.data
     if (!base) return
+    currentBaseUserId = base.id
     // 直接调用后端 /merchant/detail?base_id=xxx
     return request({ url: '/merchant/detail', method: 'get', params: { base_id: base.id } })
   }).catch(() => null).then(r => {
@@ -50,6 +89,10 @@ onMounted(() => {
     if (r && r.data && r.data.data) {
       currentMerchantId = r.data.data.id
       console.log('[MessageNotify] detected merchant id =', currentMerchantId)
+      try {
+        localStorage.setItem('isMerchant', '1')
+        window.dispatchEvent(new Event('merchant:detected'))
+      } catch (e) {}
     }
   }).catch(() => {})
 })

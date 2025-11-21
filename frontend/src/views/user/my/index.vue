@@ -51,9 +51,10 @@
           <img src="/src/assets/icons/address.svg" alt="address" @error="onImgError" />
           <div>我的地址</div>
         </div>
-        <div class="f-item" @click="go('support')">
+        <div class="f-item" @click="go('support')" style="position:relative">
           <img src="/src/assets/icons/support.svg" alt="support" @error="onImgError" />
           <div>客服与帮助</div>
+          <span v-if="unreadSupport" class="support-badge">{{ unreadSupport }}</span>
         </div>
         <div class="f-item" @click="go('settings')">
           <img src="/src/assets/icons/settings.svg" alt="settings" @error="onImgError" />
@@ -76,12 +77,15 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import * as myApi from '@/api/user/my'
+import request from '@/api/merchant/request'
+import chatClient from '@/utils/chatClient'
 
 const router = useRouter()
 const username = ref(localStorage.getItem('username') || '游客')
 const points = ref(0)
 const orderCount = ref(0)
 const couponCount = ref(0)
+const unreadSupport = ref(0)
 
 onMounted(async () => {
   const p = await myApi.getProfile()
@@ -89,6 +93,32 @@ onMounted(async () => {
   points.value = p.points || 0
   orderCount.value = p.orderCount || 0
   couponCount.value = p.couponCount || 0
+  // 获取用户未读会话总数
+  try {
+    const r = await request.get('/user/chats')
+    if (r?.data?.code === 1) {
+      const arr = r.data.data || []
+      unreadSupport.value = arr.reduce((s, it) => s + (it.unread_count || 0), 0)
+    }
+  } catch (e) {}
+  // 订阅 ws，实时更新未读总数
+  const handler = (msg) => {
+    try {
+      // 若收到针对当前用户的消息，重新计算未读总数
+      const uid = msg.user_base_id || msg.userBaseId
+      if (!uid) return
+      // 触发重新加载
+      request.get('/user/chats').then(rr => {
+        if (rr?.data?.code === 1) {
+          const arr = rr.data.data || []
+          unreadSupport.value = arr.reduce((s, it) => s + (it.unread_count || 0), 0)
+        }
+      }).catch(()=>{})
+    } catch(e) {}
+  }
+  chatClient.onMessage(handler)
+  // 移除监听在组件卸载时
+  window.addEventListener('beforeunload', () => chatClient.offMessage(handler))
 })
 
 async function go(key: string) {
@@ -201,6 +231,20 @@ function onImgError(e: any) {
 .f-item:hover { transform:translateY(-6px); box-shadow:0 10px 24px rgba(250,173,20,0.12) }
 .f-item.danger { background:#fff6f4 }
 .f-item.danger:hover { box-shadow:0 10px 24px rgba(255,120,100,0.12) }
+.support-badge {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  background: #f56c6c;
+  color: #fff;
+  min-width: 20px;
+  height: 20px;
+  line-height: 20px;
+  font-size: 12px;
+  border-radius: 10px;
+  text-align: center;
+  padding: 0 6px;
+}
 
 @media(max-width:900px){ .feature-grid { grid-template-columns: repeat(2, 1fr) } }
 

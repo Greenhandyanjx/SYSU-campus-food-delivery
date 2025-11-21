@@ -2,7 +2,9 @@
   <div class="chat-container">
     
     <!-- 顶部标题栏 -->
-    <div class="chat-header">
+    <div class="chat-card">
+
+      <div class="chat-header">
       <div class="header-left">
         <img class="avatar" :src="merchantAvatar" alt="商家" />
         <span class="title">{{ merchantName }} · 在线客服</span>
@@ -39,10 +41,11 @@
     </div>
 
   </div>
+</div>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { getChatHistory, getWsUrl, getMerchantDetail, getBaseUserDetail } from '@/api/chat'
 import chatClient from '@/utils/chatClient'
 
@@ -71,8 +74,17 @@ const userNameLocal = ref('我')
 const userBaseIdLocal = ref(props.userBaseId || null)
 
 function formatTime(s) {
-  const d = new Date(s)
-  return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
+  if (!s) return ''
+  const dt = new Date(s)
+  const now = new Date()
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const startOfYesterday = new Date(startOfToday.getTime() - 24 * 3600 * 1000)
+  const pad = (n) => String(n).padStart(2, '0')
+  const timePart = `${pad(dt.getHours())}:${pad(dt.getMinutes())}`
+  if (dt >= startOfToday) return `今天 ${timePart}`
+  if (dt >= startOfYesterday) return `昨天 ${timePart}`
+  if (dt.getFullYear() === now.getFullYear()) return `${dt.getMonth() + 1}月${dt.getDate()}日 ${timePart}`
+  return `${dt.getFullYear()}年${dt.getMonth() + 1}月${dt.getDate()}日 ${timePart}`
 }
 
 async function loadHistory() {
@@ -151,6 +163,9 @@ function handleGlobalMessage(msg) {
   // append only if message belongs to this chat (merchant/user pair)
   const mid = msg.merchant_id || msg.merchantId
   const uid = msg.user_base_id || msg.userBaseId
+  // ignore server echoes of messages we just sent (from_base_id equals our own base id)
+  const from = msg.from_base_id || msg.fromBaseId
+  if (from && userBaseIdLocal.value && Number(from) === Number(userBaseIdLocal.value)) return
   if (!mid || Number(mid) !== Number(props.merchantId)) return
   // push and scroll
   messages.value.push(msg)
@@ -230,6 +245,34 @@ onMounted(async () => {
   chatClient.onMessage(handleGlobalMessage)
 })
 
+// 当外部传入的 merchantId / userBaseId 发生变化时，重新加载会话
+watch(() => props.merchantId, async (newVal, oldVal) => {
+  if (!newVal) return
+  // 重置消息并重新加载
+  messages.value = []
+  await ensureNames()
+  await loadHistory()
+  // 如果当前用户打开的是会话，尝试通知后端标记为已读（用户端）
+  try {
+    await fetch('/api/user/chats/mark_read', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: localStorage.getItem('token') || '' }, body: JSON.stringify({ merchant_id: Number(newVal) }) })
+  } catch (e) {}
+})
+
+watch(() => props.userBaseId, async (newVal, oldVal) => {
+  // 当 userBaseId 变化（例如商家端切换客户）时重新加载
+  messages.value = []
+  await ensureNames()
+  await loadHistory()
+})
+
+// 当外部直接传入的商家名称/头像发生变化时，实时更新本地显示
+watch(() => props.merchantName, (nv) => {
+  if (nv) merchantName.value = nv
+})
+watch(() => props.merchantAvatar, (nv) => {
+  if (nv) merchantAvatar.value = nv
+})
+
 onBeforeUnmount(() => {
   ws?.close()
   chatClient.offMessage(handleGlobalMessage)
@@ -239,16 +282,28 @@ onBeforeUnmount(() => {
 <style scoped>
 /* ====================== 外层布局 ====================== */
 .chat-container {
-  width: 100%;
-  max-width: 450px;
-  height: 100%; /* fill the parent modal height */
-  border: 1px solid #e5e5e5;
-  border-radius: 16px;
+  width: 400px !important;
+  height: 700px !important;
+  max-width: 400px !important;
+  min-height: 700px !important;
+  border: none; /* 去掉外层白色边框，统一由组件内部展示 */
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
+  background: transparent; /* 透明背景，内部区域负责白色卡片样式 */
+  box-shadow: none;
+}
+
+/* 内部卡片，用于保留白色背景与阴影，避免依赖 dialog 外层样式 */
+.chat-card {
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
   background: #fff;
   box-shadow: 0 10px 30px rgba(0,0,0,0.12);
-  overflow: hidden;                 /* 重点：防止子元素溢出遮挡 */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ====================== 顶部栏 ====================== */
@@ -268,7 +323,7 @@ onBeforeUnmount(() => {
 .local-close {
   border: none;
   background: transparent;
-  font-size: 18px;
+  font-size: 16px;
   cursor: pointer;
   padding: 6px 8px;
   border-radius: 6px;
@@ -296,15 +351,17 @@ onBeforeUnmount(() => {
   background: #f5f5f5;
   /* 解决 iPhone 底部安全区被遮挡 */
   padding-bottom: env(safe-area-inset-bottom, 20px);
+  /* 确保消息区在固定高度卡片中展示滚动条 */
+  -webkit-overflow-scrolling: touch;
 }
 
 /* 滚动条美化（可选） */
 .messages::-webkit-scrollbar {
-  width: 4px;
+  width: 8px;
 }
 .messages::-webkit-scrollbar-thumb {
-  background: rgba(0,0,0,0.2);
-  border-radius: 2px;
+  background: rgba(0,0,0,0.18);
+  border-radius: 4px;
 }
 
 .message-row {
@@ -333,9 +390,9 @@ onBeforeUnmount(() => {
 
 /* 气泡主体 */
 .bubble {
-  padding: 10px 14px;
-  border-radius: 18px;
-  font-size: 15px;
+  padding: 8px 12px;
+  border-radius: 16px;
+  font-size: 14px;
   line-height: 1.45;
   word-break: break-word;
   position: relative;
@@ -345,7 +402,7 @@ onBeforeUnmount(() => {
 /* 左边（商家）气泡 - 白色 + 尖角 */
 .message-row:not(.me) .bubble {
   background: #ffffff;
-  border: 1px solid #e8e8e8;
+  border: 1px solid #ffffff;
   margin-left: 8px;
 }
 
@@ -367,10 +424,10 @@ onBeforeUnmount(() => {
 .message-row:not(.me) .bubble::after {
   content: "";
   position: absolute;
-  left: -9px;
-  bottom: 8px;
+  left: -15px;
+  bottom: 7px;
   border: 8px solid transparent;
-  border-right-color: #e8e8e8;
+  border-right-color: #ffffff;
 }
 
 .message-row.me .bubble::before {

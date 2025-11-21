@@ -21,7 +21,15 @@
     <div class="merchant-chat-area">
       <MerchantChatList />
     </div>
-    <MerchantChatWindow v-if="showChat" :merchantId="chatMerchantId" :userBaseId="chatUserBaseId" @close="showChat=false" />
+
+    <!-- 使用 teleport 在 body 上弹出商家聊天窗口（移除原先页面内联的小窗口） -->
+    <teleport to="body">
+      <div v-if="showChat" class="merchant-chat-overlay" @click.self="showChat=false">
+        <div class="merchant-chat-modal">
+          <MerchantChatWindow :merchantId="chatMerchantId" :userBaseId="chatUserBaseId" @close="showChat=false" />
+        </div>
+      </div>
+    </teleport>
   </div>
 </template>
 
@@ -151,4 +159,16 @@ const chatUserBaseId = ref<number | null>(null)
   gap: 20px;
   margin-top: 20px;
 }
+
+/* merchant chat modal styles (global to this view) */
+.merchant-chat-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index: 2147483647;
+}
+.merchant-chat-modal { z-index:2147483648 }
 </style>

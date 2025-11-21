@@ -1,9 +1,11 @@
 <template>
   <div class="merchant-chat">
+    <div class="merchant-card">
+
     <div class="m-header">
       <div class="m-left">
         <img class="m-avatar" :src="merchantAvatar" />
-        <div class="m-title">{{ merchantName }} · 在线客服</div>
+        <div class="m-title">{{ chatUserName || ('用户 ' + (userBaseIdLocal || '')) }} · 会话</div>
       </div>
       <button class="m-close" @click="$emit('close')">✕</button>
     </div>
@@ -23,10 +25,12 @@
       <button class="m-send" @click="send">发送</button>
     </div>
   </div>
+
+  </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import chatClient from '@/utils/chatClient'
 import { getChatHistory, getMerchantDetail, getBaseUserDetail } from '@/api/chat'
 import request from '@/api/merchant/request'
@@ -44,13 +48,23 @@ const merchantName = ref('商家')
 const merchantAvatar = ref('/imgs/merchant.png')
 const myAvatar = ref('/imgs/user.png')
 const otherAvatar = ref('/imgs/merchant.png')
+const chatUserName = ref('')
 
 const currentBaseId = ref(null)
 const userBaseIdLocal = ref(props.userBaseId || null)
 
 function formatTime(s) {
-  const d = new Date(s)
-  return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
+  if (!s) return ''
+  const dt = new Date(s)
+  const now = new Date()
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const startOfYesterday = new Date(startOfToday.getTime() - 24 * 3600 * 1000)
+  const pad = (n) => String(n).padStart(2, '0')
+  const timePart = `${pad(dt.getHours())}:${pad(dt.getMinutes())}`
+  if (dt >= startOfToday) return `今天 ${timePart}`
+  if (dt >= startOfYesterday) return `昨天 ${timePart}`
+  if (dt.getFullYear() === now.getFullYear()) return `${dt.getMonth() + 1}月${dt.getDate()}日 ${timePart}`
+  return `${dt.getFullYear()}年${dt.getMonth() + 1}月${dt.getDate()}日 ${timePart}`
 }
 
 async function loadHistory() {
@@ -118,6 +132,15 @@ async function ensure() {
       }
     } catch (e) {}
   }
+
+  // 尝试获取会话用户的名称（用于在商家端显示用户名字）
+  if (userBaseIdLocal.value) {
+    try {
+      const ru = await getBaseUserDetail(userBaseIdLocal.value)
+      const uu = ru?.data?.data
+      if (uu) chatUserName.value = uu.username || uu.nickname || ''
+    } catch (e) { }
+  }
 }
 
 function send() {
@@ -142,27 +165,66 @@ onMounted(async () => {
   chatClient.connect()
 })
 
+// 当 props.merchantId 或 props.userBaseId 变化时重新加载
+watch(() => props.userBaseId, async (nv) => {
+  if (!nv) return
+  messages.value = []
+  userBaseIdLocal.value = nv
+  await loadHistory()
+  try { await request.post('/merchant/chats/mark_read', { merchant_id: props.merchantId, user_base_id: userBaseIdLocal.value }) } catch (e) {}
+})
+
+watch(() => props.merchantId, async (nv) => {
+  if (!nv) return
+  messages.value = []
+  await ensure()
+  await loadHistory()
+})
+
 onBeforeUnmount(() => {
   chatClient.offMessage(handleIncoming)
 })
 </script>
 
 <style scoped>
-.merchant-chat { width: 360px; height: 420px; display:flex; flex-direction:column; border-radius:10px; overflow:hidden; background:#fff; border:1px solid #eee }
-.m-header { height:56px; background:#ffd600; display:flex; align-items:center; justify-content:space-between; padding:0 12px }
+/* 使商家端聊天窗口外观与用户端一致：去除外边框、固定大小、消息区独立滚动 */
+.merchant-chat {
+  width: 400px;
+  height: 700px;
+  min-width: 400px;
+  min-height: 700px;
+  display:flex;
+  flex-direction:column;
+  border-radius:12px;
+  overflow:hidden;
+  background: transparent; /* 由内部卡片负责白色背景 */
+  border: none;
+}
+.merchant-card {
+  width: 100%;
+  height: 100%;
+  display:flex;
+  flex-direction:column;
+  border-radius:12px;
+  background:#fff;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+  overflow:hidden;
+}
+.m-header { height:60px; background:#ffd600; display:flex; align-items:center; justify-content:space-between; padding:0 14px }
 .m-left { display:flex; align-items:center }
-.m-avatar { width:36px; height:36px; border-radius:50%; margin-right:8px }
-.m-title { font-weight:600 }
-.m-close { background:transparent; border:none; font-size:16px; cursor:pointer }
-.m-messages { flex:1; overflow-y:auto; padding:12px; background:#f5f5f5 }
-.m-row { display:flex; margin-bottom:12px; align-items:flex-end }
+.m-avatar { width:40px; height:40px; border-radius:50%; margin-right:10px }
+.m-title { font-weight:700 }
+.m-close { background:transparent; border:none; font-size:18px; cursor:pointer }
+/* 消息区独立滚动 */
+.m-messages { flex:1; overflow-y:auto; padding:14px; background:#f5f5f5; -webkit-overflow-scrolling: touch }
+.m-row { display:flex; margin-bottom:14px; align-items:flex-end }
 .m-row.me { flex-direction:row-reverse }
-.m-msg-avatar { width:32px; height:32px; border-radius:50%; flex-shrink:0 }
+.m-msg-avatar { width:36px; height:36px; border-radius:50%; flex-shrink:0 }
 .m-bubble-wrapper { max-width:72%; position:relative }
-.m-bubble { padding:8px 12px; border-radius:14px; background:#fff; border:1px solid #e8e8e8 }
+.m-bubble { padding:10px 14px; border-radius:16px; background:#fff; border:1px solid #e8e8e8 }
 .m-row.me .m-bubble { background:#ffe563 }
-.m-time { font-size:11px; color:#999; margin-top:4px }
-.m-input { height:56px; display:flex; padding:8px; gap:8px; background:#fff; align-items:center }
-.m-input input { flex:1; height:40px; border-radius:20px; border:1px solid #ddd; padding:0 12px }
-.m-send { width:64px; height:40px; border-radius:20px; background:#ffd600; border:none; cursor:pointer }
+.m-time { font-size:11px; color:#999; margin-top:6px }
+.m-input { height:64px; display:flex; padding:10px; gap:10px; background:#fff; align-items:center }
+.m-input input { flex:1; height:44px; border-radius:22px; border:1px solid #ddd; padding:0 14px }
+.m-send { width:72px; height:44px; border-radius:22px; background:#ffd600; border:none; cursor:pointer }
 </style>

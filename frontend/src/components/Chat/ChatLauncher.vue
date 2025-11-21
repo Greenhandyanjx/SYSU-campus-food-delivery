@@ -92,7 +92,7 @@ function closeChat() {
   color: white;
   border: none;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 10px;
 }
 .chat-overlay {
   position: fixed;
@@ -104,9 +104,9 @@ function closeChat() {
   z-index: 2147483647; /* very high to ensure top-most */
   -webkit-font-smoothing: antialiased;
 }
-.chat-modal { width: 420px; max-width: 92%; background: #fff; border-radius: 10px; overflow: hidden; display:flex; flex-direction:column; z-index:2147483648; position:relative }
+.chat-modal { width: 400px; max-width: 92%; background: #fff; border-radius: 10px; overflow: hidden; display:flex; flex-direction:column; z-index:2147483648; position:relative }
 .chat-header { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; border-bottom:1px solid #eee; }
 .chat-header .title { font-weight:700 }
-.chat-header .close { border: none; background: transparent; font-size:16px; cursor:pointer }
-.chat-body { height: 520px; }
+.chat-header .close { border: none; background: transparent; font-size:10px; cursor:pointer }
+.chat-body { height: 700px; }
 </style>

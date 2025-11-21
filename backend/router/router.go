@@ -78,6 +78,10 @@ func SetRouter() *gin.Engine {
 		// 其他需要中间件保护的路由可以添加在这里
 		// 聊天 WebSocket 与历史接口
 		auth.GET("/chat/history", controller.ChatHistory)
+		// 用户侧会话列表
+		auth.GET("/user/chats", controller.GetUserChats)
+		// 用户侧已读标记
+		auth.POST("/user/chats/mark_read", controller.MarkUserChatRead)
 		// 商家会话列表与已读标记
 		auth.GET("/merchant/chats", controller.GetMerchantChats)
 		auth.POST("/merchant/chats/mark_read", controller.MarkChatRead)
