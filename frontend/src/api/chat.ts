@@ -3,10 +3,19 @@ import request from '@/api/merchant/request'
 export const getChatHistory = (merchantId: number | string, userBaseId?: number | string) => {
   const params: any = { merchantId }
   if (userBaseId) params.userBaseId = userBaseId
-  return request({
-    url: '/chat/history',
-    method: 'GET',
-    params
+  // 增加更长的超时时间并在超时情况下重试一次
+  const cfg = { url: '/chat/history', method: 'GET', params, timeout: 15000 }
+  return request(cfg).catch(async err => {
+    const isTimeout = err && (err.code === 'ECONNABORTED' || (err.message && err.message.includes('timeout')))
+    if (isTimeout) {
+      try {
+        // 简单重试一次
+        return await request(cfg)
+      } catch (e) {
+        return Promise.reject(e)
+      }
+    }
+    return Promise.reject(err)
   })
 }
 
