@@ -33,7 +33,7 @@ export function updateOnlineStatus(isOnline: boolean) {
 
 /**
  * getNewOrders()
- * 功能：获取新订单列表（待接单）
+ * 功能：获取新订单列表（待接单，status=1）
  * 请求：GET /rider/orders/new
  * 返回示例：{ code:1, data:[{ id, restaurant, pickupAddress, customer, deliveryAddress, distance, estimatedFee, estimatedTime, createdAt }] }
  */
@@ -49,6 +49,16 @@ export function getNewOrders() {
  */
 export function acceptOrder(orderId: string) {
   return request({ url: `/rider/orders/${orderId}/accept`, method: 'post' })
+}
+
+/**
+ * acceptOrderSafe(orderId)
+ * 功能：骑手安全接单（带事务锁，防止并发接单）
+ * 请求：POST /rider/orders/{orderId}/accept_safe
+ * 返回示例：{ code:1, data:{ success:true, pickupCode:'A123' } }
+ */
+export function acceptOrderSafe(orderId: string) {
+  return request({ url: `/rider/orders/${orderId}/accept_safe`, method: 'post' })
 }
 
 /**
@@ -105,7 +115,7 @@ export function getOrderDetail(orderId: string) {
 
 /**
  * getIncomeStats()
- * 功能：获取收入统计
+ * 功能：获取收入统计（根据时间段查询）
  * 请求：GET /rider/income/stats
  * 查询参数：{ period?: 'today|week|month' }
  * 返回示例：{ code:1, data:{ dailyIncome:185.5, weeklyIncome:1280, monthlyIncome:5200, completedOrders:68 } }
@@ -115,8 +125,38 @@ export function getIncomeStats(params?: { period?: string }) {
 }
 
 /**
+ * getTodayIncome()
+ * 功能：获取今日收入统计
+ * 请求：GET /rider/income/today
+ * 返回示例：{ code:1, data:{ todayIncome:185.5, todayOrders:8 } }
+ */
+export function getTodayIncome() {
+  return request({ url: '/rider/income/today', method: 'get' })
+}
+
+/**
+ * getIncomeSummary()
+ * 功能：获取收入汇总统计
+ * 请求：GET /rider/income/summary
+ * 返回示例：{ code:1, data:{ totalIncome:12580.5, completedOrders:156 } }
+ */
+export function getIncomeSummary() {
+  return request({ url: '/rider/income/summary', method: 'get' })
+}
+
+/**
+ * getMonthIncome()
+ * 功能：获取月度收入数据
+ * 请求：GET /rider/income/month
+ * 返回示例：{ code:1, data:[{ date: '2024-01-01', money: 185.5 }] }
+ */
+export function getMonthIncome() {
+  return request({ url: '/rider/income/month', method: 'get' })
+}
+
+/**
  * getIncomeHistory()
- * 功能：获取收入明细
+ * 功能：获取收入明细（分页）
  * 请求：GET /rider/income/history
  * 查询参数：{ page:1, size:20, startDate?, endDate? }
  * 返回示例：{ code:1, data:{ items:[{ id, orderId, amount, type, time, remark }], total } }
@@ -133,6 +173,16 @@ export function getIncomeHistory(params?: { page?: number; size?: number; startD
  */
 export function getWeeklyStats() {
   return request({ url: '/rider/stats/weekly', method: 'get' })
+}
+
+/**
+ * getRiderDashboard()
+ * 功能：获取骑手仪表板数据
+ * 请求：GET /rider/dashboard
+ * 返回示例：{ code:1, data:{ todayIncome:185.5, todayOrders:8, delivering:2, waitPickup:1 } }
+ */
+export function getRiderDashboard() {
+  return request({ url: '/rider/dashboard', method: 'get' })
 }
 
 // ==================== 历史订单相关 ====================
@@ -604,14 +654,19 @@ export default {
   updateOnlineStatus,
   getNewOrders,
   acceptOrder,
+  acceptOrderSafe,
   getPickupOrders,
   confirmPickup,
   getDeliveringOrders,
   completeDelivery,
   getOrderDetail,
   getIncomeStats,
+  getTodayIncome,
+  getIncomeSummary,
+  getMonthIncome,
   getIncomeHistory,
   getWeeklyStats,
+  getRiderDashboard,
   getOrderHistory,
   getWalletInfo,
   withdraw,
