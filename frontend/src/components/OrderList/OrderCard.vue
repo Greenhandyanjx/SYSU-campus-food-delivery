@@ -4,8 +4,9 @@
     <div class="card-header">
       <div class="store" @click="$emit('open-store', order.storeId)">
         <img v-if="order.storeLogo" :src="order.storeLogo" alt="logo" @error="onImgError" />
-        <span class="store-name">{{ order.storeName }}</span>
-        <i class="arrow el-icon-arrow-right"></i>
+        <span class="store-name">{{ order.storeName }}    >
+          <!-- <img src="/src/assets/icons/rightarrow.svg" alt="arrow" class="arrow" style="width: 15px;height: 15px;border: 0;top: 20px;"/> -->
+        </span>
       </div>
       <div class="status">{{ order.statusText }}</div>
     </div>
