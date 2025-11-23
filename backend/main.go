@@ -13,10 +13,10 @@ func main() {
 
 	// 2. 初始化数据库连接
 	// 这里注释掉了，因为已经在config.InitConfig()中初始化了
-	// config.InitDB()
+	//config.InitDB()
 
 	// 3. 执行自动建表
-	//config.Initalldb()
+	config.Initalldb()
 
 	//不改动数据执行一次即可
 	//config.Initalldb()
