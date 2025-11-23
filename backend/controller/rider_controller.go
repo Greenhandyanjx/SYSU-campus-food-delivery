@@ -4,10 +4,12 @@ import (
 	"backend/global"
 	"backend/models"
 	"backend/utils"
+	"encoding/json"
 	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // GET /rider/info
@@ -169,9 +171,10 @@ func PickupOrder(c *gin.Context) {
 	}
 
 	// 更新为配送中（3）
+	now := time.Now()
 	err := global.Db.Model(&order).Updates(map[string]interface{}{
-		"status":       3,
-		"pickup_point": time.Now(),
+		"status":    3,
+		"pickup_at": &now,
 	}).Error
 
 	if err != nil {
@@ -201,7 +204,6 @@ func GetDeliveringOrders(c *gin.Context) {
 	c.JSON(200, gin.H{"code": 1, "data": orders})
 }
 
-// POST /rider/orders/:orderId/complete
 func CompleteOrder(c *gin.Context) {
 	riderID := c.GetUint("baseUserID")
 	orderId := c.Param("orderId")
@@ -218,14 +220,35 @@ func CompleteOrder(c *gin.Context) {
 		return
 	}
 
-	// 修改状态
-	order.Status = 4
-	order.DropofPoint = time.Now()
+	now := time.Now()
 
+	// 1. 更新订单状态 + 完成时间
+	order.Status = 4
+	order.DropofPoint = now
+	order.FinishAt = &now
 	if err := global.Db.Save(&order).Error; err != nil {
 		c.JSON(200, gin.H{"code": 0, "msg": "完成配送失败"})
 		return
 	}
+
+	// 2. 写入收入记录
+	income := models.RiderIncomeRecord{
+		RiderID:   riderID,
+		OrderID:   order.ID,
+		Amount:    order.TotalPrice,
+		Type:      "delivery",
+		Remark:    "配送完成收入",
+		CreatedAt: now,
+	}
+	global.Db.Create(&income)
+
+	// 3. 同步更新钱包余额 & 总收入（字段名必须使用数据库里的字段）
+	global.Db.Model(&models.RiderWallet{}).
+		Where("rider_id = ?", riderID).
+		Updates(map[string]interface{}{
+			"balance":      gorm.Expr("balance + ?", order.TotalPrice),
+			"total_income": gorm.Expr("total_income + ?", order.TotalPrice),
+		})
 
 	c.JSON(200, gin.H{"code": 1, "data": gin.H{"success": true}})
 }
@@ -294,22 +317,7 @@ func GetOrderDetailForRider(c *gin.Context) {
 		return
 	}
 
-	// 2. 查收货人信息（Consignee）
-	var consignee models.Consignee
-	if err := global.Db.First(&consignee, order.Consigneeid).Error; err != nil {
-		c.JSON(200, gin.H{"code": 0, "msg": "收货人信息查询失败"})
-		return
-	}
-
-	// 3. 查地址（Address）
-	var address models.Address
-	global.Db.First(&address, consignee.Addressid)
-
-	// 4. 查订单商品（如果你的表有 OrderDish）
-	var dishes []models.OrderDish
-	global.Db.Where("order_id = ?", order.ID).Find(&dishes)
-
-	// 5. 封装返回（前端要求的结构）
+	// 2. 返回前端要求的结构
 	c.JSON(200, gin.H{
 		"code": 1,
 		"data": gin.H{
@@ -319,18 +327,15 @@ func GetOrderDetailForRider(c *gin.Context) {
 			"pickupCode": order.PickupCode,
 
 			"customerInfo": gin.H{
-				"name":  consignee.Name,
-				"phone": consignee.Phone,
+				"name":  order.Consignee,
+				"phone": order.Phone,
 				"address": gin.H{
-					"province": address.Province,
-					"city":     address.City,
-					"district": address.District,
-					"street":   address.Street,
-					"detail":   address.Detail,
+					"full": order.Address,
 				},
 			},
 
-			"items": dishes,
+			// 你现在没有订单菜品表，先返回空数组
+			"items": []interface{}{},
 		},
 	})
 }
@@ -474,4 +479,203 @@ func UpdateRiderLocation(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{"code": 1, "data": gin.H{"success": true}})
+}
+func AcceptOrder(c *gin.Context) {
+	orderId := c.Param("orderId")
+	riderID := c.GetUint("baseUserID")
+
+	var order models.Order
+	if err := global.Db.Where("id = ?", orderId).First(&order).Error; err != nil {
+		c.JSON(200, gin.H{"code": 0, "msg": "订单不存在"})
+		return
+	}
+
+	if order.Status != 1 {
+		c.JSON(200, gin.H{"code": 0, "msg": "订单已被抢走"})
+		return
+	}
+
+	now := time.Now()
+	pickupCode := utils.GeneratePickupCode()
+
+	global.Db.Model(&order).Updates(map[string]interface{}{
+		"status":      2,
+		"rider_id":    riderID,
+		"pickup_code": pickupCode,
+		"accepted_at": &now,
+	})
+
+	c.JSON(200, gin.H{
+		"code": 1,
+		"data": gin.H{
+			"success":    true,
+			"pickupCode": pickupCode,
+		},
+	})
+}
+func GetIncomeStats(c *gin.Context) {
+	riderID := c.GetUint("baseUserID")
+	period := c.DefaultQuery("period", "today")
+
+	var start time.Time
+	now := time.Now()
+
+	switch period {
+	case "today":
+		start = now.Truncate(24 * time.Hour)
+	case "week":
+		start = now.AddDate(0, 0, -7)
+	case "month":
+		start = now.AddDate(0, -1, 0)
+	default:
+		start = now.Truncate(24 * time.Hour)
+	}
+
+	var income float64
+	global.Db.Model(&models.RiderIncomeRecord{}).
+		Where("rider_id = ? AND created_at >= ?", riderID, start).
+		Select("SUM(amount)").Scan(&income)
+
+	var count int64
+	global.Db.Model(&models.Order{}).
+		Where("rider_id = ? AND status = 4 AND finish_at >= ?", riderID, start).
+		Count(&count)
+
+	c.JSON(200, gin.H{
+		"code": 1,
+		"data": gin.H{
+			"dailyIncome":     income,
+			"completedOrders": count,
+		},
+	})
+}
+func GetIncomeHistory(c *gin.Context) {
+	riderID := c.GetUint("baseUserID")
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
+
+	offset := (page - 1) * size
+
+	var list []models.RiderIncomeRecord
+	var total int64
+
+	query := global.Db.Model(&models.RiderIncomeRecord{}).
+		Where("rider_id = ?", riderID)
+
+	query.Count(&total)
+
+	query.Order("created_at DESC").
+		Offset(offset).
+		Limit(size).
+		Find(&list)
+
+	c.JSON(200, gin.H{
+		"code": 1,
+		"data": gin.H{
+			"items": list,
+			"total": total,
+		},
+	})
+}
+func GetWeeklyStats(c *gin.Context) {
+	riderID := c.GetUint("baseUserID")
+
+	start := time.Now().AddDate(0, 0, -7)
+
+	// 收入
+	var weekIncome float64
+	global.Db.Model(&models.RiderIncomeRecord{}).
+		Where("rider_id = ? AND created_at >= ?", riderID, start).
+		Select("SUM(amount)").Scan(&weekIncome)
+
+	// 完成订单
+	var weekOrders int64
+	global.Db.Model(&models.Order{}).
+		Where("rider_id = ? AND status = 4 AND finish_at >= ?", riderID, start).
+		Count(&weekOrders)
+
+	// 在线时长（你 RiderProfile 里应有 OnlineHours 字段）
+	var profile models.RiderProfile
+	global.Db.Where("user_id = ?", riderID).First(&profile)
+
+	c.JSON(200, gin.H{
+		"code": 1,
+		"data": gin.H{
+			"weekIncome":  weekIncome,
+			"weekOrders":  weekOrders,
+			"onlineHours": profile.OnlineHours,
+			"avgRating":   profile.Rating,
+		},
+	})
+}
+func GetWalletInfo(c *gin.Context) {
+	riderID := c.GetUint("baseUserID")
+
+	var wallet models.RiderWallet
+	global.Db.Where("rider_id = ?", riderID).First(&wallet)
+
+	c.JSON(200, gin.H{
+		"code": 1,
+		"data": wallet,
+	})
+}
+func Withdraw(c *gin.Context) {
+	riderID := c.GetUint("baseUserID")
+
+	var req struct {
+		Amount  float64 `json:"amount"`
+		Account string  `json:"account"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(200, gin.H{"code": 0, "msg": "参数错误"})
+		return
+	}
+
+	now := time.Now()
+
+	record := models.RiderWithdraw{
+		RiderID:   riderID,
+		Amount:    req.Amount,
+		Account:   req.Account,
+		Status:    "pending",
+		AppliedAt: now,
+	}
+
+	global.Db.Create(&record)
+
+	c.JSON(200, gin.H{
+		"code": 1,
+		"data": gin.H{"success": true, "withdrawId": record.ID},
+	})
+}
+func GetWithdrawHistory(c *gin.Context) {
+	riderID := c.GetUint("baseUserID")
+
+	var list []models.RiderWithdraw
+	global.Db.Where("rider_id = ?", riderID).
+		Order("applied_at DESC").
+		Find(&list)
+
+	c.JSON(200, gin.H{
+		"code": 1,
+		"data": list,
+	})
+}
+func GetDeliveryRoute(c *gin.Context) {
+	orderId := c.Param("orderId")
+
+	var route models.DeliveryRoute
+	if err := global.Db.Where("order_id = ?", orderId).First(&route).Error; err != nil {
+		c.JSON(200, gin.H{"code": 0, "msg": "未找到路线"})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"code": 1,
+		"data": gin.H{
+			"route":         json.RawMessage(route.RouteJSON),
+			"distance":      route.Distance,
+			"estimatedTime": route.ETA,
+		},
+	})
 }

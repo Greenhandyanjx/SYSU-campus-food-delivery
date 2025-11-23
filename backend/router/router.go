@@ -109,6 +109,24 @@ func SetRouter() *gin.Engine {
 		auth.GET("/rider/income/month", controller.GetMonthIncome)
 		auth.GET("/rider/dashboard", controller.GetRiderDashboard)
 		auth.POST("/rider/location", controller.UpdateRiderLocation)
+		// ====== Rider APIs (missing parts added) ======
+
+		auth.POST("/rider/orders/:orderId/accept", controller.AcceptOrder) // 正式版接单接口
+
+		// 收入统计
+		auth.GET("/rider/income/stats", controller.GetIncomeStats)
+		auth.GET("/rider/income/history", controller.GetIncomeHistory)
+
+		// 每周数据统计
+		auth.GET("/rider/stats/weekly", controller.GetWeeklyStats)
+
+		// 钱包
+		auth.GET("/rider/wallet", controller.GetWalletInfo)
+		auth.POST("/rider/wallet/withdraw", controller.Withdraw)
+		auth.GET("/rider/wallet/withdraw/history", controller.GetWithdrawHistory)
+
+		// 配送路线
+		auth.GET("/rider/orders/:orderId/route", controller.GetDeliveryRoute)
 		// 并发安全的接单接口（可替代原来的）
 		auth.POST("/rider/orders/:orderId/accept_safe", controller.AcceptOrderSafe)
 
