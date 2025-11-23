@@ -98,13 +98,22 @@ func SetRouter() *gin.Engine {
 		auth.GET("/rider/info", controller.GetRiderInfo)
 		auth.POST("/rider/status", controller.UpdateRiderStatus)
 		auth.GET("/rider/orders/new", controller.GetNewOrders)
-		auth.POST("/rider/orders/:orderId/accept", controller.AcceptOrder)
 		auth.POST("/rider/orders/:orderId/pickup", controller.PickupOrder)
 		auth.GET("/rider/orders/delivering", controller.GetDeliveringOrders)
 		auth.POST("/rider/orders/:orderId/complete", controller.CompleteOrder)
 		auth.GET("/rider/orders/history", controller.GetOrderHistory)
+		auth.GET("/rider/orders/pickup", controller.GetPickupOrders)
+		auth.GET("/rider/orders/:orderId", controller.GetOrderDetailForRider)
+		auth.GET("/rider/income/today", controller.GetTodayIncome)
+		auth.GET("/rider/income/summary", controller.GetIncomeSummary)
+		auth.GET("/rider/income/month", controller.GetMonthIncome)
+		auth.GET("/rider/dashboard", controller.GetRiderDashboard)
+		auth.POST("/rider/location", controller.UpdateRiderLocation)
+		// 并发安全的接单接口（可替代原来的）
+		auth.POST("/rider/orders/:orderId/accept_safe", controller.AcceptOrderSafe)
 
 		auth.GET("merchant/statistics/top", controller.GetTopSales)
+
 	}
 	return fe
 }

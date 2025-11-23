@@ -102,48 +102,47 @@ func GetNewOrders(c *gin.Context) {
 	c.JSON(200, gin.H{"code": 1, "data": results})
 }
 
-// POST /rider/orders/:orderId/accept
-func AcceptOrder(c *gin.Context) {
+// POST /rider/orders/:orderId/accept_safe
+func AcceptOrderSafe(c *gin.Context) {
 	orderId := c.Param("orderId")
-	riderID := c.GetUint("baseUserID") // 骑手 ID，从 token 获取
+	riderID := c.GetUint("baseUserID")
+
+	tx := global.Db.Begin()
 
 	var order models.Order
-	if err := global.Db.Where("id = ?", orderId).First(&order).Error; err != nil {
+	if err := tx.Set("gorm:query_option", "FOR UPDATE").
+		Where("id = ?", orderId).First(&order).Error; err != nil {
+		tx.Rollback()
 		c.JSON(200, gin.H{"code": 0, "msg": "订单不存在"})
 		return
 	}
 
-	// 只能抢待接单订单
 	if order.Status != 1 {
+		tx.Rollback()
 		c.JSON(200, gin.H{"code": 0, "msg": "订单已被抢走"})
 		return
 	}
 
-	// 生成取货码（例如 A123）
 	pickupCode := utils.GeneratePickupCode()
 
-	// 更新订单：status=2, rider_id, pickup_code
-	updateErr := global.Db.Model(&order).Updates(map[string]interface{}{
+	err := tx.Model(&order).Updates(map[string]interface{}{
 		"status":      2,
 		"rider_id":    riderID,
 		"pickup_code": pickupCode,
 	}).Error
 
-	if updateErr != nil {
-		c.JSON(200, gin.H{
-			"code": 0,
-			"msg":  "接单失败",
-		})
+	if err != nil {
+		tx.Rollback()
+		c.JSON(200, gin.H{"code": 0, "msg": "接单失败"})
 		return
 	}
 
-	c.JSON(200, gin.H{
-		"code": 1,
-		"data": gin.H{
-			"success":    true,
-			"pickupCode": pickupCode,
-		},
-	})
+	tx.Commit()
+
+	c.JSON(200, gin.H{"code": 1, "data": gin.H{
+		"success":    true,
+		"pickupCode": pickupCode,
+	}})
 }
 
 // 骑手取货接口
@@ -267,4 +266,212 @@ func GetOrderHistory(c *gin.Context) {
 			"total": total,
 		},
 	})
+}
+
+// GET /rider/orders/pickup
+func GetPickupOrders(c *gin.Context) {
+	riderID := c.GetUint("baseUserID")
+
+	var orders []models.Order
+	err := global.Db.Where("rider_id = ? AND status = 2", riderID).Find(&orders).Error
+	if err != nil {
+		c.JSON(200, gin.H{"code": 0, "msg": "查询失败"})
+		return
+	}
+
+	c.JSON(200, gin.H{"code": 1, "data": orders})
+}
+
+// GET /rider/orders/:orderId
+func GetOrderDetailForRider(c *gin.Context) {
+	orderId := c.Param("orderId")
+	riderID := c.GetUint("baseUserID")
+
+	// 1. 查订单
+	var order models.Order
+	if err := global.Db.Where("id = ? AND rider_id = ?", orderId, riderID).First(&order).Error; err != nil {
+		c.JSON(200, gin.H{"code": 0, "msg": "订单不存在或无权限"})
+		return
+	}
+
+	// 2. 查收货人信息（Consignee）
+	var consignee models.Consignee
+	if err := global.Db.First(&consignee, order.Consigneeid).Error; err != nil {
+		c.JSON(200, gin.H{"code": 0, "msg": "收货人信息查询失败"})
+		return
+	}
+
+	// 3. 查地址（Address）
+	var address models.Address
+	global.Db.First(&address, consignee.Addressid)
+
+	// 4. 查订单商品（如果你的表有 OrderDish）
+	var dishes []models.OrderDish
+	global.Db.Where("order_id = ?", order.ID).Find(&dishes)
+
+	// 5. 封装返回（前端要求的结构）
+	c.JSON(200, gin.H{
+		"code": 1,
+		"data": gin.H{
+			"id":         order.ID,
+			"status":     order.Status,
+			"total":      order.TotalPrice,
+			"pickupCode": order.PickupCode,
+
+			"customerInfo": gin.H{
+				"name":  consignee.Name,
+				"phone": consignee.Phone,
+				"address": gin.H{
+					"province": address.Province,
+					"city":     address.City,
+					"district": address.District,
+					"street":   address.Street,
+					"detail":   address.Detail,
+				},
+			},
+
+			"items": dishes,
+		},
+	})
+}
+
+// GET /rider/income/today
+func GetTodayIncome(c *gin.Context) {
+	riderID := c.GetUint("baseUserID")
+
+	var total float64
+	global.Db.Model(&models.Order{}).
+		Where("rider_id = ? AND status = 4 AND DATE(updated_at) = CURDATE()", riderID).
+		Select("SUM(total_price)").Scan(&total)
+
+	var count int64
+	global.Db.Model(&models.Order{}).
+		Where("rider_id = ? AND status = 4 AND DATE(updated_at) = CURDATE()", riderID).
+		Count(&count)
+
+	c.JSON(200, gin.H{
+		"code": 1,
+		"data": gin.H{
+			"todayIncome": total,
+			"todayOrders": count,
+		},
+	})
+}
+
+// GET /rider/income/summary
+func GetIncomeSummary(c *gin.Context) {
+	riderID := c.GetUint("baseUserID")
+
+	var total float64
+	global.Db.Model(&models.Order{}).
+		Where("rider_id = ? AND status = 4", riderID).
+		Select("SUM(total_price)").Scan(&total)
+
+	var count int64
+	global.Db.Model(&models.Order{}).
+		Where("rider_id = ? AND status = 4", riderID).
+		Count(&count)
+
+	c.JSON(200, gin.H{
+		"code": 1,
+		"data": gin.H{
+			"totalIncome":     total,
+			"completedOrders": count,
+		},
+	})
+}
+
+// GET /rider/income/month
+func GetMonthIncome(c *gin.Context) {
+	riderID := c.GetUint("baseUserID")
+
+	type Item struct {
+		Date  string  `json:"date"`
+		Money float64 `json:"money"`
+	}
+
+	var data []Item
+
+	global.Db.Raw(`
+        SELECT DATE(updated_at) AS date, SUM(total_price) AS money
+        FROM orders
+        WHERE rider_id = ? AND status = 4
+        GROUP BY DATE(updated_at)
+        ORDER BY date ASC
+    `, riderID).Scan(&data)
+
+	c.JSON(200, gin.H{
+		"code": 1,
+		"data": data,
+	})
+}
+
+// GET /rider/dashboard
+func GetRiderDashboard(c *gin.Context) {
+	riderID := c.GetUint("baseUserID")
+
+	// 今日收入
+	var todayIncome float64
+	global.Db.Model(&models.Order{}).
+		Where("rider_id = ? AND status = 4 AND DATE(updated_at)=CURDATE()", riderID).
+		Select("SUM(total_price)").Scan(&todayIncome)
+
+	// 今日单数
+	var todayOrders int64
+	global.Db.Model(&models.Order{}).
+		Where("rider_id = ? AND status = 4 AND DATE(updated_at)=CURDATE()", riderID).
+		Count(&todayOrders)
+
+	// 配送中
+	var delivering int64
+	global.Db.Model(&models.Order{}).
+		Where("rider_id = ? AND status = 3", riderID).
+		Count(&delivering)
+
+	// 待取货
+	var waitPickup int64
+	global.Db.Model(&models.Order{}).
+		Where("rider_id = ? AND status = 2", riderID).
+		Count(&waitPickup)
+
+	c.JSON(200, gin.H{
+		"code": 1,
+		"data": gin.H{
+			"todayIncome": todayIncome,
+			"todayOrders": todayOrders,
+			"delivering":  delivering,
+			"waitPickup":  waitPickup,
+		},
+	})
+}
+
+// POST /rider/location
+func UpdateRiderLocation(c *gin.Context) {
+	riderID := c.GetUint("baseUserID")
+
+	var req struct {
+		Latitude  float64 `json:"latitude"`
+		Longitude float64 `json:"longitude"`
+		Address   string  `json:"address"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(200, gin.H{"code": 0, "msg": "参数错误"})
+		return
+	}
+
+	err := global.Db.Model(&models.RiderProfile{}).
+		Where("user_id = ?", riderID).
+		Updates(map[string]interface{}{
+			"latitude":  req.Latitude,
+			"longitude": req.Longitude,
+			"address":   req.Address,
+		}).Error
+
+	if err != nil {
+		c.JSON(200, gin.H{"code": 0, "msg": "定位更新失败"})
+		return
+	}
+
+	c.JSON(200, gin.H{"code": 1, "data": gin.H{"success": true}})
 }
