@@ -42,6 +42,9 @@ func SetRouter() *gin.Engine {
 		noAuth.GET("/merchant/order/detail", controller.GetOrderDetail)
 		noAuth.POST("/merchant/order/add", controller.Orderadd)
 
+		// 用户端 Store（商家）查询
+		noAuth.GET("/store/query", controller.StoreQuery)
+		noAuth.GET("/store/dishes", controller.StoreDishes)
 	}
 	// 创建一个需要中间件的组
 	auth := fe.Group("/api")
@@ -79,7 +82,8 @@ func SetRouter() *gin.Engine {
 		auth.GET("/merchant/statistics/user", controller.GetUserData)
 		auth.GET("/merchant/statistics/order", controller.GetOrderStatistics)
 
-		auth.GET("/user/cart", controller.GetCart)
+		auth.GET("/user/cart", controller.GetUserCart)
+		auth.POST("/user/cart/add", controller.AddToCart) // 添加到购物车
 	}
 	return fe
 }
