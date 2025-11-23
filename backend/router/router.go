@@ -127,6 +127,8 @@ func SetRouter() *gin.Engine {
 
 		// 配送路线
 		auth.GET("/rider/orders/:orderId/route", controller.GetDeliveryRoute)
+		// 并发安全的接单接口（可替代原来的）
+		auth.POST("/rider/orders/:orderId/accept_safe", controller.AcceptOrderSafe)
 
 		auth.GET("merchant/statistics/top", controller.GetTopSales)
 
