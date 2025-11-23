@@ -75,29 +75,48 @@ func Initalldb() error {
 		fmt.Println("rider_profiles table create fail")
 		return err
 	}
-     if err := global.Db.Table("order-dish").AutoMigrate(&models.OrderDish{}); err != nil {
-	 	fmt.Println("orderdish table create fail")
-	 	panic(err)
+	if err := global.Db.Table("order-dish").AutoMigrate(&models.OrderDish{}); err != nil {
+		fmt.Println("orderdish table create fail")
+		panic(err)
 	}
-	 if err := global.Db.Table("order-meal").AutoMigrate(&models.OrderMeal{}); err != nil {
-	 	fmt.Println("ordermeal table create fail")
-	 	panic(err)
+	if err := global.Db.Table("order-meal").AutoMigrate(&models.OrderMeal{}); err != nil {
+		fmt.Println("ordermeal table create fail")
+		panic(err)
 	}
-	 if err := global.Db.Table("sales-stats").AutoMigrate(&models.SalesStat{}); err != nil {
-	 	fmt.Println("salesstats table create fail")
-	 	panic(err)
+	if err := global.Db.Table("sales-stats").AutoMigrate(&models.SalesStat{}); err != nil {
+		fmt.Println("salesstats table create fail")
+		panic(err)
 	}
-	 if err := global.Db.Table("consignees").AutoMigrate(&models.Consignee{}); err != nil {
-	 	fmt.Println("consignees table create fail")
-	 	panic(err)
+	if err := global.Db.Table("consignees").AutoMigrate(&models.Consignee{}); err != nil {
+		fmt.Println("consignees table create fail")
+		panic(err)
 	}
 	if err := global.Db.Table("addresses").AutoMigrate(&models.Address{}); err != nil {
-	 	fmt.Println("addressees table create fail")
-	 	panic(err)
+		fmt.Println("addressees table create fail")
+		panic(err)
 	}
 	if err := global.Db.Table("orders").AutoMigrate(&models.Order{}); err != nil {
-	 	fmt.Println("orders table create fail")
-	 	panic(err)
+		fmt.Println("orders table create fail")
+		panic(err)
+	}
+	if err := global.Db.Table("rider_wallets").AutoMigrate(&models.RiderWallet{}); err != nil {
+		fmt.Println("rider_wallets table create fail")
+		return err
+	}
+
+	if err := global.Db.Table("rider_income_records").AutoMigrate(&models.RiderIncomeRecord{}); err != nil {
+		fmt.Println("rider_income_records table create fail")
+		return err
+	}
+
+	if err := global.Db.Table("rider_withdraws").AutoMigrate(&models.RiderWithdraw{}); err != nil {
+		fmt.Println("rider_withdraws table create fail")
+		return err
+	}
+
+	if err := global.Db.Table("delivery_routes").AutoMigrate(&models.DeliveryRoute{}); err != nil {
+		fmt.Println("delivery_routes table create fail")
+		return err
 	}
 	return nil
 }
