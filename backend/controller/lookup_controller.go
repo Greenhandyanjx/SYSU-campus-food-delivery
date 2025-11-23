@@ -3,9 +3,10 @@ package controller
 import (
 	"backend/global"
 	"backend/models"
-	"backend/utils"
+	butils "backend/utils"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -23,9 +24,18 @@ func GetMerchantDetail(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "invalid id"})
 			return
 		}
-		if err = global.Db.First(&m, uint(id)).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "merchant not found"})
-			return
+		// 先尝试从缓存读取
+		cacheKey := "merchant:id:" + strconv.FormatUint(id, 10)
+		if v, ok := butils.DefaultCache.Get(cacheKey); ok {
+			if mm, ok2 := v.(models.Merchant); ok2 {
+				m = mm
+			}
+		} else {
+			if err = global.Db.First(&m, uint(id)).Error; err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "merchant not found"})
+				return
+			}
+			butils.DefaultCache.Set(cacheKey, m, 5*time.Minute)
 		}
 	} else if baseIDStr != "" {
 		var baseID uint64
@@ -34,9 +44,17 @@ func GetMerchantDetail(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "invalid base_id"})
 			return
 		}
-		if err = global.Db.Where("base_id = ?", uint(baseID)).First(&m).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "merchant not found"})
-			return
+		cacheKey := "merchant:base_id:" + strconv.FormatUint(baseID, 10)
+		if v, ok := butils.DefaultCache.Get(cacheKey); ok {
+			if mm, ok2 := v.(models.Merchant); ok2 {
+				m = mm
+			}
+		} else {
+			if err = global.Db.Where("base_id = ?", uint(baseID)).First(&m).Error; err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "merchant not found"})
+				return
+			}
+			butils.DefaultCache.Set(cacheKey, m, 5*time.Minute)
 		}
 	} else {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "id or base_id required"})
@@ -57,14 +75,23 @@ func GetBaseUserDetail(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "id or Authorization required"})
 			return
 		}
-		username, err := utils.ParseJWT(token)
+		username, err := butils.ParseJWT(token)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "msg": "invalid token"})
 			return
 		}
-		if err = global.Db.Where("username = ?", username).First(&b).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "user not found"})
-			return
+		// 尝试缓存
+		cacheKey := "baseuser:username:" + username
+		if v, ok := butils.DefaultCache.Get(cacheKey); ok {
+			if bb, ok2 := v.(models.BaseUser); ok2 {
+				b = bb
+			}
+		} else {
+			if err = global.Db.Where("username = ?", username).First(&b).Error; err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "user not found"})
+				return
+			}
+			butils.DefaultCache.Set(cacheKey, b, 5*time.Minute)
 		}
 	} else {
 		var id uint64
@@ -73,9 +100,17 @@ func GetBaseUserDetail(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "invalid id"})
 			return
 		}
-		if err = global.Db.First(&b, uint(id)).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "user not found"})
-			return
+		cacheKey := "baseuser:id:" + strconv.FormatUint(id, 10)
+		if v, ok := butils.DefaultCache.Get(cacheKey); ok {
+			if bb, ok2 := v.(models.BaseUser); ok2 {
+				b = bb
+			}
+		} else {
+			if err = global.Db.First(&b, uint(id)).Error; err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "user not found"})
+				return
+			}
+			butils.DefaultCache.Set(cacheKey, b, 5*time.Minute)
 		}
 	}
 	// 避免返回密码字段
@@ -86,3 +121,8 @@ func GetBaseUserDetail(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": resp})
 }
+
+// 注意：为了进一步优化，建议为 base_users.username 和 merchants.base_id 创建索引。
+// 你可以将以下 SQL 作为 migration：
+// ALTER TABLE base_users ADD INDEX idx_base_users_username (username);
+// ALTER TABLE merchants ADD INDEX idx_merchants_base_id (base_id);

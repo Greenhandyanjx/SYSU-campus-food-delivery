@@ -98,7 +98,7 @@ async function load() {
 
 function open(c) {
   // debug: log item shape to help diagnose unexpected types
-  try { console.debug('[UserChatList.open] item:', c) } catch (e) {}
+  try { console.log('[UserChatList.open] item:', c) } catch (e) {}
 
   // 读取 merchant id 时更加鲁棒：支持字段为 value / getter 函数 / 不同命名
   let mid = null
