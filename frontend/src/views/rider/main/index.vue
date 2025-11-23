@@ -333,7 +333,7 @@ const initRiderData = async () => {
       riderInfo.value = riderData.data
       isOnline.value = riderData.data.isOnline
     }
-    //fix
+
     // 获取收入统计
     const incomeData = await riderApi.getIncomeStatsWithDemo()
     if (incomeData.code === 1 && incomeData.data) {
