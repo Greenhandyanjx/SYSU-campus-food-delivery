@@ -145,6 +145,7 @@ import {
   getCategoryList,
   commonDownload
 } from '@/api/merchant/dish'
+import { CATEGORIES } from '@/constants/categories'
 // token handled by request interceptor; getToken import removed
 const uploadHeaders = {
   Authorization: `Bearer ${localStorage.getItem('token')}`
@@ -157,7 +158,7 @@ const textarea = ref('')
 const value = ref('')
 const imageUrl = ref('')
 const actionType = ref('')
-const dishList = ref<any[]>([])
+const dishList = ref<any[]>(CATEGORIES.filter(c => c.id !== 0))
 const dishFlavorsData = ref<any[]>([])
 const dishFlavors = ref<any[]>([])
 // 本地标签池（示例），可改为从后端获取
@@ -323,17 +324,19 @@ function keyDownHandle(val: any, e?: Event) {
   }
 }
 
+// categories are now static constants (CATEGORIES); keep helper for backward compatibility
 async function getDishList() {
+  // try backend first, fallback to local constants
   try {
     const res = await getCategoryList({ type: 1 })
-    if (res.data.code === 1) {
+    if (res && res.data && Number(res.data.code) === 1 && Array.isArray(res.data.data) && res.data.data.length > 0) {
       dishList.value = res.data.data
-    } else {
-      ElMessage.error(res.data.msg)
+      return
     }
-  } catch (err: any) {
-    ElMessage.error('请求出错了：' + err.message)
+  } catch (err) {
+    // ignore and fallback
   }
+  dishList.value = CATEGORIES.filter(c => c.id !== 0)
 }
 
 function getFlavorListHand() {

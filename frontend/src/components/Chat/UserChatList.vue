@@ -159,8 +159,6 @@ onMounted(() => {
   })
 })
 </script>
-
-<!-- UserChatList.vue 只改 <style> 部分，其余不动 -->
 <style scoped>
 .user-chat-list {
   width: 100%;

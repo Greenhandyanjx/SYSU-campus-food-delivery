@@ -16,7 +16,7 @@ func main() {
 	//config.InitDB()
 
 	// 3. 执行自动建表
-	config.Initalldb()
+	// config.Initalldb()
 
 	//不改动数据执行一次即可
 	//config.Initalldb()
@@ -27,6 +27,6 @@ func main() {
 	if err := r.Run(":" + config.AppConfig.App.Port); err != nil {
 		log.Fatalf("Server startup failed: %v", err)
 	}
-
+    
 	fmt.Println("server start at port 3000")
 }
