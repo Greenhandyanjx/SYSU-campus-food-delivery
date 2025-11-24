@@ -220,7 +220,7 @@ const form = ref({
   realname: '',
   idNumber: '',
   vehicle: '',
-  idPhoto: '',
+  // idPhoto: '',
   shopName: '',
   owner: '',
   license: '',
@@ -344,7 +344,7 @@ async function handleRegister() {
           idNumber: form.value.idNumber,
           phone: form.value.phone,
           vehicle: form.value.vehicle,
-          idPhotoUrl: form.value.idPhoto,
+          // idPhotoUrl: form.value.idPhoto,
           code: form.value.code,
           role: "rider",
         })
