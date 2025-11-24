@@ -145,5 +145,10 @@ func Initalldb() error {
 		fmt.Println("delivery_routes table create fail")
 		return err
 	}
+	//创建store
+	if err := global.Db.Table("stores").AutoMigrate(&models.Store{}); err != nil {
+        fmt.Println("stores table create fail")
+        return err
+    }
 	return nil
 }
