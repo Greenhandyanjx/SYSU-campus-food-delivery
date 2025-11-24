@@ -89,7 +89,7 @@ func GetNewOrders(c *gin.Context) {
 			Restaurant:      merchant.ShopName,
 			PickupAddress:   merchant.ShopLocation,
 			Customer:        "匿名用户",
-			DeliveryAddress: o.Address,
+			// DeliveryAddress: o.PayInfo,
 			Distance:        1.2,
 			EstimatedFee:    o.TotalPrice,
 			EstimatedTime:   20,

@@ -79,7 +79,7 @@ func Initalldb() error {
 	 	fmt.Println("orderdish table create fail")
 	 	panic(err)
 	}
-	 if err := global.Db.Table("order-meal").AutoMigrate(&models.OrderMeal{}); err != nil {
+	 if err := global.Db.AutoMigrate(&models.OrderMeal{}); err != nil {
 	 	fmt.Println("ordermeal table create fail")
 	 	panic(err)
 	}
