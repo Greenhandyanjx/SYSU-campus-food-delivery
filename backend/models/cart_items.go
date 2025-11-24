@@ -6,7 +6,7 @@ type CartItem struct {
 	MerchantID uint   `json:"merchant_id"`
 	DishID     uint   `json:"dish_id"`
 	Name       string `json:"name"`
-	Price      string `gorm:"not null;type:double" json:"price"`
+	Price      string `gorm:"not null;type:varchar(20)" json:"price"`
 	Qty        int    `json:"qty"`
 	Selected   bool   `json:"selected"`
 }
