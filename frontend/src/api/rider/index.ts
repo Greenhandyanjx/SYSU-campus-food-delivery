@@ -33,7 +33,7 @@ export function updateOnlineStatus(isOnline: boolean) {
 
 /**
  * getNewOrders()
- * 功能：获取新订单列表（待接单）
+ * 功能：获取新订单列表（待接单，status=1）
  * 请求：GET /rider/orders/new
  * 返回示例：{ code:1, data:[{ id, restaurant, pickupAddress, customer, deliveryAddress, distance, estimatedFee, estimatedTime, createdAt }] }
  */
@@ -49,6 +49,16 @@ export function getNewOrders() {
  */
 export function acceptOrder(orderId: string) {
   return request({ url: `/rider/orders/${orderId}/accept`, method: 'post' })
+}
+
+/**
+ * acceptOrderSafe(orderId)
+ * 功能：骑手安全接单（带事务锁，防止并发接单）
+ * 请求：POST /rider/orders/{orderId}/accept_safe
+ * 返回示例：{ code:1, data:{ success:true, pickupCode:'A123' } }
+ */
+export function acceptOrderSafe(orderId: string) {
+  return request({ url: `/rider/orders/${orderId}/accept_safe`, method: 'post' })
 }
 
 /**
@@ -105,7 +115,7 @@ export function getOrderDetail(orderId: string) {
 
 /**
  * getIncomeStats()
- * 功能：获取收入统计
+ * 功能：获取收入统计（根据时间段查询）
  * 请求：GET /rider/income/stats
  * 查询参数：{ period?: 'today|week|month' }
  * 返回示例：{ code:1, data:{ dailyIncome:185.5, weeklyIncome:1280, monthlyIncome:5200, completedOrders:68 } }
@@ -115,8 +125,38 @@ export function getIncomeStats(params?: { period?: string }) {
 }
 
 /**
+ * getTodayIncome()
+ * 功能：获取今日收入统计
+ * 请求：GET /rider/income/today
+ * 返回示例：{ code:1, data:{ todayIncome:185.5, todayOrders:8 } }
+ */
+export function getTodayIncome() {
+  return request({ url: '/rider/income/today', method: 'get' })
+}
+
+/**
+ * getIncomeSummary()
+ * 功能：获取收入汇总统计
+ * 请求：GET /rider/income/summary
+ * 返回示例：{ code:1, data:{ totalIncome:12580.5, completedOrders:156 } }
+ */
+export function getIncomeSummary() {
+  return request({ url: '/rider/income/summary', method: 'get' })
+}
+
+/**
+ * getMonthIncome()
+ * 功能：获取月度收入数据
+ * 请求：GET /rider/income/month
+ * 返回示例：{ code:1, data:[{ date: '2024-01-01', money: 185.5 }] }
+ */
+export function getMonthIncome() {
+  return request({ url: '/rider/income/month', method: 'get' })
+}
+
+/**
  * getIncomeHistory()
- * 功能：获取收入明细
+ * 功能：获取收入明细（分页）
  * 请求：GET /rider/income/history
  * 查询参数：{ page:1, size:20, startDate?, endDate? }
  * 返回示例：{ code:1, data:{ items:[{ id, orderId, amount, type, time, remark }], total } }
@@ -133,6 +173,16 @@ export function getIncomeHistory(params?: { page?: number; size?: number; startD
  */
 export function getWeeklyStats() {
   return request({ url: '/rider/stats/weekly', method: 'get' })
+}
+
+/**
+ * getRiderDashboard()
+ * 功能：获取骑手仪表板数据
+ * 请求：GET /rider/dashboard
+ * 返回示例：{ code:1, data:{ todayIncome:185.5, todayOrders:8, delivering:2, waitPickup:1 } }
+ */
+export function getRiderDashboard() {
+  return request({ url: '/rider/dashboard', method: 'get' })
 }
 
 // ==================== 历史订单相关 ====================
@@ -202,6 +252,310 @@ export function updateLocation(location: { latitude: number; longitude: number; 
  */
 export function getDeliveryRoute(orderId: string) {
   return request({ url: `/rider/orders/${orderId}/route`, method: 'get' })
+}
+
+// ==================== 认证相关 ====================
+
+/**
+ * getVerification()
+ * 功能：获取骑手认证信息
+ * 请求：GET /rider/verification
+ * 返回示例：{ code:1, data:{ id, realName, idCard, phone, status, submitTime } }
+ */
+export function getVerification() {
+  return request({ url: '/rider/verification', method: 'get' })
+}
+
+/**
+ * submitVerification(data)
+ * 功能：提交实名认证
+ * 请求：POST /rider/verification
+ * 请求体：{ realName, idCard, idCardFront, idCardBack, healthCert }
+ * 返回示例：{ code:1, data:{ success:true, verificationId:'v1' } }
+ */
+export function submitVerification(data: {
+  realName: string
+  idCard: string
+  idCardFront: string
+  idCardBack: string
+  healthCert: string
+}) {
+  return request({ url: '/rider/verification', method: 'post', data })
+}
+
+// ==================== 工作统计相关 ====================
+
+/**
+ * getWorkStats()
+ * 功能：获取工作数据统计
+ * 请求：GET /rider/stats/work
+ * 查询参数：{ period?: 'today|week|month' }
+ * 返回示例：{ code:1, data:{ totalOrders:68, totalIncome:1280.5, completionRate:95.8 } }
+ */
+export function getWorkStats(params?: { period?: string }) {
+  return request({ url: '/rider/stats/work', method: 'get', params })
+}
+
+/**
+ * getMonthlyStats()
+ * 功能：获取月统计数据
+ * 请求：GET /rider/stats/monthly
+ * 返回示例：{ code:1, data:{ monthOrders:280, monthIncome:5200, onlineDays:25 } }
+ */
+export function getMonthlyStats() {
+  return request({ url: '/rider/stats/monthly', method: 'get' })
+}
+
+// ==================== 收入明细相关 ====================
+
+/**
+ * getIncomeDetails()
+ * 功能：获取收入明细
+ * 请求：GET /rider/income/details
+ * 查询参数：{ page:1, size:20, type?, startDate?, endDate? }
+ * 返回示例：{ code:1, data:{ items:[{ id, orderId, amount, type, time, remark }], total } }
+ */
+export function getIncomeDetails(params?: {
+  page?: number
+  size?: number
+  type?: string
+  startDate?: string
+  endDate?: string
+}) {
+  return request({ url: '/rider/income/details', method: 'get', params })
+}
+
+// ==================== 配送记录相关 ====================
+
+/**
+ * getDeliveryRecords()
+ * 功能：获取配送记录
+ * 请求：GET /rider/delivery/records
+ * 查询参数：{ page:1, size:20, status?, startDate?, endDate? }
+ * 返回示例：{ code:1, data:{ items:[{ id, orderNo, distance, duration, completedAt }], total } }
+ */
+export function getDeliveryRecords(params?: {
+  page?: number
+  size?: number
+  status?: string
+  startDate?: string
+  endDate?: string
+}) {
+  return request({ url: '/rider/delivery/records', method: 'get', params })
+}
+
+// ==================== 评价相关 ====================
+
+/**
+ * getReviews()
+ * 功能：获取用户评价
+ * 请求：GET /rider/reviews
+ * 查询参数：{ page:1, size:20 }
+ * 返回示例：{ code:1, data:{ items:[{ id, orderId, rating, comment, createdAt }], avgRating:4.8 } }
+ */
+export function getReviews(params?: { page?: number; size?: number }) {
+  return request({ url: '/rider/reviews', method: 'get', params })
+}
+
+// ==================== 排行榜相关 ====================
+
+/**
+ * getRanking()
+ * 功能：获取排行榜数据
+ * 请求：GET /rider/ranking/{type}
+ * 路径参数：type - 'income' | 'orders' | 'rating' | 'efficiency'
+ * 返回示例：{ code:1, data:[{ rank, name, avatar, value, isSelf }] }
+ */
+export function getRanking(type: string) {
+  return request({ url: `/rider/ranking/${type}`, method: 'get' })
+}
+
+// ==================== 通知相关 ====================
+
+/**
+ * getNotifications()
+ * 功能：获取通知列表
+ * 请求：GET /rider/notifications
+ * 查询参数：{ page:1, size:20, read?: boolean }
+ * 返回示例：{ code:1, data:{ items:[{ id, title, content, type, isRead, createdAt }], unreadCount } }
+ */
+export function getNotifications(params?: { page?: number; size?: number; read?: boolean }) {
+  return request({ url: '/rider/notifications', method: 'get', params })
+}
+
+/**
+ * markNotificationRead()
+ * 功能：标记通知已读
+ * 请求：PUT /rider/notifications/{id}/read
+ * 返回示例：{ code:1, data:{ success:true } }
+ */
+export function markNotificationRead(id: string) {
+  return request({ url: `/rider/notifications/${id}/read`, method: 'put' })
+}
+
+// ==================== 系统消息相关 ====================
+
+/**
+ * getSystemMessages()
+ * 功能：获取系统消息
+ * 请求：GET /rider/messages/system
+ * 查询参数：{ page:1, size:20 }
+ * 返回示例：{ code:1, data:{ items:[{ id, title, content, type, publishedAt }] } }
+ */
+export function getSystemMessages(params?: { page?: number; size?: number }) {
+  return request({ url: '/rider/messages/system', method: 'get', params })
+}
+
+// ==================== 热力图相关 ====================
+
+/**
+ * getHeatmapData()
+ * 功能：获取配送热力图数据
+ * 请求：GET /rider/heatmap
+ * 查询参数：{ start?, end? }
+ * 返回示例：{ code:1, data:[{ date, areas:[{ lat, lng, count }] }] }
+ */
+export function getHeatmapData(params?: { start?: string; end?: string }) {
+  return request({ url: '/rider/heatmap', method: 'get', params })
+}
+
+// ==================== 配送状态更新相关 ====================
+
+/**
+ * startDelivery()
+ * 功能：开始配送
+ * 请求：PUT /rider/orders/{orderId}/start
+ * 返回示例：{ code:1, data:{ success:true, startTime } }
+ */
+export function startDelivery(orderId: string) {
+  return request({ url: `/rider/orders/${orderId}/start`, method: 'put' })
+}
+
+/**
+ * arrivePickup()
+ * 功能：到达取餐点
+ * 请求：PUT /rider/orders/{orderId}/arrive-pickup
+ * 请求体：{ latitude?, longitude?, code? }
+ * 返回示例：{ code:1, data:{ success:true, arrivedAt } }
+ */
+export function arrivePickup(orderId: string, data?: { latitude?: number; longitude?: number; code?: string }) {
+  return request({ url: `/rider/orders/${orderId}/arrive-pickup`, method: 'put', data })
+}
+
+/**
+ * updateDeliveryStatus()
+ * 功能：更新配送状态
+ * 请求：PUT /rider/orders/{orderId}/status
+ * 请求体：{ status, latitude?, longitude?, note? }
+ * 返回示例：{ code:1, data:{ success:true } }
+ */
+export function updateDeliveryStatus(orderId: string, data: {
+  status: string
+  latitude?: number
+  longitude?: number
+  note?: string
+}) {
+  return request({ url: `/rider/orders/${orderId}/status`, method: 'put', data })
+}
+
+// ==================== 异常报告相关 ====================
+
+/**
+ * reportIssue()
+ * 功能：异常情况报告
+ * 请求：POST /rider/orders/{orderId}/issue
+ * 请求体：{ type, description, images?, timestamp? }
+ * 返回示例：{ code:1, data:{ success:true, issueId } }
+ */
+export function reportIssue(orderId: string, data: {
+  type: string
+  description: string
+  images?: string[]
+  timestamp?: number
+}) {
+  return request({ url: `/rider/orders/${orderId}/issue`, method: 'post', data })
+}
+
+// ==================== 设置相关 ====================
+
+/**
+ * getWorkSettings()
+ * 功能：获取工作设置
+ * 请求：GET /rider/settings/work
+ * 返回示例：{ code:1, data:{ autoAccept, deliveryRange, workTime, restTime, maxOrders } }
+ */
+export function getWorkSettings() {
+  return request({ url: '/rider/settings/work', method: 'get' })
+}
+
+/**
+ * updateWorkSettings()
+ * 功能：更新工作设置
+ * 请求：PUT /rider/settings/work
+ * 请求体：{ autoAccept?, deliveryRange?, workTime?, restTime?, maxOrders? }
+ * 返回示例：{ code:1, data:{ success:true } }
+ */
+export function updateWorkSettings(data: {
+  autoAccept?: boolean
+  deliveryRange?: number
+  workTime?: { start: string; end: string }
+  restTime?: { enabled: boolean; start: string; end: string }
+  maxOrders?: number
+}) {
+  return request({ url: '/rider/settings/work', method: 'put', data })
+}
+
+/**
+ * getAccountSettings()
+ * 功能：获取账户设置
+ * 请求：GET /rider/settings/account
+ * 返回示例：{ code:1, data:{ phone, email, wechat, alipay, bankCard } }
+ */
+export function getAccountSettings() {
+  return request({ url: '/rider/settings/account', method: 'get' })
+}
+
+/**
+ * updateAccountSettings()
+ * 功能：更新账户设置
+ * 请求：PUT /rider/settings/account
+ * 请求体：{ phone?, email?, wechat?, alipay?, bankCard? }
+ * 返回示例：{ code:1, data:{ success:true } }
+ */
+export function updateAccountSettings(data: {
+  phone?: string
+  email?: string
+  wechat?: string
+  alipay?: string
+  bankCard?: string
+}) {
+  return request({ url: '/rider/settings/account', method: 'put', data })
+}
+
+/**
+ * getNotificationSettings()
+ * 功能：获取通知设置
+ * 请求：GET /rider/settings/notification
+ * 返回示例：{ code:1, data:{ orderNotification, systemNotification, soundEnabled, vibrationEnabled } }
+ */
+export function getNotificationSettings() {
+  return request({ url: '/rider/settings/notification', method: 'get' })
+}
+
+/**
+ * updateNotificationSettings()
+ * 功能：更新通知设置
+ * 请求：PUT /rider/settings/notification
+ * 请求体：{ orderNotification?, systemNotification?, soundEnabled?, vibrationEnabled? }
+ * 返回示例：{ code:1, data:{ success:true } }
+ */
+export function updateNotificationSettings(data: {
+  orderNotification?: boolean
+  systemNotification?: boolean
+  soundEnabled?: boolean
+  vibrationEnabled?: boolean
+}) {
+  return request({ url: '/rider/settings/notification', method: 'put', data })
 }
 
 // ==================== Demo数据 ====================
@@ -300,20 +654,71 @@ export default {
   updateOnlineStatus,
   getNewOrders,
   acceptOrder,
+  acceptOrderSafe,
   getPickupOrders,
   confirmPickup,
   getDeliveringOrders,
   completeDelivery,
   getOrderDetail,
   getIncomeStats,
+  getTodayIncome,
+  getIncomeSummary,
+  getMonthIncome,
   getIncomeHistory,
   getWeeklyStats,
+  getRiderDashboard,
   getOrderHistory,
   getWalletInfo,
   withdraw,
   getWithdrawHistory,
   updateLocation,
   getDeliveryRoute,
+
+  // 认证相关
+  getVerification,
+  submitVerification,
+
+  // 工作统计相关
+  getWorkStats,
+  getMonthlyStats,
+
+  // 收入明细相关
+  getIncomeDetails,
+
+  // 配送记录相关
+  getDeliveryRecords,
+
+  // 评价相关
+  getReviews,
+
+  // 排行榜相关
+  getRanking,
+
+  // 通知相关
+  getNotifications,
+  markNotificationRead,
+
+  // 系统消息相关
+  getSystemMessages,
+
+  // 热力图相关
+  getHeatmapData,
+
+  // 配送状态更新相关
+  startDelivery,
+  arrivePickup,
+  updateDeliveryStatus,
+
+  // 异常报告相关
+  reportIssue,
+
+  // 设置相关
+  getWorkSettings,
+  updateWorkSettings,
+  getAccountSettings,
+  updateAccountSettings,
+  getNotificationSettings,
+  updateNotificationSettings,
 
   // 带Demo数据回退的接口
   getRiderInfoWithDemo,

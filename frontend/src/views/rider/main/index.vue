@@ -346,7 +346,51 @@ const initRiderData = async () => {
     // 获取新订单
     const ordersData = await riderApi.getNewOrdersWithDemo()
     if (ordersData.code === 1 && ordersData.data) {
-      newOrders.value = ordersData.data
+      newOrders.value = ordersData.data.map(order => ({
+        id: order.id,
+        restaurant: order.restaurant,
+        pickupAddress: order.pickupAddress,
+        customer: order.customer,
+        deliveryAddress: order.deliveryAddress,
+        distance: order.distance,
+        estimatedFee: order.estimatedFee,
+        estimatedTime: order.estimatedTime,
+        createdAt: order.createdAt
+      }))
+    }
+
+    // 获取待取货订单
+    try {
+      const pickupData = await riderApi.getPickupOrders()
+      if (pickupData.data?.code === 1 && pickupData.data?.data) {
+        pickupOrders.value = pickupData.data.data.map(order => ({
+          id: order.id,
+          restaurant: order.restaurant,
+          pickupAddress: order.pickupAddress,
+          pickupCode: order.pickupCode,
+          shopPhone: order.shopPhone,
+          remainingTime: order.remainingTime || 15 * 60 * 1000
+        }))
+      }
+    } catch (e) {
+      console.warn('获取待取货订单失败，使用demo数据')
+    }
+
+    // 获取配送中订单
+    try {
+      const deliveringData = await riderApi.getDeliveringOrders()
+      if (deliveringData.data?.code === 1 && deliveringData.data?.data) {
+        deliveringOrders.value = deliveringData.data.data.map(order => ({
+          id: order.id,
+          customer: order.customer,
+          customerPhone: order.customerPhone,
+          customerAvatar: order.customerAvatar || 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
+          deliveryAddress: order.deliveryAddress,
+          remainingTime: order.remainingTime || 30 * 60 * 1000
+        }))
+      }
+    } catch (e) {
+      console.warn('获取配送中订单失败，使用demo数据')
     }
 
   } catch (error) {
@@ -368,10 +412,23 @@ onMounted(() => {
   updateTime()
   timer = setInterval(updateTime, 1000)
   initRiderData()
+
+  // 每30秒刷新订单数据
+  const orderTimer = setInterval(() => {
+    if (isOnline.value) {
+      refreshOrders()
+    }
+  }, 30000)
+
+  // 保存定时器以便清理
+  timer.orderTimer = orderTimer
 })
 
 onUnmounted(() => {
-  if (timer) clearInterval(timer)
+  if (timer) {
+    clearInterval(timer)
+    if (timer.orderTimer) clearInterval(timer.orderTimer)
+  }
 })
 
 // 方法
@@ -500,9 +557,54 @@ const goToHelp = () => {
 // 刷新订单数据
 const refreshOrders = async () => {
   try {
+    // 刷新新订单
     const ordersData = await riderApi.getNewOrdersWithDemo()
     if (ordersData.code === 1 && ordersData.data) {
-      newOrders.value = ordersData.data
+      newOrders.value = ordersData.data.map(order => ({
+        id: order.id,
+        restaurant: order.restaurant,
+        pickupAddress: order.pickupAddress,
+        customer: order.customer,
+        deliveryAddress: order.deliveryAddress,
+        distance: order.distance,
+        estimatedFee: order.estimatedFee,
+        estimatedTime: order.estimatedTime,
+        createdAt: order.createdAt
+      }))
+    }
+
+    // 刷新待取货订单
+    try {
+      const pickupData = await riderApi.getPickupOrders()
+      if (pickupData.data?.code === 1 && pickupData.data?.data) {
+        pickupOrders.value = pickupData.data.data.map(order => ({
+          id: order.id,
+          restaurant: order.restaurant,
+          pickupAddress: order.pickupAddress,
+          pickupCode: order.pickupCode,
+          shopPhone: order.shopPhone,
+          remainingTime: order.remainingTime || 15 * 60 * 1000
+        }))
+      }
+    } catch (e) {
+      console.warn('刷新待取货订单失败')
+    }
+
+    // 刷新配送中订单
+    try {
+      const deliveringData = await riderApi.getDeliveringOrders()
+      if (deliveringData.data?.code === 1 && deliveringData.data?.data) {
+        deliveringOrders.value = deliveringData.data.data.map(order => ({
+          id: order.id,
+          customer: order.customer,
+          customerPhone: order.customerPhone,
+          customerAvatar: order.customerAvatar || 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
+          deliveryAddress: order.deliveryAddress,
+          remainingTime: order.remainingTime || 30 * 60 * 1000
+        }))
+      }
+    } catch (e) {
+      console.warn('刷新配送中订单失败')
     }
   } catch (error) {
     console.error('刷新订单数据失败:', error)
