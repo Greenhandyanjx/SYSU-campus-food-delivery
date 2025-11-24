@@ -11,8 +11,9 @@ import axios from "axios";
  */
 
 // 创建 axios 实例
+// 使用相对路径 `/api`，在开发模式下 Vite 的 proxy 会将其转发到后端服务，避免硬编码主机/端口
 const service = axios.create({
-  baseURL: "http://localhost:3000/api", // 这里视情况改，比如你的后端前缀
+  baseURL: '/api',
   timeout: 5000,
 });
 

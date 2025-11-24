@@ -12,17 +12,17 @@
     </div>
 
     <div class="cart-list">
-      <div v-for="(shop, sIdx) in visibleShops" :key="shop.storeId" class="shop-card">
+      <div v-for="(shop, sIdx) in visibleShops" :key="shop.merchant_id" class="shop-card">
         <div class="shop-header">
                 <el-checkbox v-model="shop.selected" @change="onToggleShop(shop)" />
                 <div class="shop-name" @click="goStore(shop)">
                   <img class="shop-logo" :src="shop.logo || '/src/assets/noImg.png'" @error="onImgError" />
-                  {{ shop.name }}
+                  {{ shop.merchant_name }}
                 </div>
               </div>
 
         <div class="shop-items">
-          <div v-for="(it, iIdx) in shop.items.filter(it => showItemByCategory(it))" :key="it.dishId" class="item-row">
+          <div v-for="(it, iIdx) in shop.items.filter(it => showItemByCategory(it))" :key="it.dish_id" class="item-row">
             <div class="item-left">
               <el-checkbox v-model="it.selected" @change="onToggleItem(shop, it)" />
             </div>
@@ -44,7 +44,7 @@
         <div v-if="showCanceled(shop)" class="canceled-card">
           <div class="canceled-header">已取消商品</div>
           <div class="canceled-items">
-            <div v-for="ci in canceledItems(shop)" :key="ci.dishId" class="canceled-row">
+            <div v-for="ci in canceledItems(shop)" :key="ci.dish_id" class="canceled-row">
               <div class="canceled-name">{{ ci.name }}</div>
               <div class="canceled-count">已取消: {{ ci.canceledQty }}</div>
             </div>
@@ -93,15 +93,37 @@ const categories = ref<string[]>([])
 
 async function load() {
   const d = await cartApi.getCart()
-  // Normalize shape
-  cartData.value = { shops: (d.shops || d.shops || []) }
-  // ensure selected/qty fields
-  cartData.value.shops.forEach((s: any) => {
-    s.items = (s.items || []).map((it: any) => ({ selected: !!it.selected, qty: it.qty || 1, originalQty: it.originalQty || it.qty || 1, ...it }))
+  // 支持后端返回两种形式：直接 { shops: [...] }（demo）或统一包裹形式 { code, msg, data: { shops: [...] } }
+  let shops: any[] = []
+  if (d) {
+    if (Array.isArray(d.shops)) shops = d.shops
+    else if (d.data && Array.isArray(d.data.shops)) shops = d.data.shops
+    else if (Array.isArray(d)) shops = d
+  }
+
+  // Normalize shape and coerce numeric fields to numbers to avoid template errors
+  cartData.value = { shops: (shops || []).map((s: any) => {
+    const items = (s.items || []).map((it: any) => {
+      const qty = Number(it.qty || it.qty === 0 ? it.qty : (it.qty === undefined ? 0 : it.qty)) || 0
+      const price = Number(it.price) || 0
+      return {
+        // preserve backend keys (dish_id, dishId, id...), but ensure numeric types and selection flag
+        ...it,
+        qty,
+        price,
+        selected: !!it.selected,
+        originalQty: it.originalQty != null ? Number(it.originalQty) : qty
+      }
+    })
     // determine shop selected based on selectable items
-    const selectable = s.items.filter(isSelectableItem)
-    s.selected = selectable.length > 0 ? selectable.every((it: any) => !!it.selected) : false
-  })
+    const selectable = items.filter(isSelectableItem)
+    return {
+      ...s,
+      items,
+      selected: selectable.length > 0 ? selectable.every((it: any) => !!it.selected) : false
+    }
+  }) }
+
   categories.value = buildCategoriesFromCart(cartData.value)
 }
 
@@ -220,7 +242,8 @@ async function onDeleteSelected() {
 
 function toggleManage() { manageMode.value = !manageMode.value }
 
-function goStore(shop: any) { router.push('/user/store/' + encodeURIComponent(shop.name)) }
+function goStore(shop: any) 
+{ router.push('/user/store/' + encodeURIComponent(shop.name)) }
 
 function canceledItems(shop: any) {
   return (shop.items || []).map((it: any) => ({ dishId: it.dishId, name: it.name, canceledQty: Math.max(0, (it.originalQty || 0) - (it.qty || 0)) })).filter((x: any) => x.canceledQty > 0)

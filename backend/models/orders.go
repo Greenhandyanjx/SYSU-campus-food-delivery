@@ -27,4 +27,11 @@ type Order struct {
 	// ==== 新增骑手相关字段 ====
 	RiderID    uint   `json:"rider_id" gorm:"default:0"`
 	PickupCode string `json:"pickup_code"`
+
+	// ========== 时间线字段（前端强需求） ==========
+	AcceptedAt *time.Time `json:"acceptedAt"` // 接单时间
+	PickupAt   *time.Time `json:"pickupAt"`   // 取货时间
+	DeliverAt  *time.Time `json:"deliverAt"`  // 开始配送时间
+	FinishAt   *time.Time `json:"finishAt"`   // 完成时间 （已派送）
+
 }

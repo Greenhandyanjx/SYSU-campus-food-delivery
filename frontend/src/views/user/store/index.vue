@@ -206,7 +206,7 @@ const query = ref('')
 const route = useRoute()
 /* ------------------ Demo 数据备用 ------------------ */
 const demoStore = {
-  id: 101,
+  id: 1,
   name: '金色小厨 · 校园餐厅',
   logo: '/src/assets/demo/noImg.png',
   desc: '校园人气食堂 · 用心做好每一顿饭',

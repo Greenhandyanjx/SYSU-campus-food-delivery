@@ -25,4 +25,17 @@ export default defineConfig({
       }
     }
   }
+  ,
+  // 开发服务器代理：将以 /api 开头的请求代理到后端服务（开发时避免 CORS）
+  server: {
+    proxy: {
+      '/api': {
+        // 后端实际运行端口（你的 curl 返回数据来自 3000），将代理指向 3000
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        secure: false,
+        // 保留 /api 前缀不做重写，后端路由以 /api 开头定义
+      }
+    }
+  }
 })

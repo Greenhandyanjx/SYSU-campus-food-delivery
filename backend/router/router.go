@@ -34,6 +34,10 @@ func SetRouter() *gin.Engine {
 		noAuth.GET("/merchant/dish/categories", controller.Get_category)
 
 		noAuth.GET("/merchant/common/download", controller.CommonDownload)
+		// 管理性接口（一次性操作）：替换 categories 表（注意：需要 ?force=1）
+		noAuth.POST("/admin/seed_categories", controller.ReplaceCategories)
+		// 用户首页获取店铺列表（无需鉴权）
+		noAuth.GET("/user/stores", controller.GetStores)
 		// 允许未登录用户上传图片（用于注册页面等）
 		noAuth.POST("/common/upload", controller.UploadImage)
 
@@ -98,13 +102,42 @@ func SetRouter() *gin.Engine {
 		auth.GET("/rider/info", controller.GetRiderInfo)
 		auth.POST("/rider/status", controller.UpdateRiderStatus)
 		auth.GET("/rider/orders/new", controller.GetNewOrders)
-		auth.POST("/rider/orders/:orderId/accept", controller.AcceptOrder)
 		auth.POST("/rider/orders/:orderId/pickup", controller.PickupOrder)
 		auth.GET("/rider/orders/delivering", controller.GetDeliveringOrders)
 		auth.POST("/rider/orders/:orderId/complete", controller.CompleteOrder)
 		auth.GET("/rider/orders/history", controller.GetOrderHistory)
+		auth.GET("/rider/orders/pickup", controller.GetPickupOrders)
+		auth.GET("/rider/orders/:orderId", controller.GetOrderDetailForRider)
+		auth.GET("/rider/income/today", controller.GetTodayIncome)
+		auth.GET("/rider/income/summary", controller.GetIncomeSummary)
+		auth.GET("/rider/income/month", controller.GetMonthIncome)
+		auth.GET("/rider/dashboard", controller.GetRiderDashboard)
+		auth.POST("/rider/location", controller.UpdateRiderLocation)
+		// ====== Rider APIs (missing parts added) ======
+
+		auth.POST("/rider/orders/:orderId/accept", controller.AcceptOrder) // 正式版接单接口
+
+		// 收入统计
+		auth.GET("/rider/income/stats", controller.GetIncomeStats)
+		auth.GET("/rider/income/history", controller.GetIncomeHistory)
+
+		// 每周数据统计
+		auth.GET("/rider/stats/weekly", controller.GetWeeklyStats)
+
+		// 钱包
+		auth.GET("/rider/wallet", controller.GetWalletInfo)
+		auth.POST("/rider/wallet/withdraw", controller.Withdraw)
+		auth.GET("/rider/wallet/withdraw/history", controller.GetWithdrawHistory)
+
+		// 配送路线
+		auth.GET("/rider/orders/:orderId/route", controller.GetDeliveryRoute)
+		// 并发安全的接单接口（可替代原来的）
+		auth.POST("/rider/orders/:orderId/accept_safe", controller.AcceptOrderSafe)
 
 		auth.GET("merchant/statistics/top", controller.GetTopSales)
+
+		auth.GET("/user/cart", controller.GetUserCart)
+		auth.POST("/user/cart/add", controller.AddToCart) // 添加到购物车
 	}
 	return fe
 }
