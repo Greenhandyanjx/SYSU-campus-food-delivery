@@ -4,9 +4,9 @@ import (
 	"backend/global"
 	"backend/models"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -167,29 +167,28 @@ func FetchDishnames(c *gin.Context, ordersWithDetails *[]models.OrderWithDishnam
     for _, order := range *ordersWithDetails {
         orderIDs = append(orderIDs, order.ID)
     }
-    // 查询 orderdish 表以获取每个订单的菜品名
-    var orderDishnames []struct {
-        OrderID   uint     `gorm:"column:order_id"`
-        Dishnames string   `gorm:"column:dishnames"` // 修改为 string 类型，因为 GROUP_CONCAT 返回的是一个字符串
-    }
-    if err := global.Db.Table("order-dish").
-        Select("order_id, GROUP_CONCAT(dishname) as dishnames").
-        Where("order_id IN ?", orderIDs).
-        Group("order_id").
-        Find(&orderDishnames).Error; err != nil {
-        log.Printf("查询订单菜品名失败: %v", err)
-        c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "查询订单菜品名失败", "data": nil})
-        return
-    }
-    // 构建订单和菜品名的映射
-    dishnamesMap := make(map[uint]string)
-    for _, od := range orderDishnames {
-        dishnamesMap[od.OrderID] = od.Dishnames
-    }
-    // 将映射中的数据赋值给结构体表
-    for i, order := range *ordersWithDetails {
-        if dishnames, exists := dishnamesMap[order.ID]; exists {
-            (*ordersWithDetails)[i].Orderdishes = dishnames
-        }
-    }
+    	// 获取 OrderDish 列表，并预加载 Dish
+	var orderDishes []models.OrderDish
+	result := global.Db.Preload("Dish").Where("order_id IN ?", orderIDs).Find(&orderDishes)
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "查询订单菜品关联表失败", "data": nil})
+		return
+	}
+    // 构建 orderID 到 dishnames 的映射
+	dishnamesMap := make(map[uint]string)
+	for _, orderDish := range orderDishes {
+		dishnamesMap[uint(orderDish.OrderID)] += orderDish.Dish.DishName + ", "
+	}
+	// 去除末尾的逗号和空格
+	for orderID, dishnames := range dishnamesMap {
+		dishnamesMap[orderID] = strings.TrimSuffix(dishnames, ", ")
+	}
+	// 将映射中的数据赋值给结构体表
+	for i, order := range *ordersWithDetails {
+		if dishnames, exists := dishnamesMap[order.ID]; exists {
+			(*ordersWithDetails)[i].Orderdishes = dishnames
+		} else {
+			(*ordersWithDetails)[i].Orderdishes = ""
+		}
+	}
 }

@@ -297,7 +297,7 @@
               <div class="amount-label">费用</div>
               <div class="amount-list">
                 <div class="dish-amount"><span class="amount-name">菜品小计：</span><span class="amount-price">￥{{ (Number(Number(diaForm.amount || 0) - 6 - Number(diaForm.packAmount || 0)).toFixed(2)) }}</span></div>
-                <div class="send-amount"><span class="amount-name">派送费：</span><span class="amount-price">￥6</span></div>
+                <div class="send-amount"><span class="amount-name">派送费：</span><span class="amount-price">￥{{ diaForm.deliveryAmount ? Number(diaForm.deliveryAmount).toFixed(2) : '' }}</span></div>
                 <div class="package-amount"><span class="amount-name">打包费：</span><span class="amount-price">￥{{ diaForm.packAmount ? Number(diaForm.packAmount).toFixed(2) : '' }}</span></div>
                 <div class="all-amount"><span class="amount-name">合计：</span><span class="amount-price">￥{{ diaForm.amount ? Number(diaForm.amount).toFixed(2) : '' }}</span></div>
                 <div class="pay-type"><span class="pay-name">支付渠道：</span><span class="pay-value">{{ diaForm.payMethod === 1 ? '微信支付' : '支付宝支付' }}</span></div>
