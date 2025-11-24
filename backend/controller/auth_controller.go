@@ -103,6 +103,20 @@ func Register(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"code": "500", "msg": "create rider error"})
 			return
 		}
+		// ==== 新增：创建 rider_profile（骑手资料）====
+		rp := models.RiderProfile{
+			UserID:  base.ID,
+			RiderID: r.ID,
+			Name:    "李骑手", // 默认名
+			Phone:   r.Phone,
+			Avatar:  "",
+		}
+		if err := tx.Create(&rp).Error; err != nil {
+			tx.Rollback()
+			log.Printf("create rider_profile error: %v", err)
+			ctx.JSON(http.StatusInternalServerError, gin.H{"code": "500", "msg": "create rider_profile error"})
+			return
+		}
 	case "merchant":
 		m := models.Merchant{
 			BaseID:       base.ID,

@@ -7,3 +7,7 @@ type RiderWallet struct {
 	FrozenAmount float64 `json:"frozenAmount"`
 	TotalIncome  float64 `json:"totalIncome"`
 }
+
+func (RiderWallet) TableName() string {
+	return "rider_wallets"
+}

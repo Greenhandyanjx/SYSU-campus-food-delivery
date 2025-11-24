@@ -138,6 +138,43 @@ func SetRouter() *gin.Engine {
 
 		auth.GET("/user/cart", controller.GetUserCart)
 		auth.POST("/user/cart/add", controller.AddToCart) // 添加到购物车
+		// ====== Rider 扩展接口（根据 index.ts 补全） ======
+		// 配送状态扩展
+		auth.PUT("/rider/orders/:orderId/start", controller.StartDelivery)
+		auth.PUT("/rider/orders/:orderId/arrive-pickup", controller.ArrivePickup)
+		auth.PUT("/rider/orders/:orderId/status", controller.UpdateDeliveryStatus)
+		auth.POST("/rider/orders/:orderId/issue", controller.ReportIssue)
+
+		// 收入明细 & 配送记录
+		auth.GET("/rider/income/details", controller.GetIncomeDetails)
+		auth.GET("/rider/delivery/records", controller.GetDeliveryRecords)
+
+		// 工作统计
+		auth.GET("/rider/stats/work", controller.GetWorkStats)
+		auth.GET("/rider/stats/monthly", controller.GetMonthlyStats)
+
+		// 评价 & 排行榜
+		auth.GET("/rider/reviews", controller.GetReviews)
+		auth.GET("/rider/ranking/:type", controller.GetRanking)
+
+		// 通知 & 系统消息 & 热力图
+		auth.GET("/rider/notifications", controller.GetNotifications)
+		auth.PUT("/rider/notifications/:id/read", controller.MarkNotificationRead)
+		auth.GET("/rider/messages/system", controller.GetSystemMessages)
+		auth.GET("/rider/heatmap", controller.GetHeatmapData)
+
+		// 认证
+		auth.GET("/rider/verification", controller.GetVerification)
+		auth.POST("/rider/verification", controller.SubmitVerification)
+
+		// 设置
+		auth.GET("/rider/settings/work", controller.GetWorkSettings)
+		auth.PUT("/rider/settings/work", controller.UpdateWorkSettings)
+		auth.GET("/rider/settings/account", controller.GetAccountSettings)
+		auth.PUT("/rider/settings/account", controller.UpdateAccountSettings)
+		auth.GET("/rider/settings/notification", controller.GetNotificationSettings)
+		auth.PUT("/rider/settings/notification", controller.UpdateNotificationSettings)
+
 	}
 	return fe
 }

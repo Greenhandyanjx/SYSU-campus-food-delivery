@@ -102,18 +102,18 @@ func Initalldb() error {
 		fmt.Println("rider_profiles table create fail")
 		return err
 	}
-	if err := global.Db.Table("order-dish").AutoMigrate(&models.OrderDish{}); err != nil {
-		fmt.Println("orderdish table create fail")
-		panic(err)
-	}
-	 if err := global.Db.AutoMigrate(&models.OrderMeal{}); err != nil {
-	 	fmt.Println("ordermeal table create fail")
-	 	panic(err)
-	}
-	if err := global.Db.Table("sales-stats").AutoMigrate(&models.SalesStat{}); err != nil {
-		fmt.Println("salesstats table create fail")
-		panic(err)
-	}
+	// if err := global.Db.Table("order-dish").AutoMigrate(&models.OrderDish{}); err != nil {
+	// 	fmt.Println("orderdish table create fail")
+	// 	panic(err)
+	// }
+	// if err := global.Db.AutoMigrate(&models.OrderMeal{}); err != nil {
+	// 	fmt.Println("ordermeal table create fail")
+	// 	panic(err)
+	// }
+	// if err := global.Db.Table("sales-stats").AutoMigrate(&models.SalesStat{}); err != nil {
+	// 	fmt.Println("salesstats table create fail")
+	// 	panic(err)
+	// }
 	if err := global.Db.Table("consignees").AutoMigrate(&models.Consignee{}); err != nil {
 		fmt.Println("consignees table create fail")
 		panic(err)
@@ -147,8 +147,55 @@ func Initalldb() error {
 	}
 	//创建store
 	if err := global.Db.Table("stores").AutoMigrate(&models.Store{}); err != nil {
-        fmt.Println("stores table create fail")
-        return err
-    }
+		fmt.Println("stores table create fail")
+		return err
+	}
+	// ==== Rider extended models ====
+
+	if err := global.Db.Table("rider_issues").AutoMigrate(&models.RiderIssue{}); err != nil {
+		fmt.Println("rider_issues table create fail")
+		return err
+	}
+
+	if err := global.Db.Table("rider_reviews").AutoMigrate(&models.RiderReview{}); err != nil {
+		fmt.Println("rider_reviews table create fail")
+		return err
+	}
+
+	if err := global.Db.Table("rider_notifications").AutoMigrate(&models.RiderNotification{}); err != nil {
+		fmt.Println("rider_notifications table create fail")
+		return err
+	}
+
+	if err := global.Db.Table("rider_system_messages").AutoMigrate(&models.RiderSystemMessage{}); err != nil {
+		fmt.Println("rider_system_messages table create fail")
+		return err
+	}
+
+	if err := global.Db.Table("rider_work_settings").AutoMigrate(&models.RiderWorkSettings{}); err != nil {
+		fmt.Println("rider_work_settings table create fail")
+		return err
+	}
+
+	if err := global.Db.Table("rider_account_settings").AutoMigrate(&models.RiderAccountSettings{}); err != nil {
+		fmt.Println("rider_account_settings table create fail")
+		return err
+	}
+
+	if err := global.Db.Table("rider_notification_settings").AutoMigrate(&models.RiderNotificationSettings{}); err != nil {
+		fmt.Println("rider_notification_settings table create fail")
+		return err
+	}
+
+	if err := global.Db.Table("rider_verifications").AutoMigrate(&models.RiderVerification{}); err != nil {
+		fmt.Println("rider_verifications table create fail")
+		return err
+	}
+
+	if err := global.Db.Table("rider_heatmap_points").AutoMigrate(&models.RiderHeatmapPoint{}); err != nil {
+		fmt.Println("rider_heatmap_points table create fail")
+		return err
+	}
+
 	return nil
 }
