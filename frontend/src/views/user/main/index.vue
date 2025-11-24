@@ -131,6 +131,7 @@ import banner2 from '@/assets/banners/images/banner2.png'
 import banner3 from '@/assets/banners/images/banner3.png'
 import banner4 from '@/assets/banners/images/banner4.png'
 import banner5 from '@/assets/banners/images/banner5.png'
+import axios from 'axios'
 
 const images = [
   {
@@ -178,25 +179,27 @@ const router = useRouter()
 const route = useRoute()
 const query = ref('')
 
-const categories = ref([
-  { label: '全部', icon: '/src/assets/icons/all.svg', key: 'all', filter: null },
-  { label: '招牌套餐', icon: '/src/assets/icons/setmeal.svg', key: 'setmeal', filter: 'setmeal' },
-  { label: '现煮粉面', icon: '/src/assets/icons/noodle.svg', key: 'noodle', filter: 'noodle' },
-  { label: '汉堡炸鸡', icon: '/src/assets/icons/burger.svg', key: 'burger', filter: 'burger' },
-  { label: '奶茶咖啡', icon: '/src/assets/icons/milktea.svg', key: 'milktea', filter: 'milktea' },
-  { label: '日式便当', icon: '/src/assets/icons/bento.svg', key: 'bento', filter: 'bento' },
-  { label: '烧烤烤肉', icon: '/src/assets/icons/bbq.svg', key: 'bbq', filter: 'bbq' },
-  { label: '水果拼盘', icon: '/src/assets/icons/fruit.svg', key: 'fruit', filter: 'fruit' },
-  { label: '精致甜品', icon: '/src/assets/icons/dessert.svg', key: 'dessert', filter: 'dessert' },
-  { label: '家常快炒', icon: '/src/assets/icons/stirfry.svg', key: 'stirfry', filter: 'stirfry' },
-  { label: '粥粉面饭', icon: '/src/assets/icons/rice.svg', key: 'rice', filter: 'rice' },
-  //五个额外分类
-  { label: '极速配送', icon: '/src/assets/icons/delivery.svg', key: 'fast_delivery', filter: 'fast' },
-  { label: '午餐推荐', icon: '/src/assets/icons/lunch.svg', key: 'lunch', filter: 'lunch' },
-  { label: '低价满减', icon: '/src/assets/icons/discount.svg', key: 'low_price', filter: 'discount' },
-  { label: '沙拉轻食', icon: '/src/assets/icons/salad.svg', key: 'salad', filter: 'salad' },
-  { label: '精致下午茶', icon: '/src/assets/icons/afternoon.svg', key: 'afternoon', filter: 'afternoon' },
-])
+const categories = ref([])
+
+// 本地图标映射（以 id 为 key），用于将后端返回的分类 id 映射到前端图标
+const iconMap: Record<number, string> = {
+  0: '/src/assets/icons/all.svg',
+  1: '/src/assets/icons/setmeal.svg',
+  2: '/src/assets/icons/noodle.svg',
+  3: '/src/assets/icons/burger.svg',
+  4: '/src/assets/icons/milktea.svg',
+  5: '/src/assets/icons/bento.svg',
+  6: '/src/assets/icons/bbq.svg',
+  7: '/src/assets/icons/fruit.svg',
+  8: '/src/assets/icons/dessert.svg',
+  9: '/src/assets/icons/stirfry.svg',
+  10: '/src/assets/icons/rice.svg',
+  11: '/src/assets/icons/delivery.svg',
+  12: '/src/assets/icons/lunch.svg',
+  13: '/src/assets/icons/discount.svg',
+  14: '/src/assets/icons/salad.svg',
+  15: '/src/assets/icons/afternoon.svg',
+}
 
 // 计算当前激活的分类：优先使用 route.query.cat，其次如果 q 与某个分类 label 相同也视作激活
 const activeCategory = computed(() => {
@@ -212,41 +215,99 @@ const activeCategory = computed(() => {
 })
 
 
-const stores = ref([
-  {
-    name: '黄焖鸡米饭',
-    desc: '经典家常菜，味道鲜香',
-    img: '/src/assets/noImg.png',
-    logo: '/src/assets/noImg.png',
-    tags: ['家常菜', '下饭王'],
-    rating: 4.8,
-    sales: 320,
-    minOrder: 15,
-    deliveryFee: 2,
-    dishes: [
-      { name: '黄焖鸡套餐', price: 18, count: 0, categories: ['招牌套餐'], tags: ['招牌','热销'] },
-      { name: '香菇滑鸡饭', price: 16, count: 0, categories: ['家常快炒'], tags: ['家常'] },
-      { name: '青椒土豆丝', price: 10, count: 0, categories: ['家常快炒'], tags: [] }
-    ]
-  },
-  {
-    name: '茶百道',
-    desc: '奶香浓郁，果茶清爽',
-    img: '/src/assets/noImg.png',
-    logo: '/src/assets/noImg.png',
-    tags: ['奶茶', '饮品', '水果茶'],
-    rating: 4.9,
-    sales: 520,
-    minOrder: 12,
-    deliveryFee: 1,
-    dishes: [
-      { name: '乌龙奶茶', price: 12, count: 0, categories: ['奶茶咖啡'], tags: ['清新'] },
-      { name: '杨枝甘露', price: 15, count: 0, categories: ['奶茶咖啡'], tags: ['网红'] },
-      { name: '百香果绿茶', price: 11, count: 0, categories: ['奶茶咖啡','精致下午茶'], tags: ['水果'] },
-      { name: '芝士奶盖', price: 13, count: 0, categories: ['精致下午茶'], tags: ['奶盖'] }
-    ]
+const stores = ref([])
+
+// 辅助：从后端 categories 列表构建 id->label 映射
+function buildCategoryMap(list: any[]) {
+  const m: Record<number, string> = {}
+  list.forEach((c: any) => {
+    if (c && c.id != null) m[c.id] = c.name || c.Name || c.label || ''
+  })
+  return m
+}
+
+// 本地后备分类（回退用）
+const fallbackCategories = [
+  { id: 0, label: '全部', icon: iconMap[0], key: 'all', filter: null },
+  { id: 1, label: '招牌套餐', icon: iconMap[1], key: 'setmeal' },
+  { id: 2, label: '现煮粉面', icon: iconMap[2], key: 'noodle' },
+  { id: 3, label: '汉堡炸鸡', icon: iconMap[3], key: 'burger' },
+  { id: 4, label: '奶茶咖啡', icon: iconMap[4], key: 'milktea' },
+  { id: 5, label: '日式便当', icon: iconMap[5], key: 'bento' },
+  { id: 6, label: '烧烤烤肉', icon: iconMap[6], key: 'bbq' },
+  { id: 7, label: '水果拼盘', icon: iconMap[7], key: 'fruit' },
+  { id: 8, label: '精致甜品', icon: iconMap[8], key: 'dessert' },
+  { id: 9, label: '家常快炒', icon: iconMap[9], key: 'stirfry' },
+  { id: 10, label: '粥粉面饭', icon: iconMap[10], key: 'rice' },
+  { id: 11, label: '极速配送', icon: iconMap[11], key: 'fast_delivery' },
+  { id: 12, label: '午餐推荐', icon: iconMap[12], key: 'lunch' },
+  { id: 13, label: '低价满减', icon: iconMap[13], key: 'low_price' },
+  { id: 14, label: '沙拉轻食', icon: iconMap[14], key: 'salad' },
+  { id: 15, label: '精致下午茶', icon: iconMap[15], key: 'afternoon' },
+]
+
+async function loadData() {
+  let backendCats: any[] = []
+  try {
+    // 1) 尝试获取后端分类（type=1 表示菜品分类）
+    const catRes = await axios.get('/api/merchant/category/list', { params: { type: 1 } })
+    if (catRes.data && (catRes.data.code === 1 || catRes.data.code === '1')) {
+      backendCats = catRes.data.data || []
+    }
+  } catch (e: any) {
+    console.warn('category API failed, will use fallback categories', e && e.message)
   }
-])
+
+  // 如果后端没有返回完整的 15 个分类，使用本地回退列表
+  if (!backendCats || backendCats.length < 15) {
+    categories.value = fallbackCategories
+    backendCats = fallbackCategories.filter((c: any) => c.id && c.id !== 0).map((c: any) => ({ id: c.id, name: c.label }))
+  } else {
+    const cats: any[] = [{ id: 0, label: '全部', icon: iconMap[0], key: 'all', filter: null }]
+    backendCats.forEach((c: any) => {
+      const id = Number(c.id)
+      cats.push({ id, label: c.name || c.Name, icon: iconMap[id] || iconMap[0], key: c.name || `cat_${id}`, filter: null })
+    })
+    categories.value = cats
+  }
+
+  // 2) 获取后端店铺列表（若失败则保持空数组）
+  try {
+    const storesRes = await axios.get('/api/user/stores')
+    if (storesRes.data && (storesRes.data.code === 1 || storesRes.data.code === '1')) {
+      const catMap = buildCategoryMap(backendCats)
+      stores.value = (storesRes.data.data || []).map((s: any) => {
+        const sd = s.dishes || []
+        const dishes = sd.map((d: any) => ({
+          id: d.id,
+          name: d.name,
+          price: d.price,
+          count: 0,
+          categories: Array.isArray(d.categoryId) ? d.categoryId.map((cid: number) => catMap[cid] || cid) : [(catMap[d.categoryId] || d.categoryId)],
+        }))
+        return {
+          id: s.id,
+          name: s.name || s.shop_name,
+          desc: s.desc || s.shop_location,
+          img: s.logo || '/src/assets/noImg.png',
+          logo: s.logo || '/src/assets/noImg.png',
+          tags: s.tags || [],
+          rating: s.rating || 4.8,
+          sales: s.sales || 0,
+          minOrder: s.minOrder || 0,
+          deliveryFee: s.deliveryFee || 0,
+          dishes,
+        }
+      })
+    } else {
+      // 如果返回结构不正确，保持空 stores（不会抛）
+      stores.value = []
+    }
+  } catch (e: any) {
+    console.warn('stores API failed, frontend will show no stores until DB has data', e && e.message)
+    stores.value = []
+  }
+}
 
 // 根据路由 query 进行过滤
 const filteredStores = computed(() => {
@@ -336,7 +397,10 @@ function scrollHandler() {
 function scrollToTop() {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
-onMounted(() => window.addEventListener('scroll', scrollHandler, { passive: true }))
+onMounted(() => {
+  window.addEventListener('scroll', scrollHandler, { passive: true })
+  loadData()
+})
 onBeforeUnmount(() => window.removeEventListener('scroll', scrollHandler))
 
 // function onBannerClick(item: any) {
