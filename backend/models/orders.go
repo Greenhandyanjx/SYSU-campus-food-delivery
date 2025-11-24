@@ -10,9 +10,6 @@ type Order struct {
 	gorm.Model
 
 	Consigneeid  int       `json:"consigneeid" gorm:"not null"`
-	Phone        string    `json:"phone" gorm:"type:VARCHAR(20);not null"`
-	Consignee    string    `json:"consignee" gorm:"type:VARCHAR(100);not null"`
-	Address      string    `json:"address" gorm:"type:VARCHAR(255);not null"` // ← 你缺了这条！
 	PickupPoint  time.Time `json:"pickuppoint" gorm:"type:datetime;not null;default:current_timestamp"`
 	DropofPoint  time.Time `json:"dropofpoint" gorm:"type:datetime;not null;default:current_timestamp"`
 	ExpectedTime time.Time `json:"expectedtime" gorm:"type:datetime;not null;default:current_timestamp"`
