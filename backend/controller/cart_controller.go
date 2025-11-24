@@ -5,6 +5,7 @@ import (
 	"backend/models"
 	"backend/utils"
 	"errors"
+	"fmt"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -95,69 +96,105 @@ func GetUserCart(c *gin.Context) {
 	})
 }
 
-// POST /user/cart/add
 func AddToCart(c *gin.Context) {
-	var req AddToCartRequest
+	var req map[string]interface{}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.Fail(c, "参数错误："+err.Error())
 		return
 	}
 
 	userID := c.MustGet("baseUserID").(uint)
+	fmt.Println("UserID:", userID, "Request:", req)
 
-	// 1. 找用户的购物车（一个用户只有一个 cart）
+	// 从 map 中读取前端实际传的字段
+	merchantIDFloat, ok := req["storeId"].(float64)
+	if !ok {
+		utils.Fail(c, "storeId 参数错误")
+		return
+	}
+	dishIDFloat, ok := req["dishId"].(float64)
+	if !ok {
+		utils.Fail(c, "dishId 参数错误")
+		return
+	}
+	qtyFloat, ok := req["qty"].(float64)
+	if !ok {
+		utils.Fail(c, "qty 参数错误")
+		return
+	}
+
+	merchantID := uint(merchantIDFloat)
+	dishID := uint(dishIDFloat)
+	qty := int(qtyFloat)
+
+	// 1. 找用户的购物车
 	var cart models.Cart
 	if err := global.Db.Where("user_id = ?", userID).First(&cart).Error; err != nil {
-		// 如果没有购物车，则创建一个
-		cart = models.Cart{
-			UserID: userID,
-		}
+		fmt.Println("Cart not found, creating new one")
+		cart = models.Cart{UserID: userID}
 		if err := global.Db.Create(&cart).Error; err != nil {
+			fmt.Println("Create cart failed:", err)
 			utils.Error(c, err)
 			return
 		}
+		fmt.Println("New cart created:", cart)
+	} else {
+		fmt.Println("Found cart:", cart)
 	}
 
 	// 2. 是否已经存在同商家 + 同菜品？
 	var item models.CartItem
 	err := global.Db.Where(
 		"cart_id = ? AND merchant_id = ? AND dish_id = ?",
-		cart.ID, req.MerchantID, req.DishID,
+		cart.ID, merchantID, dishID,
 	).First(&item).Error
 
 	if err == nil {
-		// 已经存在 → 数量 + req.Qty
-		item.Qty += req.Qty
+		fmt.Println("CartItem exists, increasing quantity:", item)
+		item.Qty += qty
 		if err := global.Db.Save(&item).Error; err != nil {
+			fmt.Println("Failed to update item:", err)
 			utils.Error(c, err)
 			return
 		}
+		fmt.Println("Updated item:", item)
 		utils.Success(c, "添加成功（数量增加）")
+		return
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		fmt.Println("Error querying cart_item:", err)
+		utils.Error(c, err)
 		return
 	}
 
-	// 3. 获取菜品信息（用于价格与名称）
+	// 3. 获取菜品信息（可选，如果前端传了 name 和 price 可直接用）
 	var dish models.Dish
-	if err := global.Db.Where("id = ?", req.DishID).First(&dish).Error; err != nil {
-		utils.Fail(c, "菜品不存在")
-		return
+	if err := global.Db.Where("id = ?", dishID).First(&dish).Error; err != nil {
+		fmt.Println("Dish not found, using frontend data")
+		dish.DishName, _ = req["name"].(string)
+		dish.Price, _ = req["price"].(string)
+	} else {
+		fmt.Println("Found dish in DB:", dish)
 	}
 
 	// 4. 新增购物车 item
 	newItem := models.CartItem{
 		CartID:     cart.ID,
-		MerchantID: req.MerchantID,
-		DishID:     req.DishID,
+		MerchantID: merchantID,
+		DishID:     dishID,
 		Name:       dish.DishName,
-		Price:      dish.Price,
-		Qty:        req.Qty,
+		Price:      dish.Price, // 已经是 string
+		Qty:        qty,
 		Selected:   true,
 	}
 
+	fmt.Println("Inserting new CartItem:", newItem)
 	if err := global.Db.Create(&newItem).Error; err != nil {
+		fmt.Println("Create CartItem failed:", err)
 		utils.Error(c, err)
 		return
 	}
 
+	fmt.Println("Create CartItem success")
 	utils.Success(c, "添加成功")
+
 }
