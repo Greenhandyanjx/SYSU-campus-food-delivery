@@ -5,6 +5,7 @@ import (
 	"backend/models"
 	"backend/utils"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -49,7 +50,6 @@ func UpdateRiderStatus(c *gin.Context) {
 	c.JSON(200, gin.H{"code": 1, "data": gin.H{"success": true}})
 }
 
-// 获取待接单订单（status=1）
 func GetNewOrders(c *gin.Context) {
 	type Result struct {
 		ID              uint      `json:"id"`
@@ -77,22 +77,44 @@ func GetNewOrders(c *gin.Context) {
 	results := []Result{}
 
 	for _, o := range orders {
+
+		// 1. 查商家
 		var merchant models.Merchant
 		err := global.Db.Where("id = ?", o.MerchantID).First(&merchant).Error
 
-		// 如果查不到商家，不要直接空白，给默认值
 		if err != nil {
 			merchant.ShopName = "未知商家"
 			merchant.ShopLocation = "无地址"
 		}
 
+		// 2. 查 consignee
+		var consignee models.Consignee
+		if err := global.Db.Where("id = ?", o.Consigneeid).First(&consignee).Error; err != nil {
+			continue // 收货人不存在就跳过该订单
+		}
+
+		// 3. 查 address
+		var addr models.Address
+		if err := global.Db.Where("id = ?", consignee.Addressid).First(&addr).Error; err != nil {
+			continue
+		}
+
+		// 4. 拼接地址字符串（根据你们前端需求）
+		fullAddr := fmt.Sprintf("%s%s%s%s%s",
+			addr.Province,
+			addr.City,
+			addr.District,
+			addr.Street,
+			addr.Detail,
+		)
+
 		result := Result{
 			ID:              o.ID,
 			Restaurant:      merchant.ShopName,
 			PickupAddress:   merchant.ShopLocation,
-			Customer:        "匿名用户",
-			// DeliveryAddress: o.PayInfo,
-			Distance:        1.2,
+			Customer:        consignee.Name, // 可修改成匿名或真实
+			DeliveryAddress: fullAddr,       // 方案 B 正确做法
+			Distance:        1.2,            // 缺真实计算暂时写死
 			EstimatedFee:    o.TotalPrice,
 			EstimatedTime:   20,
 			CreatedAt:       o.CreatedAt,
@@ -310,14 +332,28 @@ func GetOrderDetailForRider(c *gin.Context) {
 	orderId := c.Param("orderId")
 	riderID := c.GetUint("baseUserID")
 
-	// 1. 查订单
+	// 1. 查询订单
 	var order models.Order
 	if err := global.Db.Where("id = ? AND rider_id = ?", orderId, riderID).First(&order).Error; err != nil {
 		c.JSON(200, gin.H{"code": 0, "msg": "订单不存在或无权限"})
 		return
 	}
 
-	// 2. 返回前端要求的结构
+	// 2. 用 order.Consigneeid 查 consignee 表
+	var consignee models.Consignee
+	if err := global.Db.Where("id = ?", order.Consigneeid).First(&consignee).Error; err != nil {
+		c.JSON(200, gin.H{"code": 0, "msg": "收货人不存在"})
+		return
+	}
+
+	// 3. 用 consignee.Addressid 查 address 表
+	var addr models.Address
+	if err := global.Db.Where("id = ?", consignee.Addressid).First(&addr).Error; err != nil {
+		c.JSON(200, gin.H{"code": 0, "msg": "地址不存在"})
+		return
+	}
+
+	// 4. 返回前端想要的数据结构
 	c.JSON(200, gin.H{
 		"code": 1,
 		"data": gin.H{
@@ -327,15 +363,18 @@ func GetOrderDetailForRider(c *gin.Context) {
 			"pickupCode": order.PickupCode,
 
 			"customerInfo": gin.H{
-				"name":  order.Consignee,
-				"phone": order.Phone,
+				"name":  consignee.Name,
+				"phone": consignee.Phone,
 				"address": gin.H{
-					"full": order.Address,
+					"province": addr.Province,
+					"city":     addr.City,
+					"district": addr.District,
+					"street":   addr.Street,
+					"detail":   addr.Detail,
 				},
 			},
 
-			// 你现在没有订单菜品表，先返回空数组
-			"items": []interface{}{},
+			"items": []interface{}{}, // 你们还没建菜品表，所以保持空数组
 		},
 	})
 }
