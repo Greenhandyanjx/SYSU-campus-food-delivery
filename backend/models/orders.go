@@ -9,8 +9,8 @@ import (
 type Order struct {
 	gorm.Model
 
-	Consigneeid  int       `json:"consigneeid" gorm:"not null"`
-	
+	Consigneeid int `json:"consigneeid" gorm:"not null"`
+
 	PickupPoint  time.Time `json:"pickuppoint" gorm:"type:datetime;not null;default:current_timestamp"`
 	DropofPoint  time.Time `json:"dropofpoint" gorm:"type:datetime;not null;default:current_timestamp"`
 	ExpectedTime time.Time `json:"expectedtime" gorm:"type:datetime;not null;default:current_timestamp"`
@@ -21,9 +21,9 @@ type Order struct {
 
 	Numberoftableware int `json:"numberoftableware" gorm:"not null default:'0'"`
 
-    //支付信息
-	PayInfoid int `json:"payid" gorm:"not null"`
-    PayInfo PayInfo `gorm:"foreignKey:PayInfoid"`
+	//支付信息
+	PayInfoid int     `json:"payid" gorm:"not null"`
+	PayInfo   PayInfo `gorm:"foreignKey:PayInfoid"`
 	// ==== 新增骑手相关字段 ====
 	RiderID    uint   `json:"rider_id" gorm:"default:0"`
 	PickupCode string `json:"pickup_code"`
