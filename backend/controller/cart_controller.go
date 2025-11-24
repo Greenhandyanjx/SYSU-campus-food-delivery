@@ -96,6 +96,7 @@ func GetUserCart(c *gin.Context) {
 	})
 }
 
+// 添加到购物车功能
 func AddToCart(c *gin.Context) {
 	var req map[string]interface{}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -196,5 +197,87 @@ func AddToCart(c *gin.Context) {
 
 	fmt.Println("Create CartItem success")
 	utils.Success(c, "添加成功")
+}
 
+// 更新用户购物车
+func UpdateCartItem(c *gin.Context) {
+	userID := c.MustGet("baseUserID").(uint)
+	// 解析请求参数
+	var req struct {
+		StoreID string `json:"storeId" binding:"required"`
+		DishID  int    `json:"dishId" binding:"required"`
+		Qty     int    `json:"qty" binding:"required,min=0"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.Error(c, err)
+		return
+	}
+	// 查询用户购物车，如果不存在则创建
+	var cart models.Cart
+	if err := global.Db.Where("user_id = ?", userID).First(&cart).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// 自动创建空购物车
+			cart = models.Cart{UserID: userID}
+			if err := global.Db.Create(&cart).Error; err != nil {
+				utils.Error(c, err)
+				return
+			}
+		} else {
+			utils.Error(c, err)
+			return
+		}
+	}
+
+	// 转换 storeID 为 uint
+	merchantID, err := strconv.ParseUint(req.StoreID, 10, 32)
+	if err != nil {
+		utils.Error(c, err)
+		return
+	}
+
+	// 处理购物车商品
+	if req.Qty == 0 {
+		// 如果数量为0，删除该商品
+		if err := global.Db.Where("cart_id = ? AND dish_id = ? AND merchant_id = ?", cart.ID, uint(req.DishID), uint(merchantID)).Delete(&models.CartItem{}).Error; err != nil {
+			utils.Error(c, err)
+			return
+		}
+	} else {
+		// 更新或创建购物车商品
+		var cartItem models.CartItem
+		if err := global.Db.Where("cart_id = ? AND dish_id = ? AND merchant_id = ?", cart.ID, uint(req.DishID), uint(merchantID)).First(&cartItem).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				// 创建新商品项
+				cartItem = models.CartItem{
+					CartID:     cart.ID,
+					DishID:     uint(req.DishID),
+					MerchantID: uint(merchantID),
+					Qty:        req.Qty,
+				}
+				if err := global.Db.Create(&cartItem).Error; err != nil {
+					utils.Error(c, err)
+					return
+				}
+			} else {
+				utils.Error(c, err)
+				return
+			}
+		} else {
+			// 更新现有商品数量
+			if err := global.Db.Model(&cartItem).Update("qty", req.Qty).Error; err != nil {
+				utils.Error(c, err)
+				return
+			}
+		}
+	}
+
+	// 返回成功响应
+	utils.Success(c, gin.H{
+		"success": true,
+		"updatedItem": gin.H{
+			"storeId": req.StoreID,
+			"dishId":  req.DishID,
+			"qty":     req.Qty,
+		},
+	})
 }
