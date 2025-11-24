@@ -136,6 +136,8 @@ func SetRouter() *gin.Engine {
 
 		auth.GET("merchant/statistics/top", controller.GetTopSales)
 
+		auth.GET("/user/cart", controller.GetUserCart)
+		auth.POST("/user/cart/add", controller.AddToCart) // 添加到购物车
 	}
 	return fe
 }
