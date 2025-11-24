@@ -127,13 +127,14 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import HeadLable from '@/components/HeadLable/index.vue'
 import ImageUpload from '@/components/ImgUpLoad/index.vue'
 import AddDish from './components/AddDish.vue'
- import { querySetmealById, addSetmeal, editSetmeal } from '@/api/merchant/setMeal'
+import { querySetmealById, addSetmeal, editSetmeal } from '@/api/merchant/setMeal'
 import { getCategoryList } from '@/api/dish'
+import { CATEGORIES } from '@/constants/categories'
 
 const route = useRoute()
 const router = useRouter()
 
-const setMealList = ref<any[]>([])
+const setMealList = ref<any[]>(CATEGORIES.filter(c => c.id !== 0))
 const seachKey = ref('')
 const dishList = ref<any[]>([])
 const imageUrl = ref('')
@@ -224,12 +225,15 @@ function init() {
 
 
 function getDishTypeList() {
+  // Prefer backend categories, fallback to local constants
   getCategoryList({ type: 2 }).then((res: any) => {
-    if (res && res.data && Number(res.data.code) === 1) {
+    if (res && res.data && Number(res.data.code) === 1 && Array.isArray(res.data.data) && res.data.data.length > 0) {
       setMealList.value = res.data.data
     } else {
-      ElMessage.error(res.data.msg)
+      setMealList.value = CATEGORIES.filter(c => c.id !== 0)
     }
+  }).catch(() => {
+    setMealList.value = CATEGORIES.filter(c => c.id !== 0)
   })
 }
 

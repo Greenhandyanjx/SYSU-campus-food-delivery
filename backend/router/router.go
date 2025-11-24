@@ -34,6 +34,10 @@ func SetRouter() *gin.Engine {
 		noAuth.GET("/merchant/dish/categories", controller.Get_category)
 
 		noAuth.GET("/merchant/common/download", controller.CommonDownload)
+		// 管理性接口（一次性操作）：替换 categories 表（注意：需要 ?force=1）
+		noAuth.POST("/admin/seed_categories", controller.ReplaceCategories)
+		// 用户首页获取店铺列表（无需鉴权）
+		noAuth.GET("/user/stores", controller.GetStores)
 		// 允许未登录用户上传图片（用于注册页面等）
 		noAuth.POST("/common/upload", controller.UploadImage)
 
@@ -132,6 +136,8 @@ func SetRouter() *gin.Engine {
 
 		auth.GET("merchant/statistics/top", controller.GetTopSales)
 
+		auth.GET("/user/cart", controller.GetUserCart)
+		auth.POST("/user/cart/add", controller.AddToCart) // 添加到购物车
 	}
 	return fe
 }
