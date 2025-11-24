@@ -9,7 +9,7 @@ type OrderWithDishnames struct {
     ID                  uint      `json:"orderid"`
     Ordertime time.Time `json:"orderTime"`
     Dropofpoint         time.Time `json:"dropofpoint"`
-    ExpectedTime        time.Time `json:"expectedtime"`
+    ExpectedTime        time.Time `json:"expected_time"`
     Status              int       `json:"status"`
     TablewareNumber   int       `json:"tablewareNumber"`
     TotalPrice          float64   `json:"totalprice"`

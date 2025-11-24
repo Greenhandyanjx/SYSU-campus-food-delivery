@@ -79,32 +79,116 @@ func GetOrderPage(c *gin.Context) {
 
 // 根据orderId获取订单详情
 func GetOrderDetail(c *gin.Context) {
-	orderIdStr := c.Query("orderId")
-	if orderIdStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "orderId is required", "data": nil})
-		return
-	}
-	orderId, err := strconv.Atoi(orderIdStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid orderId format", "data": nil})
-		return
-	}
-	var order models.Order
-	result := global.Db.First(&order, orderId)
-	if result.Error != nil {
-		if result.Error == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusNotFound, gin.H{"code": 0, "message": "order not found", "data": nil})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get order detail", "data": nil})
-		return
-	}
+    orderIdStr := c.Query("orderId")
+    if orderIdStr == "" {
+        c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "orderId is required", "data": nil})
+        return
+    }
 
-	c.JSON(http.StatusOK, gin.H{
-		"code": 1,
-		"data": order,
-	})
+    orderId, err := strconv.Atoi(orderIdStr)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid orderId format", "data": nil})
+        return
+    }
+
+    // 获取订单基础信息
+    var order models.Order
+    result := global.Db.Preload("PayInfo").First(&order, orderId)
+    if result.Error != nil {
+        if result.Error == gorm.ErrRecordNotFound {
+            c.JSON(http.StatusNotFound, gin.H{"code": 0, "message": "order not found", "data": nil})
+            return
+        }
+        c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get order detail", "data": nil})
+        return
+    }
+
+    // 获取收获信息
+    var consignee models.Consignee
+    result = global.Db.First(&consignee, "id = ?", order.Consigneeid)
+    if result.Error != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get consignee detail", "data": nil})
+        return
+    }
+
+    // 获取收获地址信息
+    var address models.Address
+    result = global.Db.First(&address, consignee.Addressid)
+    if result.Error != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get address detail", "data": nil})
+        return
+    }
+
+    // 获取订单中的餐品信息并关联Meal表
+    var orderMeals []models.OrderMeal
+    result = global.Db.Preload("Meal").Table("order_meals").Where("order_id = ?", orderId).Find(&orderMeals)
+    if result.Error != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get order meals", "data": nil})
+        return
+    }
+    // 获取订单中的菜品信息
+    var orderDishes []models.OrderDish
+    result = global.Db.Preload("Dish").Table("order_dishes").Where("order_id = ?", orderId).Find(&orderDishes)
+    if result.Error != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get order dishes", "data": nil})
+        return
+    }
+    // 构建items信息
+    items := make([]gin.H, 0)
+    for _, orderMeal := range orderMeals {
+        meal := orderMeal.Meal // 假设OrderMeal表中预加载了Meal信息
+        items = append(items, gin.H{
+            "skuId": "m" + strconv.Itoa(orderMeal.MealID),
+            "name":  meal.Mealname,
+            "qty":   orderMeal.Num,
+            "price": meal.Price, // 也可以根据需要添加价格信息
+        })
+    }
+    for _, dish := range orderDishes {
+        items = append(items, gin.H{
+            "skuId": "d" + strconv.Itoa(dish.DishID),
+            "name":  dish.Dish.DishName,
+            "qty":   dish.Num,
+			"price":dish.Dish.Price,
+        })
+    }
+	  // 获取配送员信息
+    var rider models.Rider
+    result = global.Db.First(&rider, order.RiderID)
+    if result.Error != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get rider detail", "data": nil})
+        return
+    }
+    // 构建最终返回的数据
+	fmt.Println(order.PayInfo.Paymethod,order.PayInfo.CheckoutTime,order.PayInfo.Packamount)
+    response := gin.H{
+        "code": 1,
+        "data": gin.H{
+            "id":        "o" + strconv.Itoa(int(order.ID)),
+            "number":    order.CreatedAt.Format("20060102") + fmt.Sprintf("%06d", order.ID),
+            "amount":    order.TotalPrice, // 假设Order表有TotalAmount字段
+            "status":    order.Status,
+            "orderTime": order.CreatedAt.Format(time.RFC3339),
+			"phone":     consignee.Phone,
+			"expected_time":order.ExpectedTime,
+            "orderDetailList": items,
+			"remark":order.Notes,
+            "consignee": consignee.Name,
+            "address":   address.Province + " " + address.City + " " + address.District + " " + address.Street + " " + address.Detail,
+            "delivery": gin.H{
+                "courierId":    "r" + strconv.Itoa(int(rider.ID)), // 使用rider.ID
+                "courierName":  rider.RealName,                         // 使用rider.Name
+                "courierPhone": rider.Phone,                        // 使用rider.Phone
+            },
+			"payMethod":order.PayInfo.Paymethod,
+			"checkoutTime":order.PayInfo.CheckoutTime,
+			"packAmount":order.PayInfo.Packamount,
+			"deliveryAmount":order.PayInfo.Deliveryamount,
+        },
+    }
+    c.JSON(http.StatusOK, response)
 }
+
 
 func OrderAccept(c *gin.Context) {
 	type OrderAcceptRequest struct {
