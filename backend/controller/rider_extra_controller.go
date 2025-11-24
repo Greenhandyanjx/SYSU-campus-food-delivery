@@ -204,15 +204,22 @@ func ReportIssue(c *gin.Context) {
 // getIncomeDetails()
 func GetIncomeDetails(c *gin.Context) {
 	riderID := c.GetUint("baseUserID")
+
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
+	if page < 1 {
+		page = 1
+	}
+	if size <= 0 {
+		size = 20
+	}
 	offset := (page - 1) * size
 
 	itype := c.Query("type")
 	startDate := c.Query("startDate")
 	endDate := c.Query("endDate")
 
-	var list []models.RiderIncomeRecord
+	var records []models.RiderIncomeRecord
 	var total int64
 
 	query := global.Db.Model(&models.RiderIncomeRecord{}).
@@ -229,15 +236,33 @@ func GetIncomeDetails(c *gin.Context) {
 	}
 
 	query.Count(&total)
-	query.Order("created_at DESC").
+
+	if err := query.
+		Order("created_at DESC").
 		Offset(offset).
 		Limit(size).
-		Find(&list)
+		Find(&records).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "查询失败"})
+		return
+	}
+
+	// 和 GetIncomeHistory 一样，手动映射字段名
+	items := make([]gin.H, 0, len(records))
+	for _, r := range records {
+		items = append(items, gin.H{
+			"id":      r.ID,
+			"orderId": r.OrderID,
+			"amount":  r.Amount,
+			"type":    r.Type,
+			"time":    r.CreatedAt, // ⭐ 关键：time 字段
+			"remark":  r.Remark,
+		})
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"code": 1,
 		"data": gin.H{
-			"items": list,
+			"items": items,
 			"total": total,
 		},
 	})

@@ -195,14 +195,55 @@ func PickupOrder(c *gin.Context) {
 func GetDeliveringOrders(c *gin.Context) {
 	riderID := c.GetUint("baseUserID")
 
+	type DeliveringOrderResp struct {
+		ID              uint   `json:"id"`
+		Customer        string `json:"customer"`
+		CustomerPhone   string `json:"customerPhone"`
+		CustomerAvatar  string `json:"customerAvatar"`
+		DeliveryAddress string `json:"deliveryAddress"`
+		RemainingTime   int    `json:"remainingTime"`
+	}
+
 	var orders []models.Order
-	err := global.Db.Where("rider_id = ? AND status = 3", riderID).Find(&orders).Error
-	if err != nil {
+	if err := global.Db.
+		Where("rider_id = ? AND status = 3", riderID).
+		Order("updated_at DESC").
+		Find(&orders).Error; err != nil {
 		c.JSON(200, gin.H{"code": 0, "msg": "查询失败"})
 		return
 	}
 
-	c.JSON(200, gin.H{"code": 1, "data": orders})
+	list := make([]DeliveringOrderResp, 0, len(orders))
+
+	for _, o := range orders {
+		var consignee models.Consignee
+		global.Db.Where("id = ?", o.Consigneeid).First(&consignee)
+
+		var addr models.Address
+		global.Db.Where("id = ?", consignee.Addressid).First(&addr)
+
+		fullAddr := addr.Province + addr.City + addr.District + addr.Street + addr.Detail
+
+		// 计算剩余时间（分钟），小于 0 就置 0
+		remaining := 0
+		if !o.ExpectedTime.IsZero() {
+			diff := int(time.Until(o.ExpectedTime).Minutes())
+			if diff > 0 {
+				remaining = diff
+			}
+		}
+
+		list = append(list, DeliveringOrderResp{
+			ID:              o.ID,
+			Customer:        consignee.Name,
+			CustomerPhone:   consignee.Phone,
+			CustomerAvatar:  "", // 先不给头像字段，避免 bu.Avatar 报错
+			DeliveryAddress: fullAddr,
+			RemainingTime:   remaining,
+		})
+	}
+
+	c.JSON(200, gin.H{"code": 1, "data": list})
 }
 
 func CompleteOrder(c *gin.Context) {
@@ -260,42 +301,83 @@ func CompleteOrder(c *gin.Context) {
 		"total_income": gorm.Expr("total_income + ?", order.TotalPrice),
 	})
 
-	c.JSON(200, gin.H{"code": 1, "data": gin.H{"success": true}})
+	c.JSON(200, gin.H{
+		"code": 1,
+		"data": gin.H{
+			"success":   true,
+			"actualFee": order.TotalPrice, // 实际配送费
+		},
+	})
+
 }
 
 // GET /rider/orders/history
 func GetOrderHistory(c *gin.Context) {
 	riderID := c.GetUint("baseUserID")
 
-	// 分页参数
 	page := c.DefaultQuery("page", "1")
 	size := c.DefaultQuery("size", "10")
-
 	pageInt, _ := strconv.Atoi(page)
 	sizeInt, _ := strconv.Atoi(size)
-
 	offset := (pageInt - 1) * sizeInt
+
+	statusStr := c.Query("status") // 可选，根据 index.ts 说明
+	date := c.Query("date")        // 可选
+
+	type HistoryItem struct {
+		ID          uint       `json:"id"`
+		Restaurant  string     `json:"restaurant"`
+		Customer    string     `json:"customer"`
+		Fee         float64    `json:"fee"`
+		Status      int        `json:"status"`
+		CompletedAt *time.Time `json:"completedAt"`
+	}
 
 	var orders []models.Order
 	var total int64
 
-	// 查询：当前骑手 + 已完成（status=4）
 	query := global.Db.Model(&models.Order{}).
-		Where("rider_id = ? AND status = 4", riderID)
+		Where("rider_id = ?", riderID)
 
-	// 统计数量
+	if statusStr != "" {
+		// 前端用字符串的话你可以自己映射一下
+		// 例如 "completed" -> 4
+	}
+
+	if date != "" {
+		query = query.Where("DATE(finish_at) = ?", date)
+	}
+
 	query.Count(&total)
-
-	// 分页查询
-	query.Order("updated_at DESC").
+	query.Order("finish_at DESC").
 		Offset(offset).
 		Limit(sizeInt).
 		Find(&orders)
 
+	list := make([]HistoryItem, 0, len(orders))
+
+	for _, o := range orders {
+		var merchant models.Merchant
+		global.Db.Where("id = ?", o.MerchantID).First(&merchant)
+
+		var consignee models.Consignee
+		global.Db.Where("id = ?", o.Consigneeid).First(&consignee)
+
+		item := HistoryItem{
+			ID:          o.ID,
+			Restaurant:  merchant.ShopName,
+			Customer:    consignee.Name,
+			Fee:         o.TotalPrice,
+			Status:      o.Status,
+			CompletedAt: o.FinishAt, // 记得在 models.Order 里有 FinishAt
+		}
+		list = append(list, item)
+	}
+
 	c.JSON(200, gin.H{
 		"code": 1,
 		"data": gin.H{
-			"items": orders,
+			"items": list,
 			"total": total,
 		},
 	})
@@ -305,14 +387,50 @@ func GetOrderHistory(c *gin.Context) {
 func GetPickupOrders(c *gin.Context) {
 	riderID := c.GetUint("baseUserID")
 
+	type PickupOrderResp struct {
+		ID            uint   `json:"id"`
+		Restaurant    string `json:"restaurant"`
+		PickupAddress string `json:"pickupAddress"`
+		PickupCode    string `json:"pickupCode"`
+		ShopPhone     string `json:"shopPhone"`
+		RemainingTime int    `json:"remainingTime"`
+	}
+
 	var orders []models.Order
-	err := global.Db.Where("rider_id = ? AND status = 2", riderID).Find(&orders).Error
-	if err != nil {
+	if err := global.Db.
+		Where("rider_id = ? AND status = 2", riderID).
+		Order("created_at DESC").
+		Find(&orders).Error; err != nil {
 		c.JSON(200, gin.H{"code": 0, "msg": "查询失败"})
 		return
 	}
 
-	c.JSON(200, gin.H{"code": 1, "data": orders})
+	list := make([]PickupOrderResp, 0, len(orders))
+
+	for _, o := range orders {
+		var merchant models.Merchant
+		global.Db.Where("id = ?", o.MerchantID).First(&merchant)
+
+		// 剩余时间：用期望送达时间减当前时间，单位分钟，负数就置 0
+		remaining := 0
+		if !o.ExpectedTime.IsZero() {
+			diff := int(time.Until(o.ExpectedTime).Minutes())
+			if diff > 0 {
+				remaining = diff
+			}
+		}
+
+		list = append(list, PickupOrderResp{
+			ID:            o.ID,
+			Restaurant:    merchant.ShopName,
+			PickupAddress: merchant.ShopLocation,
+			PickupCode:    o.PickupCode,
+			ShopPhone:     merchant.Phone, // 根据你 Merchant 实际字段改一下
+			RemainingTime: remaining,
+		})
+	}
+
+	c.JSON(200, gin.H{"code": 1, "data": list})
 }
 
 // GET /rider/orders/:orderId
@@ -340,15 +458,42 @@ func GetOrderDetailForRider(c *gin.Context) {
 		c.JSON(200, gin.H{"code": 0, "msg": "地址不存在"})
 		return
 	}
+	var merchant models.Merchant
+	global.Db.Where("id = ?", order.MerchantID).First(&merchant)
+
+	// 简单造一个时间线，至少有下单时间和完成时间
+	timeline := []gin.H{
+		{
+			"label": "用户下单",
+			"time":  order.CreatedAt,
+		},
+	}
+	if !order.AcceptedAt.IsZero() {
+		timeline = append(timeline, gin.H{
+			"label": "骑手接单",
+			"time":  order.AcceptedAt,
+		})
+	}
+	if !order.PickupAt.IsZero() {
+		timeline = append(timeline, gin.H{
+			"label": "已取餐",
+			"time":  order.PickupAt,
+		})
+	}
+	if !order.FinishAt.IsZero() {
+		timeline = append(timeline, gin.H{
+			"label": "已送达",
+			"time":  order.FinishAt,
+		})
+	}
 
 	// 4. 返回前端想要的数据结构
 	c.JSON(200, gin.H{
 		"code": 1,
 		"data": gin.H{
-			"id":         order.ID,
-			"status":     order.Status,
-			"total":      order.TotalPrice,
-			"pickupCode": order.PickupCode,
+			"id":     order.ID,
+			"status": order.Status,
+			"total":  order.TotalPrice,
 
 			"customerInfo": gin.H{
 				"name":  consignee.Name,
@@ -362,9 +507,17 @@ func GetOrderDetailForRider(c *gin.Context) {
 				},
 			},
 
-			"items": []interface{}{}, // 你们还没建菜品表，所以保持空数组
+			"shopInfo": gin.H{
+				"name":    merchant.ShopName,
+				"address": merchant.ShopLocation,
+				"phone":   merchant.Phone,
+			},
+
+			"items":    []interface{}{}, // 暂时空数组
+			"timeline": timeline,
 		},
 	})
+
 }
 
 // GET /rider/income/today
@@ -542,68 +695,112 @@ func AcceptOrder(c *gin.Context) {
 }
 func GetIncomeStats(c *gin.Context) {
 	riderID := c.GetUint("baseUserID")
-	period := c.DefaultQuery("period", "today")
+	// period := c.DefaultQuery("period", "today") // 如不需要，可以忽略
 
-	var start time.Time
 	now := time.Now()
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	weekStart := now.AddDate(0, 0, -7)
+	monthStart := now.AddDate(0, -1, 0)
 
-	switch period {
-	case "today":
-		start = now.Truncate(24 * time.Hour)
-	case "week":
-		start = now.AddDate(0, 0, -7)
-	case "month":
-		start = now.AddDate(0, -1, 0)
-	default:
-		start = now.Truncate(24 * time.Hour)
-	}
+	var dailyIncome, weeklyIncome, monthlyIncome float64
+	var completedOrders int64
 
-	var income float64
+	// 今天收入
 	global.Db.Model(&models.RiderIncomeRecord{}).
-		Where("rider_id = ? AND created_at >= ?", riderID, start).
-		Select("SUM(amount)").Scan(&income)
+		Where("rider_id = ? AND created_at >= ?", riderID, todayStart).
+		Select("SUM(amount)").Scan(&dailyIncome)
 
-	var count int64
+	// 七天收入
+	global.Db.Model(&models.RiderIncomeRecord{}).
+		Where("rider_id = ? AND created_at >= ?", riderID, weekStart).
+		Select("SUM(amount)").Scan(&weeklyIncome)
+
+	// 一个月收入
+	global.Db.Model(&models.RiderIncomeRecord{}).
+		Where("rider_id = ? AND created_at >= ?", riderID, monthStart).
+		Select("SUM(amount)").Scan(&monthlyIncome)
+
+	// 总完成单数（你可以按需求改成最近一月）
 	global.Db.Model(&models.Order{}).
-		Where("rider_id = ? AND status = 4 AND finish_at >= ?", riderID, start).
-		Count(&count)
+		Where("rider_id = ? AND status = 4").
+		Count(&completedOrders)
 
 	c.JSON(200, gin.H{
 		"code": 1,
 		"data": gin.H{
-			"dailyIncome":     income,
-			"completedOrders": count,
+			"dailyIncome":     dailyIncome,
+			"weeklyIncome":    weeklyIncome,
+			"monthlyIncome":   monthlyIncome,
+			"completedOrders": completedOrders,
 		},
 	})
 }
+
+// GET /rider/income/history
 func GetIncomeHistory(c *gin.Context) {
 	riderID := c.GetUint("baseUserID")
+
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
-
+	if page < 1 {
+		page = 1
+	}
+	if size <= 0 {
+		size = 20
+	}
 	offset := (page - 1) * size
 
-	var list []models.RiderIncomeRecord
+	// 前端 index.ts 注释里写了可以带 startDate / endDate
+	startDate := c.Query("startDate")
+	endDate := c.Query("endDate")
+
+	var records []models.RiderIncomeRecord
 	var total int64
 
 	query := global.Db.Model(&models.RiderIncomeRecord{}).
 		Where("rider_id = ?", riderID)
 
+	if startDate != "" {
+		query = query.Where("created_at >= ?", startDate)
+	}
+	if endDate != "" {
+		query = query.Where("created_at <= ?", endDate)
+	}
+
 	query.Count(&total)
 
-	query.Order("created_at DESC").
+	if err := query.
+		Order("created_at DESC").
 		Offset(offset).
 		Limit(size).
-		Find(&list)
+		Find(&records).Error; err != nil {
+		c.JSON(200, gin.H{"code": 0, "msg": "查询失败"})
+		return
+	}
+
+	// 手动组装前端期望的字段：
+	// { id, orderId, amount, type, time, remark }
+	items := make([]gin.H, 0, len(records))
+	for _, r := range records {
+		items = append(items, gin.H{
+			"id":      r.ID,
+			"orderId": r.OrderID,
+			"amount":  r.Amount,
+			"type":    r.Type,
+			"time":    r.CreatedAt, // ⭐ 关键：映射为 time
+			"remark":  r.Remark,
+		})
+	}
 
 	c.JSON(200, gin.H{
 		"code": 1,
 		"data": gin.H{
-			"items": list,
+			"items": items,
 			"total": total,
 		},
 	})
 }
+
 func GetWeeklyStats(c *gin.Context) {
 	riderID := c.GetUint("baseUserID")
 
@@ -677,9 +874,13 @@ func Withdraw(c *gin.Context) {
 
 	c.JSON(200, gin.H{
 		"code": 1,
-		"data": gin.H{"success": true, "withdrawId": record.ID},
+		"data": gin.H{
+			"success":    true,
+			"withdrawId": strconv.FormatUint(uint64(record.ID), 10), // ⭐ 转成字符串
+		},
 	})
 }
+
 func GetWithdrawHistory(c *gin.Context) {
 	riderID := c.GetUint("baseUserID")
 
