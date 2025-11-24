@@ -9,8 +9,13 @@ import (
 type Order struct {
 	gorm.Model
 
+<<<<<<< HEAD
 	Consigneeid int `json:"consigneeid" gorm:"not null"`
 
+=======
+	Consigneeid  int       `json:"consigneeid" gorm:"not null"`
+	
+>>>>>>> dev
 	PickupPoint  time.Time `json:"pickuppoint" gorm:"type:datetime;not null;default:current_timestamp"`
 	DropofPoint  time.Time `json:"dropofpoint" gorm:"type:datetime;not null;default:current_timestamp"`
 	ExpectedTime time.Time `json:"expectedtime" gorm:"type:datetime;not null;default:current_timestamp"`

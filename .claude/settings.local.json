@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run build)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run type-check)",
+      "Bash(node -e \"const api = require(''./index.js''); console.log(''Available functions:'', Object.keys(api.default || api).filter(k => typeof api[k] === ''function'').length);\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

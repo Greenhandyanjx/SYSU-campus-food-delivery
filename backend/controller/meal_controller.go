@@ -32,10 +32,6 @@ func Meal_add(ctx *gin.Context) {
 	// 将用户ID赋给套餐的MerchantID字段
 	meal.MerchantID = baseUserID
 	// 验证 category 在允许范围内（1..15）
-	if meal.Category < 1 || meal.Category > 15 {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "invalid category id"})
-		return
-	}
 	//第一次绑定
 	body, _ := io.ReadAll(ctx.Request.Body)
 	fmt.Println("Request Body:", string(body))             // 打印请求体内容
@@ -47,6 +43,11 @@ func Meal_add(ctx *gin.Context) {
 			"code": "400",
 			"msg":  "binding error",
 		})
+		return
+	}
+	if meal.Category < 1 || meal.Category > 15 {
+		log.Printf("无效的类别ID: %d", meal.Category)
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "invalid category id"})
 		return
 	}
 

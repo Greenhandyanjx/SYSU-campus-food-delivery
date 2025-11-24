@@ -1,0 +1,416 @@
+{
+  "riders": [
+    {
+      "id": 1,
+      "base_id": 1001,
+      "realname": "李明",
+      "idnumber": "440106199001011234",
+      "phone": "13800138001"
+    },
+    {
+      "id": 2,
+      "base_id": 1002,
+      "realname": "王强",
+      "idnumber": "440106199002022345",
+      "phone": "13800138002"
+    },
+    {
+      "id": 3,
+      "base_id": 1003,
+      "realname": "张伟",
+      "idnumber": "440106199003033456",
+      "phone": "13800138003"
+    },
+    {
+      "id": 4,
+      "base_id": 1004,
+      "realname": "刘洋",
+      "idnumber": "440106199004044567",
+      "phone": "13800138004"
+    },
+    {
+      "id": 5,
+      "base_id": 1005,
+      "realname": "陈静",
+      "idnumber": "440106199005055678",
+      "phone": "13800138005"
+    }
+  ],
+
+  "rider_profiles": [
+    {
+      "userId": 1001,
+      "riderId": 1,
+      "name": "李骑手",
+      "avatar": "https://example.com/avatar1.jpg",
+      "phone": "13800138001",
+      "rating": 4.8,
+      "completedOrders": 1250,
+      "isOnline": true,
+      "latitude": 22.3689,
+      "longitude": 113.5432,
+      "address": "中山大学珠海校区榕园宿舍",
+      "onlineHours": 156.5
+    },
+    {
+      "userId": 1002,
+      "riderId": 2,
+      "name": "王骑手",
+      "avatar": "https://example.com/avatar2.jpg",
+      "phone": "13800138002",
+      "rating": 4.6,
+      "completedOrders": 980,
+      "isOnline": false,
+      "latitude": 22.3701,
+      "longitude": 113.5456,
+      "address": "中山大学珠海校区荔园宿舍",
+      "onlineHours": 142.3
+    },
+    {
+      "userId": 1003,
+      "riderId": 3,
+      "name": "张骑手",
+      "avatar": "https://example.com/avatar3.jpg",
+      "phone": "13800138003",
+      "rating": 4.9,
+      "completedOrders": 1560,
+      "isOnline": true,
+      "latitude": 22.3655,
+      "longitude": 113.5410,
+      "address": "中山大学珠海校区榕园食堂",
+      "onlineHours": 189.7
+    }
+  ],
+
+  "rider_wallets": [
+    {
+      "riderId": 1,
+      "balance": 2580.50,
+      "frozenAmount": 120.00,
+      "totalIncome": 15680.50
+    },
+    {
+      "riderId": 2,
+      "balance": 1825.30,
+      "frozenAmount": 80.50,
+      "totalIncome": 12250.30
+    },
+    {
+      "riderId": 3,
+      "balance": 3456.80,
+      "frozenAmount": 200.00,
+      "totalIncome": 18920.80
+    }
+  ],
+
+  "new_orders": [
+    {
+      "id": "order001",
+      "restaurant": "麦当劳",
+      "pickupAddress": "珠海市香洲区唐家湾大学路1号",
+      "customer": "张同学",
+      "deliveryAddress": "珠海市香洲区中山大学珠海校区榕园宿舍A栋",
+      "distance": 1.2,
+      "estimatedFee": 6.5,
+      "estimatedTime": 20,
+      "createdAt": "2024-11-24T14:30:00Z",
+      "status": "pending"
+    },
+    {
+      "id": "order002",
+      "restaurant": "肯德基",
+      "pickupAddress": "珠海市香洲区唐家湾大学路101号",
+      "customer": "王同学",
+      "deliveryAddress": "珠海市香洲区中山大学珠海校区荔园宿舍B栋",
+      "distance": 1.5,
+      "estimatedFee": 7.0,
+      "estimatedTime": 25,
+      "createdAt": "2024-11-24T14:25:00Z",
+      "status": "pending"
+    },
+    {
+      "id": "order003",
+      "restaurant": "星巴克",
+      "pickupAddress": "珠海市香洲区唐家湾大学路201号",
+      "customer": "李同学",
+      "deliveryAddress": "珠海市香洲区中山大学珠海校区翰林宿舍C栋",
+      "distance": 0.8,
+      "estimatedFee": 5.5,
+      "estimatedTime": 15,
+      "createdAt": "2024-11-24T14:35:00Z",
+      "status": "pending"
+    }
+  ],
+
+  "pickup_orders": [
+    {
+      "id": "order004",
+      "restaurant": "汉堡王",
+      "pickupAddress": "珠海市香洲区唐家湾大学路301号",
+      "pickupCode": "A123",
+      "shopPhone": "13788888888",
+      "remainingTime": 600000,
+      "customer": "陈同学",
+      "riderId": 1
+    },
+    {
+      "id": "order005",
+      "restaurant": "真功夫",
+      "pickupAddress": "珠海市香洲区唐家湾大学路401号",
+      "pickupCode": "B456",
+      "shopPhone": "13999999999",
+      "remainingTime": 420000,
+      "customer": "赵同学",
+      "riderId": 3
+    }
+  ],
+
+  "delivering_orders": [
+    {
+      "id": "order006",
+      "customer": "孙同学",
+      "customerPhone": "13666666666",
+      "customerAvatar": "https://example.com/avatar6.jpg",
+      "deliveryAddress": "珠海市香洲区中山大学珠海校区榕园宿舍D栋",
+      "remainingTime": 900000,
+      "riderId": 1
+    },
+    {
+      "id": "order007",
+      "customer": "周同学",
+      "customerPhone": "13777777777",
+      "customerAvatar": "https://example.com/avatar7.jpg",
+      "deliveryAddress": "珠海市香洲区中山大学珠海校区荔园宿舍E栋",
+      "remainingTime": 600000,
+      "riderId": 2
+    }
+  ],
+
+  "order_details": [
+    {
+      "id": "order008",
+      "orderNo": "RD20241124001",
+      "status": "completed",
+      "items": [
+        {
+          "name": "巨无霸汉堡",
+          "quantity": 1,
+          "price": 25.00
+        },
+        {
+          "name": "薯条(大)",
+          "quantity": 1,
+          "price": 12.00
+        },
+        {
+          "name": "可乐(中)",
+          "quantity": 1,
+          "price": 8.00
+        }
+      ],
+      "customerInfo": {
+        "name": "吴同学",
+        "phone": "13888888888",
+        "address": "珠海市香洲区中山大学珠海校区翰林宿舍F栋"
+      },
+      "shopInfo": {
+        "name": "麦当劳",
+        "phone": "13788888888",
+        "address": "珠海市香洲区唐家湾大学路1号"
+      },
+      "total": 45.00,
+      "deliveryFee": 6.5,
+      "timeline": [
+        {
+          "time": "2024-11-24T14:30:00Z",
+          "status": "订单创建",
+          "description": "用户下单成功"
+        },
+        {
+          "time": "2024-11-24T14:35:00Z",
+          "status": "骑手接单",
+          "description": "李骑手已接单"
+        },
+        {
+          "time": "2024-11-24T14:45:00Z",
+          "status": "骑手取货",
+          "description": "骑手已取货，开始配送"
+        },
+        {
+          "time": "2024-11-24T15:05:00Z",
+          "status": "配送完成",
+          "description": "订单已送达"
+        }
+      ]
+    }
+  ],
+
+  "history_orders": [
+    {
+      "id": "order009",
+      "orderNo": "RD20241124002",
+      "status": "completed",
+      "restaurant": "肯德基",
+      "customer": "郑同学",
+      "deliveryAddress": "珠海市香洲区中山大学珠海校区榕园宿舍G栋",
+      "distance": 1.2,
+      "deliveryTime": 22,
+      "fee": 6.5,
+      "bonus": 1.0,
+      "completedAt": "2024-11-24T13:20:00Z"
+    },
+    {
+      "id": "order010",
+      "orderNo": "RD20241124003",
+      "status": "completed",
+      "restaurant": "星巴克",
+      "customer": "黄同学",
+      "deliveryAddress": "珠海市香洲区中山大学珠海校区荔园宿舍H栋",
+      "distance": 0.9,
+      "deliveryTime": 18,
+      "fee": 5.5,
+      "bonus": 0.5,
+      "completedAt": "2024-11-24T12:45:00Z"
+    }
+  ],
+
+  "income_records": [
+    {
+      "id": "income001",
+      "orderId": "order008",
+      "amount": 6.5,
+      "type": "order",
+      "time": "2024-11-24T15:05:00Z",
+      "remark": "订单RD20241124001配送费"
+    },
+    {
+      "id": "income002",
+      "orderId": "order009",
+      "amount": 6.5,
+      "type": "order",
+      "time": "2024-11-24T13:20:00Z",
+      "remark": "订单RD20241124002配送费"
+    },
+    {
+      "id": "income003",
+      "amount": 2.0,
+      "type": "bonus",
+      "time": "2024-11-24T14:00:00Z",
+      "remark": "准时配送奖励"
+    },
+    {
+      "id": "income004",
+      "amount": 1.0,
+      "type": "bonus",
+      "time": "2024-11-24T13:20:00Z",
+      "remark": "好评奖励"
+    }
+  ],
+
+  "withdraw_records": [
+    {
+      "id": "w001",
+      "amount": 500.0,
+      "status": "success",
+      "appliedAt": "2024-11-22T10:30:00Z",
+      "processedAt": "2024-11-23T14:20:00Z",
+      "account": "支付宝(138****8001)"
+    },
+    {
+      "id": "w002",
+      "amount": 300.0,
+      "status": "processing",
+      "appliedAt": "2024-11-23T14:20:00Z",
+      "account": "微信(138****8002)"
+    }
+  ],
+
+  "income_stats": {
+    "dailyIncome": 185.5,
+    "weeklyIncome": 1280.0,
+    "monthlyIncome": 5200.0,
+    "completedOrders": 68,
+    "estimatedIncome": 45.0,
+    "orderIncome": 1200.0,
+    "bonusIncome": 80.0,
+    "chartData": [
+      {
+        "date": "11-18",
+        "orders": 8,
+        "total": 142.50
+      },
+      {
+        "date": "11-19",
+        "orders": 6,
+        "total": 98.00
+      },
+      {
+        "date": "11-20",
+        "orders": 10,
+        "total": 185.50
+      },
+      {
+        "date": "11-21",
+        "orders": 7,
+        "total": 125.30
+      },
+      {
+        "date": "11-22",
+        "orders": 9,
+        "total": 168.80
+      },
+      {
+        "date": "11-23",
+        "orders": 12,
+        "total": 235.60
+      },
+      {
+        "date": "11-24",
+        "orders": 8,
+        "total": 142.50
+      }
+    ]
+  },
+
+  "weekly_stats": {
+    "weekIncome": 1280.0,
+    "weekOrders": 68,
+    "onlineHours": 45,
+    "avgRating": 4.8,
+    "avgDeliveryTime": 18,
+    "avgDistance": 1.2,
+    "onTimeRate": 95,
+    "positiveRate": 98,
+    "acceptRate": 85,
+    "deliveryEfficiency": 88,
+    "customerSatisfaction": 96
+  },
+
+  "test_scenarios": {
+    "login": {
+      "phone": "13800138001",
+      "password": "123456"
+    },
+    "update_location": {
+      "latitude": 22.3689,
+      "longitude": 113.5432,
+      "address": "中山大学珠海校区榕园"
+    },
+    "update_status": {
+      "isOnline": true
+    },
+    "accept_order": {
+      "orderId": "order001"
+    },
+    "confirm_pickup": {
+      "orderId": "order004"
+    },
+    "complete_delivery": {
+      "orderId": "order006"
+    },
+    "withdraw": {
+      "amount": 500.0,
+      "account": "alipay_138****8001"
+    }
+  }
+}
