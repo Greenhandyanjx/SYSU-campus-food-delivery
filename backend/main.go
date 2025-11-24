@@ -16,7 +16,7 @@ func main() {
 	//config.InitDB()
 
 	// 3. 执行自动建表
-	config.Initalldb()
+	// config.Initalldb()
 
 	//不改动数据执行一次即可
 	//config.Initalldb()
