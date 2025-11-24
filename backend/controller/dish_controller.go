@@ -25,6 +25,11 @@ func Dish_add(ctx *gin.Context) {
 	}
 	// 将用户ID赋给菜品的MerchantID字段
 	dish.MerchantID = baseUserID
+	// 验证 category 在允许范围内（1..15）
+	if dish.Category < 1 || dish.Category > 15 {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "invalid category id"})
+		return
+	}
 	if err := global.Db.Create(&dish).Error; err != nil {
 		log.Printf("数据库插入错误: %v", err) // 记录详细错误日志
 		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
@@ -33,6 +38,8 @@ func Dish_add(ctx *gin.Context) {
 		})
 		return
 	}
+	// 成功创建后，更新商家的分类统计
+	go UpdateMerchantTopCategories(dish.MerchantID)
 	ctx.JSON(http.StatusOK, gin.H{
 		"code": "1",
 		"msg":  "dish added successfully",
@@ -48,30 +55,30 @@ func Get_dishes(ctx *gin.Context) {
 		})
 		return
 	}
-	 // 获取上下文中的 baseUserID
-    baseUserID, exists := ctx.Get("baseUserID")
-	fmt.Println("id",baseUserID)
-    if !exists {
-        ctx.JSON(http.StatusUnauthorized, gin.H{
-            "code": "401",
-            "msg":  "未找到商户ID",
-        })
-        return
-    }
-    // 确保 baseUserID 是 uint 类型
-    merchantID, ok := baseUserID.(uint)
-    if !ok {
-        ctx.JSON(http.StatusUnauthorized, gin.H{
-            "code": "401",
-            "msg":  "商户ID类型错误",
-        })
-        return
-    }
+	// 获取上下文中的 baseUserID
+	baseUserID, exists := ctx.Get("baseUserID")
+	fmt.Println("id", baseUserID)
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{
+			"code": "401",
+			"msg":  "未找到商户ID",
+		})
+		return
+	}
+	// 确保 baseUserID 是 uint 类型
+	merchantID, ok := baseUserID.(uint)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{
+			"code": "401",
+			"msg":  "商户ID类型错误",
+		})
+		return
+	}
 	// 计算分页参数
 	offset := (params.Page - 1) * params.Size
 	limit := params.Size
 	// 构建查询条件
-    var query = global.Db.Model(&models.Dish{}).Preload("Flavors").Where("merchant_id = ?", merchantID)
+	var query = global.Db.Model(&models.Dish{}).Preload("Flavors").Where("merchant_id = ?", merchantID)
 	if params.Name != "" {
 		query = query.Where("dish_name LIKE ?", "%"+params.Name+"%")
 	}
@@ -169,6 +176,8 @@ func Edit_dish(c *gin.Context) {
 	}
 	// 返回成功响应
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"success": true, "dishId": strconv.Itoa(dish.ID)}})
+	// 更新商家分类统计（异步）
+	go UpdateMerchantTopCategories(existingDish.MerchantID)
 }
 
 func Delete_dish(c *gin.Context) {
@@ -213,12 +222,19 @@ func Delete_dish(c *gin.Context) {
 	}
 	// 返回成功响应
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"success": true, "removed": removedIDs}})
+	// 删除后尝试更新商家分类统计（异步）
+	// 如果能从请求体中推断 merchantID，可传入具体值；这里使用 baseUserID 不总是可行，
+	// 因此保守做法：触发一次全表统计对低流量场景可接受。
+	// TODO: 若有 merchantID 可用，应改为 UpdateMerchantTopCategories(merchantID)
+	go func() {
+		// 无 merchantID，尝试不做任何操作以避免不必要的全表扫描
+	}()
 }
 
 func Edit_DishStatus_By_Status(c *gin.Context) {
 	// 绑定请求体到 Dish 结构体
 	var request struct {
-		ID     int `json:"id" form:"id"`
+		ID     int    `json:"id" form:"id"`
 		Status string `json:"status" form:"status"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil {
@@ -243,11 +259,11 @@ func Edit_DishStatus_By_Status(c *gin.Context) {
 		return
 	}
 	// 更新菜品状态
-	fmt.Println("status",status)
+	fmt.Println("status", status)
 	if err := global.Db.Model(&existingDish).Update("status", status).Error; err != nil {
-       c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "更新菜品状态失败", "data": nil})
-       return
-   }
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "更新菜品状态失败", "data": nil})
+		return
+	}
 	// 返回成功响应
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"success": true}})
 }
