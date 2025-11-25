@@ -141,6 +141,10 @@ func SetRouter() *gin.Engine {
 
 		auth.GET("/user/cart", controller.GetUserCart)
 		auth.POST("/user/cart/add", controller.AddToCart) // 添加到购物车
+		auth.POST("/user/cart/selectAll", controller.SelectAll)
+		auth.POST("/user/cart/selectItem", controller.SelectItem)
+		auth.POST("/user/cart/selectShop", controller.SelectShop)
+
 		// ====== Rider 扩展接口（根据 index.ts 补全） ======
 		// 配送状态扩展
 		auth.PUT("/rider/orders/:orderId/start", controller.StartDelivery)
