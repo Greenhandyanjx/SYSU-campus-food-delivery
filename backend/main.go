@@ -15,9 +15,9 @@ func main() {
 	config.InitDB()
 
 	// 3. 执行自动建表（AutoMigrate 是幂等的，可以每次启动都跑，不会清空数据）
-	if err := config.Initalldb(); err != nil { // ⭐【改成带错误判断】
-		log.Fatalf("Initalldb failed: %v", err)
-	}
+	// if err := config.Initalldb(); err != nil { // ⭐【改成带错误判断】
+	// 	log.Fatalf("Initalldb failed: %v", err)
+	// }
 
 	// 4. 初始化路由
 	r := router.SetRouter()
