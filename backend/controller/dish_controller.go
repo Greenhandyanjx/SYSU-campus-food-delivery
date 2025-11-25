@@ -3,6 +3,8 @@ package controller
 import (
 	"backend/global"
 	"backend/models"
+	"backend/utils"
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -40,6 +42,13 @@ func Dish_add(ctx *gin.Context) {
 	}
 	// 成功创建后，更新商家的分类统计
 	go UpdateMerchantTopCategories(dish.MerchantID)
+	// 清除相关缓存（用户首页与该商家详情缓存）
+	go func(mid uint) {
+		ctx := context.Background()
+		_ = utils.Del(ctx, "stores:all")
+		_ = utils.Del(ctx, fmt.Sprintf("store:data:base_id:%d", mid))
+		_ = utils.Del(ctx, fmt.Sprintf("store:base_id:%d", mid))
+	}(dish.MerchantID)
 	ctx.JSON(http.StatusOK, gin.H{
 		"code": "1",
 		"msg":  "dish added successfully",

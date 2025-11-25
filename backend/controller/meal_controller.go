@@ -3,7 +3,9 @@ package controller
 import (
 	"backend/global"
 	"backend/models"
+	"backend/utils"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -109,6 +111,12 @@ func Meal_add(ctx *gin.Context) {
 	})
 	// 创建成功后更新商家分类统计
 	go UpdateMerchantTopCategories(meal.MerchantID)
+	// 清除用户首页与该商家详情缓存
+	go func(mid uint) {
+		_ = utils.Del(context.Background(), "stores:all")
+		_ = utils.Del(context.Background(), fmt.Sprintf("store:data:base_id:%d", mid))
+		_ = utils.Del(context.Background(), fmt.Sprintf("store:base_id:%d", mid))
+	}(meal.MerchantID)
 }
 
 func Meal_Edit(c *gin.Context) {
@@ -143,6 +151,12 @@ func Meal_Edit(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"success": true, "mealId": strconv.Itoa(meal.ID)}})
 	// 编辑成功后更新商家分类统计
 	go UpdateMerchantTopCategories(existingMeal.MerchantID)
+	// 清除相关缓存
+	go func(mid uint) {
+		_ = utils.Del(context.Background(), "stores:all")
+		_ = utils.Del(context.Background(), fmt.Sprintf("store:data:base_id:%d", mid))
+		_ = utils.Del(context.Background(), fmt.Sprintf("store:base_id:%d", mid))
+	}(existingMeal.MerchantID)
 }
 
 func Meal_Delete(c *gin.Context) {
@@ -202,8 +216,9 @@ func Meal_Delete(c *gin.Context) {
 	// 返回成功响应
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"success": true, "removed": removedIDs}})
 	// 删除后建议更新商家分类统计（如果可得 merchantID）
+	// 清除全量缓存以保证用户端能尽快看到变更
 	go func() {
-		// no-op placeholder; if merchantID known, call UpdateMerchantTopCategories(merchantID)
+		_ = utils.Del(context.Background(), "stores:all")
 	}()
 }
 
@@ -243,6 +258,17 @@ func Edit_Meal_Status(c *gin.Context) {
 	}
 	// 返回成功响应
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"success": true}})
+	// 清除相关缓存（尝试获取套餐的 merchant 后再失效）
+	go func() {
+		var meal models.Meal
+		if err := global.Db.First(&meal, request.ID).Error; err == nil {
+			_ = utils.Del(context.Background(), "stores:all")
+			_ = utils.Del(context.Background(), fmt.Sprintf("store:data:base_id:%d", meal.MerchantID))
+			_ = utils.Del(context.Background(), fmt.Sprintf("store:base_id:%d", meal.MerchantID))
+		} else {
+			_ = utils.Del(context.Background(), "stores:all")
+		}
+	}()
 }
 
 // 分页获取套餐信息

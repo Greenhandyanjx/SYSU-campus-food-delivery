@@ -26,6 +26,12 @@ func InitDB() {
 	sqldb.SetConnMaxIdleTime(5 * time.Minute)
 	sqldb.SetConnMaxLifetime(30 * time.Minute)
 	global.Db = db
+
+	// Try initialize Redis; ignore failure but log if needed
+	if err := InitRedis(); err != nil {
+		// don't fail startup, just log
+		fmt.Println("warning: redis init failed:", err)
+	}
 }
 
 func Initalldb() error {
