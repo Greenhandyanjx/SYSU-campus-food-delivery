@@ -11,15 +11,14 @@ func main() {
 	// 1. 加载配置
 	config.InitConfig()
 
-	// 2. 初始化数据库连接
-	// 这里注释掉了，因为已经在config.InitConfig()中初始化了
-	//config.InitDB()
+	// 2. 初始化数据库连接 ⭐【新增/恢复】——不要再依赖 InitConfig 里偷偷初始化
+	config.InitDB()
 
-	// 3. 执行自动建表
-	//config.Initalldb()
+	// 3. 执行自动建表（AutoMigrate 是幂等的，可以每次启动都跑，不会清空数据）
+	if err := config.Initalldb(); err != nil { // ⭐【改成带错误判断】
+		log.Fatalf("Initalldb failed: %v", err)
+	}
 
-	//不改动数据执行一次即可
-	//config.Initalldb()
 	// 4. 初始化路由
 	r := router.SetRouter()
 
@@ -28,5 +27,5 @@ func main() {
 		log.Fatalf("Server startup failed: %v", err)
 	}
 
-	fmt.Println("server start at port 3000")
+	fmt.Println("server start at port", config.AppConfig.App.Port) // ⭐ 顺带改个真实端口
 }

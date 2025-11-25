@@ -29,34 +29,64 @@ func InitDB() {
 }
 
 func Initalldb() error {
-	if err := global.Db.AutoMigrate(&models.Dish{}, &models.Flavor{}); err != nil {
-		fmt.Println("dish,flavor table create fail")
+	if global.Db == nil {
+		log.Println("Initalldb: global.Db is nil, please call InitDB() first")
+		return fmt.Errorf("global.Db is nil")
+	}
+
+	// 一个小工具函数，方便打印是哪一步出错
+	migrate := func(name string, fn func(*gorm.DB) error) error {
+		log.Printf(">>> AutoMigrate start: %s\n", name)
+		if err := fn(global.Db); err != nil {
+			log.Printf("xxx AutoMigrate failed: %s, err=%v\n", name, err)
+			return fmt.Errorf("migrate %s: %w", name, err)
+		}
+		log.Printf("<<< AutoMigrate ok: %s\n", name)
+		return nil
+	}
+
+	// 1. dish + flavor
+	if err := migrate("Dish + Flavor", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.Dish{}, &models.Flavor{})
+	}); err != nil {
 		return err
 	}
-	if err := global.Db.Table("base_users").AutoMigrate(&models.BaseUser{}); err != nil {
-		fmt.Println("base_user table create fail")
+
+	// 2. 用户/商户/骑手这些基础表
+	if err := migrate("BaseUser", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.BaseUser{})
+	}); err != nil {
 		return err
 	}
-	if err := global.Db.Table("users").AutoMigrate(&models.User{}); err != nil {
-		fmt.Println("user table create fail")
+
+	if err := migrate("User", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.User{})
+	}); err != nil {
 		return err
 	}
-	if err := global.Db.Table("riders").AutoMigrate(&models.Rider{}); err != nil {
-		fmt.Println("riders table create fail")
+
+	if err := migrate("Rider", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.Rider{})
+	}); err != nil {
 		return err
 	}
-	if err := global.Db.Table("merchants").AutoMigrate(&models.Merchant{}); err != nil {
-		fmt.Println("merchants table create fail")
+
+	if err := migrate("Merchant", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.Merchant{})
+	}); err != nil {
 		return err
 	}
-	if err := global.Db.Table("categories").AutoMigrate(&models.Category{}); err != nil {
-		fmt.Println("categories table create fail")
+
+	// 3. 分类
+	if err := migrate("Category", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.Category{})
+	}); err != nil {
 		return err
 	}
 
 	// Seed fixed categories (1..15) if table is empty
 	var cnt int64
-	global.Db.Table("categories").Count(&cnt)
+	global.Db.Model(&models.Category{}).Count(&cnt)
 	if cnt == 0 {
 		fixed := []models.Category{
 			{ID: 1, Name: "招牌套餐", Type: "common", Sort: 1},
@@ -76,124 +106,154 @@ func Initalldb() error {
 			{ID: 15, Name: "精致下午茶", Type: "common", Sort: 15},
 		}
 		for _, fc := range fixed {
-			// use Create with explicit ID
 			global.Db.Exec("INSERT INTO categories (id, name, type, sort) VALUES (?, ?, ?, ?)", fc.ID, fc.Name, fc.Type, fc.Sort)
 		}
 	}
-	if err := global.Db.Table("meal_dishes").AutoMigrate(&models.MealDish{}); err != nil {
-		fmt.Println("mealdish table create fail")
-		return err
-	}
-	// 创建 meal
-	if err := global.Db.Table("meals").AutoMigrate(&models.Meal{}); err != nil {
-		fmt.Println("mealdish table create fail")
-		return err
-	}
-	if err := global.Db.Table("orders").AutoMigrate(&models.Order{}); err != nil {
-		fmt.Println("orders table create fail")
-		return err
-	}
-	// 聊天消息表
-	if err := global.Db.Table("chat_messages").AutoMigrate(&models.ChatMessage{}); err != nil {
-		fmt.Println("chat_messages table create fail")
-		return err
-	}
-	if err := global.Db.Table("rider_profiles").AutoMigrate(&models.RiderProfile{}); err != nil {
-		fmt.Println("rider_profiles table create fail")
-		return err
-	}
-	// if err := global.Db.Table("order-dish").AutoMigrate(&models.OrderDish{}); err != nil {
-	// 	fmt.Println("orderdish table create fail")
-	// 	panic(err)
-	// }
-	// if err := global.Db.AutoMigrate(&models.OrderMeal{}); err != nil {
-	// 	fmt.Println("ordermeal table create fail")
-	// 	panic(err)
-	// }
-	// if err := global.Db.Table("sales-stats").AutoMigrate(&models.SalesStat{}); err != nil {
-	// 	fmt.Println("salesstats table create fail")
-	// 	panic(err)
-	// }
-	if err := global.Db.Table("consignees").AutoMigrate(&models.Consignee{}); err != nil {
-		fmt.Println("consignees table create fail")
-		panic(err)
-	}
-	if err := global.Db.Table("addresses").AutoMigrate(&models.Address{}); err != nil {
-		fmt.Println("addressees table create fail")
-		panic(err)
-	}
-	if err := global.Db.Table("orders").AutoMigrate(&models.Order{}); err != nil {
-		fmt.Println("orders table create fail")
-		panic(err)
-	}
-	if err := global.Db.Table("rider_wallets").AutoMigrate(&models.RiderWallet{}); err != nil {
-		fmt.Println("rider_wallets table create fail")
+
+	// 4. 其它业务表
+	if err := migrate("MealDish", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.MealDish{})
+	}); err != nil {
 		return err
 	}
 
-	if err := global.Db.Table("rider_income_records").AutoMigrate(&models.RiderIncomeRecord{}); err != nil {
-		fmt.Println("rider_income_records table create fail")
+	if err := migrate("Meal", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.Meal{})
+	}); err != nil {
 		return err
 	}
 
-	if err := global.Db.Table("rider_withdraws").AutoMigrate(&models.RiderWithdraw{}); err != nil {
-		fmt.Println("rider_withdraws table create fail")
+	if err := migrate("Order", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.Order{})
+	}); err != nil {
 		return err
 	}
 
-	if err := global.Db.Table("delivery_routes").AutoMigrate(&models.DeliveryRoute{}); err != nil {
-		fmt.Println("delivery_routes table create fail")
+	if err := migrate("ChatMessage", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.ChatMessage{})
+	}); err != nil {
 		return err
 	}
-	//创建store
-	if err := global.Db.Table("stores").AutoMigrate(&models.Store{}); err != nil {
-		fmt.Println("stores table create fail")
+
+	// 这里就是刚才 SQL 提到的那张表，大概率是它在搞事
+	if err := migrate("RiderProfile", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.RiderProfile{})
+	}); err != nil {
 		return err
 	}
+
+	if err := migrate("OrderDish", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.OrderDish{})
+	}); err != nil {
+		return err
+	}
+
+	if err := migrate("OrderMeal", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.OrderMeal{})
+	}); err != nil {
+		return err
+	}
+
+	if err := migrate("SalesStat", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.SalesStat{})
+	}); err != nil {
+		return err
+	}
+
+	if err := migrate("Consignee", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.Consignee{})
+	}); err != nil {
+		return err
+	}
+
+	if err := migrate("Address", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.Address{})
+	}); err != nil {
+		return err
+	}
+
+	if err := migrate("RiderWallet", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.RiderWallet{})
+	}); err != nil {
+		return err
+	}
+
+	if err := migrate("RiderIncomeRecord", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.RiderIncomeRecord{})
+	}); err != nil {
+		return err
+	}
+
+	if err := migrate("RiderWithdraw", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.RiderWithdraw{})
+	}); err != nil {
+		return err
+	}
+
+	if err := migrate("DeliveryRoute", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.DeliveryRoute{})
+	}); err != nil {
+		return err
+	}
+
+	if err := migrate("Store", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.Store{})
+	}); err != nil {
+		return err
+	}
+
 	// ==== Rider extended models ====
-
-	if err := global.Db.Table("rider_issues").AutoMigrate(&models.RiderIssue{}); err != nil {
-		fmt.Println("rider_issues table create fail")
+	if err := migrate("RiderIssue", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.RiderIssue{})
+	}); err != nil {
 		return err
 	}
 
-	if err := global.Db.Table("rider_reviews").AutoMigrate(&models.RiderReview{}); err != nil {
-		fmt.Println("rider_reviews table create fail")
+	if err := migrate("RiderReview", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.RiderReview{})
+	}); err != nil {
 		return err
 	}
 
-	if err := global.Db.Table("rider_notifications").AutoMigrate(&models.RiderNotification{}); err != nil {
-		fmt.Println("rider_notifications table create fail")
+	if err := migrate("RiderNotification", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.RiderNotification{})
+	}); err != nil {
 		return err
 	}
 
-	if err := global.Db.Table("rider_system_messages").AutoMigrate(&models.RiderSystemMessage{}); err != nil {
-		fmt.Println("rider_system_messages table create fail")
+	if err := migrate("RiderSystemMessage", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.RiderSystemMessage{})
+	}); err != nil {
 		return err
 	}
 
-	if err := global.Db.Table("rider_work_settings").AutoMigrate(&models.RiderWorkSettings{}); err != nil {
-		fmt.Println("rider_work_settings table create fail")
+	if err := migrate("RiderWorkSettings", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.RiderWorkSettings{})
+	}); err != nil {
 		return err
 	}
 
-	if err := global.Db.Table("rider_account_settings").AutoMigrate(&models.RiderAccountSettings{}); err != nil {
-		fmt.Println("rider_account_settings table create fail")
+	if err := migrate("RiderAccountSettings", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.RiderAccountSettings{})
+	}); err != nil {
 		return err
 	}
 
-	if err := global.Db.Table("rider_notification_settings").AutoMigrate(&models.RiderNotificationSettings{}); err != nil {
-		fmt.Println("rider_notification_settings table create fail")
+	if err := migrate("RiderNotificationSettings", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.RiderNotificationSettings{})
+	}); err != nil {
 		return err
 	}
 
-	if err := global.Db.Table("rider_verifications").AutoMigrate(&models.RiderVerification{}); err != nil {
-		fmt.Println("rider_verifications table create fail")
+	if err := migrate("RiderVerification", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.RiderVerification{})
+	}); err != nil {
 		return err
 	}
 
-	if err := global.Db.Table("rider_heatmap_points").AutoMigrate(&models.RiderHeatmapPoint{}); err != nil {
-		fmt.Println("rider_heatmap_points table create fail")
+	if err := migrate("RiderHeatmapPoint", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.RiderHeatmapPoint{})
+	}); err != nil {
 		return err
 	}
 
