@@ -253,6 +253,24 @@ const demoDishes = [
   { id: 21, name: '学生特惠套餐A', price: 29, desc: '主食+饮品+小吃组合', tags: ['套餐'], image: '/src/assets/demo/set_a.jpg', category: '套餐', sales: 311, count: 0 },
   { id: 22, name: '情侣双人套餐', price: 55, desc: '两份主食+甜点+饮品', tags: ['双人'], image: '/src/assets/demo/set_b.jpg', category: '套餐', sales: 133, count: 0 }
 ]
+// 与首页一致的 15 个分类映射（id -> 中文标签）
+const categoryLabels: Record<number, string> = {
+  1: '招牌套餐',
+  2: '现煮粉面',
+  3: '汉堡炸鸡',
+  4: '奶茶咖啡',
+  5: '日式便当',
+  6: '烧烤烤肉',
+  7: '水果拼盘',
+  8: '精致甜品',
+  9: '家常快炒',
+  10: '粥粉面饭',
+  11: '极速配送',
+  12: '午餐推荐',
+  13: '低价满减',
+  14: '沙拉轻食',
+  15: '精致下午茶',
+}
 /* ------------------ 页面加载与接口请求 ------------------ */
 async function load() {
   const name = decodeURIComponent(String(route.params.name || ''))
@@ -264,15 +282,91 @@ async function load() {
     const res = await getStoreByName(name)
     const data = res && res.data ? res.data.data || res.data : res
     if (!data) throw new Error('无返回数据')
-    store.value = data
 
-    const id = data.id || data.storeId
+    // 兼容不同后端字段命名，映射常用字段
+    store.value = {
+      id: data.id || data.ID || data.storeId,
+      base_id: data.base_id || data.baseId || data.baseID || (data.merchant && (data.merchant.base_id || data.merchant.baseId)),
+      name: data.name || data.ShopName || data.shop_name,
+      logo: data.logo || data.Logo || data.logoUrl,
+      desc: data.desc || data.ShopLocation || data.shop_location || data.description,
+      shop_location: data.shop_location || data.ShopLocation || data.shop_location,
+      rating: data.rating || 4.8,
+      minOrder: data.minOrder || data.min_order || data.min_order_value,
+      deliveryTime: data.deliveryTime || data.delivery_time,
+      openTime: data.openTime || data.open_time,
+      phone: data.phone || data.Phone || (data.merchant && (data.merchant.phone || data.merchant.Phone)),
+      bg: data.bg || data.background,
+    }
+
+    const id = store.value.id
     if (!id) throw new Error('无有效店铺ID')
 
     const r2 = await getDishesByStore(id)
     const dd = r2 && r2.data ? r2.data.data || r2.data : r2
-    if (!dd || !Array.isArray(dd) || dd.length === 0) throw new Error('空菜品')
-    dishes.value = dd
+    if (!dd) throw new Error('空菜品')
+
+    // dd 可能是数组（旧版本）或 { dishes: [], meals: [], merchant: {} }
+    let dishesArr: any[] = []
+    if (Array.isArray(dd)) {
+      // normalize legacy array items
+      dishesArr = dd.map((d: any) => {
+        const cid = Number(d.Category || d.category || d.categoryId) || undefined
+        const label = cid && categoryLabels[cid] ? categoryLabels[cid] : (d.Category || d.category || '其他')
+        return {
+          id: d.ID || d.id,
+          name: d.DishName || d.name,
+          price: Number(d.Price || d.price) || 0,
+          desc: d.Description || d.desc || '',
+          image: d.ImagePath || d.image || '/src/assets/noImg.png',
+          categoryId: cid,
+          category: label,
+          tags: d.Tags || d.tags || [],
+          count: d.count || 0,
+          sales: d.Sales || d.sales || 0,
+        }
+      })
+    } else {
+      if (Array.isArray(dd.dishes)) {
+        dishesArr = dd.dishes.map((d: any) => {
+          const cid = Number(d.Category || d.category || d.categoryId) || undefined
+          const label = cid && categoryLabels[cid] ? categoryLabels[cid] : (d.Category || d.category || '其他')
+          return {
+            id: d.ID || d.id,
+            name: d.DishName || d.name,
+            price: Number(d.Price || d.price) || 0,
+            desc: d.Description || d.desc || '',
+            image: d.ImagePath || d.image || '/src/assets/noImg.png',
+            categoryId: cid,
+            category: label,
+            tags: d.Tags || d.tags || [],
+            count: 0,
+            sales: d.Sales || d.sales || 0,
+          }
+        })
+      }
+      if (Array.isArray(dd.meals)) {
+        const mealsMapped = dd.meals.map((m: any) => {
+          const cid = Number(m.Category || m.category) || undefined
+          const label = cid && categoryLabels[cid] ? categoryLabels[cid] : (m.Category || m.category || '套餐')
+          return {
+            id: 'm-' + (m.ID || m.id),
+            name: m.Mealname || m.name,
+            price: Number(m.Price || m.price) || 0,
+            desc: m.Description || m.desc || '',
+            image: m.ImagePath || m.image || '/src/assets/noImg.png',
+            categoryId: cid,
+            category: label,
+            tags: m.Tags || ['套餐'],
+            count: 0,
+            sales: m.Sales || m.sales || 0,
+          }
+        })
+        dishesArr = dishesArr.concat(mealsMapped)
+      }
+    }
+
+    dishes.value = dishesArr
     generateCategories()
   } catch (e) {
     console.warn('加载失败，使用Demo数据:', e)
@@ -289,27 +383,53 @@ function useDemoData() {
 }
 
 function generateCategories() {
-  const cset = new Set(dishes.value.map(d => d.category))
-  categories.value = [{ id: 'all', name: '全部', count: dishes.value.length }]
-  cset.forEach(c => {
-    categories.value.push({
-      id: c,
-      name: c,
-      count: dishes.value.filter(d => d.category === c).length
-    })
-  })
+  // 统计每个分类 id 出现的次数（兼容 dish.category 为中文名或数字 id）
+  const counts: Record<string | number, number> = {}
+  for (const d of dishes.value) {
+    // 优先使用 categoryId（数字），否则使用 category 字符串
+    if (d.categoryId) {
+      counts[d.categoryId] = (counts[d.categoryId] || 0) + 1
+    } else if (d.category) {
+      counts[d.category] = (counts[d.category] || 0) + 1
+    }
+  }
+
+  const cats: any[] = [{ id: 'all', name: '全部', count: dishes.value.length }]
+  // 按固定 1..15 顺序，只有存在菜品的分类才显示
+  for (let i = 1; i <= 15; i++) {
+    const label = categoryLabels[i]
+    const cnt = counts[i] || 0
+    if (cnt > 0) {
+      cats.push({ id: i, name: label, count: cnt })
+    }
+  }
+  categories.value = cats
+  console.log('aaa:> ', categories)
+  // 默认选中全部
+  if (!categories.value.find(x => x.id === selectedCategory.value)) selectedCategory.value = 'all'
 }
 
-// 刷新购物车
+// 刷新购物车（仅加载当前店铺相关项并同步到菜品）
 async function refreshCart() {
   try {
-    const r = await getCart({ storeId: store.value.id })
+    const storeIdToSend = store.value.base_id || store.value.id
+    const r = await getCart({ storeId: storeIdToSend })
     const data = r && r.data ? r.data.data || r.data : r
-    cart.value = data && Array.isArray(data) ? data : []
-    // 同步购物车数量到菜品
+    let items: any[] = []
+    if (Array.isArray(data)) items = data
+    else if (Array.isArray(data.items)) items = data.items
+    else if (Array.isArray(data.shops)) {
+      const shop = data.shops.find((s: any) => (s.storeId == storeIdToSend || s.id == storeIdToSend || s.merchant_id == storeIdToSend || s.merchantId == storeIdToSend))
+      items = shop ? shop.items || [] : []
+    }
+    cart.value = items
+    // 同步购物车数量到菜品：兼容多种返回键名（dish_id / dishId / id）
     for (const d of dishes.value) {
-      const item = cart.value.find(c => c.dishId === d.id)
-      d.count = item ? item.qty : 0
+      const item = cart.value.find((c: any) => {
+        const candidates = [c.dishId, c.dish_id, c.DishID, c.DishId, c.id]
+        return candidates.some(x => x !== undefined && String(x) === String(d.id))
+      })
+      d.count = item ? (item.qty || item.Qty || 0) : 0
     }
   } catch (e) {
     cart.value = []
@@ -353,23 +473,28 @@ async function refreshCart() {
 //   }
 // }
 async function add(d: any) {
-  d.count = (d.count || 0) + 1
-  const exist = cart.value.find(c => c.id === d.id)
-  if (exist) {
-    exist.qty++
-  } else {
-    cart.value.push({ id: d.id, name: d.name, price: d.price, qty: 1 })
+  try {
+    const storeIdToSend = store.value.base_id || store.value.id
+    await addToCart({ storeId: storeIdToSend, dishId: d.id, name: d.name, price: d.price, qty: 1 })
+    // 本地乐观更新并刷新购物车以保持一致
+    d.count = (d.count || 0) + 1
+    await refreshCart()
+    ElMessage.success('已加入购物车')
+  } catch (e: any) {
+    ElMessage.error('加入购物车失败: ' + (e && e.message ? e.message : ''))
   }
 }
 
 async function dec(d: any) {
   if ((d.count || 0) <= 0) return
-  d.count--
-  const exist = cart.value.find(c => c.id === d.id)
-  if (exist) {
-    exist.qty--
-    if (exist.qty <= 0)
-      cart.value = cart.value.filter(c => c.id !== d.id)
+  try {
+    const storeIdToSend = store.value.base_id || store.value.id
+    await removeFromCart({ storeId: storeIdToSend, dishId: d.id, qty: 1 })
+    d.count = Math.max(0, (d.count || 0) - 1)
+    await refreshCart()
+    ElMessage.success('已从购物车移除')
+  } catch (e: any) {
+    ElMessage.error('移除失败: ' + (e && e.message ? e.message : ''))
   }
 }
 /* ------------------ 页面展示计算属性 ------------------ */
@@ -378,7 +503,11 @@ async function dec(d: any) {
 const dishesFiltered = computed(() => {
   const q = query.value.trim().toLowerCase()
   return dishes.value.filter(d => {
-    const okCate = selectedCategory.value === 'all' || d.category === selectedCategory.value
+    const sel = selectedCategory.value
+    let okCate = false
+    if (sel === 'all') okCate = true
+    else if (d.categoryId !== undefined && d.categoryId !== null) okCate = String(d.categoryId) === String(sel)
+    else okCate = String(d.category || '') === String(sel) || String(d.category || '') === String(categoryLabels[sel])
     const okQuery =
       !q ||
       d.name.toLowerCase().includes(q) ||

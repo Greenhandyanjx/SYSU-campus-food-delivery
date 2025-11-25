@@ -67,7 +67,11 @@
   			  <div class="right-dishes">
                     <div class="dish" v-for="(d, i) in (s.dishes || []).slice(0,3)" :key="i" @click.stop>
               <div class="dish-img-box">
-                <img class="dish-img" src="/src/assets/noImg.png" alt="dish" />
+                <img
+                    class="dish-img"
+                    :src="d.image?d.image:noImg"
+                    alt="dish"
+                  />
               </div>
               <div class="dish-info">
                 <div class="dish-name">{{ d.name }}</div>
@@ -132,7 +136,7 @@ import banner3 from '@/assets/banners/images/banner3.png'
 import banner4 from '@/assets/banners/images/banner4.png'
 import banner5 from '@/assets/banners/images/banner5.png'
 import axios from 'axios'
-
+import noImg from '@/assets/noImg.png'
 const images = [
   {
     src: banner1,
@@ -283,6 +287,8 @@ async function loadData() {
           name: d.name,
           price: d.price,
           count: 0,
+          image: d.image || noImg,
+          description: d.description || '',
           categories: Array.isArray(d.categoryId) ? d.categoryId.map((cid: number) => catMap[cid] || cid) : [(catMap[d.categoryId] || d.categoryId)],
         }))
         return {
