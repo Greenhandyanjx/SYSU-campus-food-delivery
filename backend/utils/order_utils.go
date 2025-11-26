@@ -174,10 +174,20 @@ func FetchDishnames(c *gin.Context, ordersWithDetails *[]models.OrderWithDishnam
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "查询订单菜品关联表失败", "data": nil})
 		return
 	}
+     // 获取 OrderMeal 列表，并预加载 Meal
+    var orderMeals []models.OrderMeal
+    result1 := global.Db.Preload("Meal").Where("order_id IN ?", orderIDs).Find(&orderMeals)
+    if result1.Error != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "查询订单套餐关联表失败", "data": nil})
+        return
+    }
     // 构建 orderID 到 dishnames 的映射
 	dishnamesMap := make(map[uint]string)
 	for _, orderDish := range orderDishes {
-		dishnamesMap[uint(orderDish.OrderID)] += orderDish.Dish.DishName + ", "
+		dishnamesMap[uint(orderDish.OrderID)] += fmt.Sprintf("%s*%d, ", orderDish.Dish.DishName, orderDish.Num)
+	}
+    for _, orderMeal := range orderMeals {
+		 dishnamesMap[uint(orderMeal.OrderID)] += fmt.Sprintf("%s*%d, ", orderMeal.Meal.Mealname, orderMeal.Num)
 	}
 	// 去除末尾的逗号和空格
 	for orderID, dishnames := range dishnamesMap {

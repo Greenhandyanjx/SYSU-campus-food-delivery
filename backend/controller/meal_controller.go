@@ -214,7 +214,7 @@ func Meal_Delete(c *gin.Context) {
 		return
 	}
 	// 返回成功响应
-	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"success": true, "removed": removedIDs}})
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"succe ss": true, "removed": removedIDs}})
 	// 删除后建议更新商家分类统计（如果可得 merchantID）
 	// 清除全量缓存以保证用户端能尽快看到变更
 	go func() {
@@ -274,6 +274,25 @@ func Edit_Meal_Status(c *gin.Context) {
 // 分页获取套餐信息
 func GetMealsPage(c *gin.Context) {
 	// 获取请求参数
+	// 获取上下文中的 baseUserID
+	baseUserID, exists := c.Get("baseUserID")
+	fmt.Println("id", baseUserID)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"code": "401",
+			"msg":  "未找到商户ID",
+		})
+		return
+	}
+	// 确保 baseUserID 是 uint 类型
+	merchantID, ok := baseUserID.(uint)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"code": "401",
+			"msg":  "商户ID类型错误",
+		})
+		return
+	}
 	page, err1 := strconv.Atoi(c.DefaultQuery("page", "1"))
 	size, err2 := strconv.Atoi(c.DefaultQuery("size", "20"))
 	name := c.Query("name")
@@ -311,7 +330,7 @@ func GetMealsPage(c *gin.Context) {
 	var meals []models.Meal
 	var total int64
 
-	query := global.Db.Model(&models.Meal{})
+	query := global.Db.Model(&models.Meal{}).Where("merchant_id = ?", merchantID)
 
 	if name != "" {
 		query = query.Where("mealname LIKE ?", "%"+name+"%")
