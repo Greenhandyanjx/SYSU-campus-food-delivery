@@ -47,6 +47,10 @@ func SetRouter() *gin.Engine {
 		noAuth.GET("/merchant/orders/status", controller.GetOrderListByStatus)
 		noAuth.GET("/merchant/orders/page", controller.GetOrderPage)
 		noAuth.GET("/merchant/order/detail", controller.GetOrderDetail)
+		// 支付平台回调（notify）
+		noAuth.POST("/order/notify", controller.PaymentNotify)
+		// 前端轮询订单状态（允许无鉴权以兼容扫码页面）
+		noAuth.GET("/order/status", controller.GetOrderStatus)
 		// lookup endpoints for frontend
 		noAuth.GET("/merchant/detail", controller.GetMerchantDetail)
 		noAuth.GET("/baseuser/detail", controller.GetBaseUserDetail)
@@ -145,6 +149,9 @@ func SetRouter() *gin.Engine {
 		auth.POST("/user/cart/selectItem", controller.SelectItem)
 		auth.POST("/user/cart/selectShop", controller.SelectShop)
 
+
+		// 支付相关接口
+		auth.POST("/order/createPayOrder", controller.CreatePayOrder)
 		// ====== Rider 扩展接口（根据 index.ts 补全） ======
 		// 配送状态扩展
 		auth.PUT("/rider/orders/:orderId/start", controller.StartDelivery)

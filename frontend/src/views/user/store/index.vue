@@ -185,6 +185,17 @@
   </div>
 </transition>
 
+  <!-- 支付二维码弹窗 -->
+  <div v-if="showPayModal" class="pay-modal-overlay" @click.self="closePayModal">
+    <div class="pay-modal">
+      <h3>请使用微信/支付宝扫码付款</h3>
+      <img :src="payQrImg" alt="pay-qr" style="width:280px;height:280px;" />
+      <div style="margin-top:12px;display:flex;gap:8px;justify-content:center;">
+        <el-button type="primary" @click="closePayModal">关闭</el-button>
+      </div>
+    </div>
+  </div>
+
 </template>
 
 <script setup lang="ts">
@@ -193,6 +204,7 @@ import ChatLauncher from '@/components/Chat/ChatLauncher.vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getStoreByName, getDishesByStore, addToCart, removeFromCart, getCart } from '@/api/user/store'
+import * as cartApi from '@/api/user/cart'
 
 /* ------------------ 核心数据定义 ------------------ */
 
@@ -543,13 +555,64 @@ function openShop() {
   window.open(`/store/${store.value.name}`, '_blank')
 }
 
-function checkout() {
+async function checkout() {
   if (cart.value.length === 0) {
     ElMessage.warning('购物车为空')
     return
   }
-  ElMessage.success('跳转结算页')
-  // 这里可跳转结算路由
+  try {
+    // 仅支持单商家结算（本页面即为该店铺）——统一使用 shops 数组（长度为 1）
+    const total = cartTotal.value
+    const merchantId = store.value.base_id || store.value.id
+    const payload = { shops: [{ merchantId: Number(merchantId), totalPrice: Number(total.toFixed(2)) }] }
+    console.log('Checkout payload (store):', JSON.stringify(payload))
+    const r = await cartApi.checkout(payload)
+    // 后端返回 { data: { orders: [ ... ] } }
+    const first = r?.data?.orders?.[0] || r?.orders?.[0] || null
+    if (!first) {
+      ElMessage.error('创建支付订单失败')
+      return
+    }
+    const orderId = first.orderId || first.OrderID || first.id || null
+    const codeUrl = first.code_url || first.CodeURL || first.codeUrl || first.out_trade_no || ''
+    if (!orderId || !codeUrl) {
+      ElMessage.error('创建支付订单失败')
+      return
+    }
+    openPayModal(orderId, codeUrl)
+  } catch (e) {
+    ElMessage.error('结算失败')
+  }
+}
+
+// 支付 modal 管理（与购物车页面相同逻辑）
+const showPayModal = ref(false)
+const payQrImg = ref('')
+let payPollTimer: any = null
+
+function openPayModal(orderId: any, codeUrl: string) {
+  payQrImg.value = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=' + encodeURIComponent(codeUrl)
+  showPayModal.value = true
+  payPollTimer = setInterval(async () => {
+    try {
+      const res = await fetch('/api/order/status?orderId=' + encodeURIComponent(orderId), { credentials: 'include' })
+      if (!res.ok) return
+      const body = await res.json()
+      const status = body?.data?.status || null
+      const payStatus = body?.data?.pay_status || null
+      if (status === 2 || payStatus === 'paid') {
+        clearInterval(payPollTimer)
+        showPayModal.value = false
+        ElMessage({ type: 'success', message: '支付成功' })
+        window.location.href = '/#/user/payment/success'
+      }
+    } catch (e) {}
+  }, 2000)
+}
+
+function closePayModal() {
+  showPayModal.value = false
+  if (payPollTimer) { clearInterval(payPollTimer); payPollTimer = null }
 }
 
 /* ------------------ 背景与挂载 ------------------ */
@@ -931,5 +994,9 @@ function decFromPopup(c: any) {
     width: calc(100% - 32px);
   }
 }
+
+/* 支付弹窗样式 */
+.pay-modal-overlay{position:fixed;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.45);z-index:1200}
+.pay-modal{background:#fff;padding:18px;border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,0.2);text-align:center}
 
 </style>
