@@ -1,4 +1,5 @@
 import request from '@/api/merchant/request'
+import { number } from 'echarts'
 
 /**
  * cart.ts API 说明（后端实现参考）
@@ -155,7 +156,7 @@ export async function updateQty(params: { storeId: string; dishId: string; qty: 
  * 说明: 后端需要校验 qty 是否有效（如库存、最大可下单数等）。前端在界面上会限制 qty 不会超过 originalQty（原始加入数量）。
  */
 
-export async function toggleItemSelection(params: { storeId: string; dishId: string; selected: boolean }) {
+export async function toggleItemSelection(params: { storeId: string; dishId: string | number; selected: boolean }) {
   try {
     const res = await request.post('/user/cart/selectItem', params)
     return res.data

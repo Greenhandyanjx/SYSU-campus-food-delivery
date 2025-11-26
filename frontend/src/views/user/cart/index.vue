@@ -174,13 +174,13 @@ async function onToggleShop(shop: any) {
   // ensure shop.selected is consistent
   shop.selected = shop.items.filter(isSelectableItem).length === 0 ? false : shop.items.filter(isSelectableItem).every((x: any) => !!x.selected)
   // fire API without blocking UI
-  try { await cartApi.toggleShopSelection({ storeId: shop.storeId, selected: !!shop.selected }) } catch (e) {}
+  try { await cartApi.toggleShopSelection({  storeId: shop.storeId || shop.merchant_id , selected: !!shop.selected }) } catch (e) {}
 }
 
 async function onToggleItem(shop: any, it: any) {
   // optimistic update already done by v-model; ensure shop selected sync
   shop.selected = shop.items.filter(isSelectableItem).length === 0 ? false : shop.items.filter(isSelectableItem).every((x: any) => !!x.selected)
-  try { await cartApi.toggleItemSelection({ storeId: shop.storeId, dishId: it.dishId, selected: !!it.selected }) } catch (e) {}
+  try { await cartApi.toggleItemSelection({ storeId: shop.storeId || shop.merchant_id , dishId: it.dishId||it.dish_id, selected: !!it.selected }) } catch (e) {}
 }
 
 async function incQty(shop: any, it: any) {

@@ -149,9 +149,15 @@ func SetRouter() *gin.Engine {
 		auth.POST("/user/cart/selectItem", controller.SelectItem)
 		auth.POST("/user/cart/selectShop", controller.SelectShop)
 
-
 		// 支付相关接口
 		auth.POST("/order/createPayOrder", controller.CreatePayOrder)
+
+		// User address management
+		auth.GET("/user/addresses", controller.GetUserAddresses)
+		auth.POST("/user/address", controller.AddUserAddress)
+		auth.PUT("/user/address/:id", controller.EditUserAddress)
+		auth.POST("/user/address/:id/default", controller.SetDefaultAddress)
+		auth.DELETE("/user/address/:id", controller.DeleteUserAddress)
 		// ====== Rider 扩展接口（根据 index.ts 补全） ======
 		// 配送状态扩展
 		auth.PUT("/rider/orders/:orderId/start", controller.StartDelivery)

@@ -55,7 +55,7 @@
         <el-table-column
           v-if="[2, 3, 4].includes(orderStatus)"
           key="orderDishes"
-          prop="dishnames"
+          prop="orderDishes"
           label="订单菜品"
         />
         <el-table-column
