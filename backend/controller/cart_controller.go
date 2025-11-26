@@ -287,9 +287,11 @@ func SelectItem(c *gin.Context) {
 	userID := c.MustGet("baseUserID").(uint)
 
 	var req struct {
-		ItemID   uint `json:"dishId" binding:"required"`   // 前端传 dishId
-		Selected bool `json:"selected" binding:"required"` // true=选中, false=取消
+		ItemID   string `json:"dishId" binding:"required"`   // 前端传 dishId
+		Selected bool   `json:"selected" binding:"required"` // true=选中, false=取消
 	}
+	//将itemid转换为数字
+	req.ItemID = c.PostForm("dishId")
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.Error(c, err)
 		return
