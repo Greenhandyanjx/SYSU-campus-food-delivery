@@ -33,7 +33,7 @@ func UpdateRevenue(c *gin.Context) {
         revenue = models.Revenue{
             MerchantID: order.MerchantID,
             Revenue:    order.TotalPrice, // 假设订单中有 Price 字段
-            Date:       currentDate,
+            Day:       currentDate,
         }
         if err := global.Db.Create(&revenue).Error; err != nil {
             c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "更新营业额失败"})

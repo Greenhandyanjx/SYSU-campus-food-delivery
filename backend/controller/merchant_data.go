@@ -4,6 +4,7 @@ package controller
 import (
 	"backend/global"
 	"backend/models"
+	"backend/utils"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,75 +15,22 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type GetStatisticsParams struct {
-	Begin string `form:"begin" json:"begin"`
-	End   string `form:"end" json:"end"`
-}
 
 func GetDataOverView(ctx *gin.Context) {
 	// 获取上下文中的 baseUserID
-	baseUserID, exists := ctx.Get("baseUserID")
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gin.H{
-			"code": "401",
-			"msg":  "未找到商户ID",
-		})
-		return
-	}
-
-	// 确保 baseUserID 是 uint 类型
-	merchantID, ok := baseUserID.(uint)
-	if !ok {
-		ctx.JSON(http.StatusUnauthorized, gin.H{
-			"code": "401",
-			"msg":  "商户ID类型错误",
-		})
-		return
-	}
-
-	// 绑定请求参数
-	var params GetStatisticsParams
-	if err := ctx.ShouldBindQuery(&params); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"code": "400",
-			"msg":  "请求参数错误",
-		})
-		return
-	}
-
-	// 解析 begin 和 end 参数为时间格式
-	beginTime, err := time.Parse("2006-01-02", params.Begin)
+	merchantID, beginTime, endTime, err := utils.MerchantStatsParams(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code": "400",
-			"msg":  "begin 参数格式错误",
+			"msg":  "参数错误: " + err.Error(),
 		})
 		return
 	}
-
-	endTime, err := time.Parse("2006-01-02", params.End)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"code": "400",
-			"msg":  "end 参数格式错误",
-		})
-		return
-	}
-
-	// 确保 endTime 不早于 beginTime
-	if endTime.Before(beginTime) {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"code": "400",
-			"msg":  "end 参数不能早于 begin 参数",
-		})
-		return
-	}
-
 	// 查询营业额
 	var revenues []models.Revenue
 	if err := global.Db.Table("revenues").
-		Where("merchant_id = ? AND date BETWEEN ? AND ?", merchantID, beginTime, endTime).
-		Select("date", "revenue").
+		Where("merchant_id = ? AND day BETWEEN ? AND ?", merchantID, beginTime, endTime).
+		Select("day", "revenue").
 		Find(&revenues).Error; err != nil {
 		log.Printf("查询营业额失败: %v", err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{
@@ -101,7 +49,7 @@ func GetDataOverView(ctx *gin.Context) {
 	dateList := make([]string, len(revenues))
 	turnoverList := make([]float64, len(revenues))
 	for i, revenue := range revenues {
-		dateList[i] = revenue.Date.Format("2006-01-02")
+		dateList[i] = revenue.Day.Format("2006-01-02")
 		turnoverList[i] = revenue.Revenue
 	}
 
@@ -117,63 +65,16 @@ func GetDataOverView(ctx *gin.Context) {
 }
 
 func GetOrderStatistics(ctx *gin.Context) {
-	// 获取上下文中的 baseUserID
-	baseUserID, exists := ctx.Get("baseUserID")
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gin.H{
-			"code": "401",
-			"msg":  "未找到商户ID",
-		})
-		return
-	}
-
-	// 确保 baseUserID 是 uint 类型
-	merchantID, ok := baseUserID.(uint)
-	if !ok {
-		ctx.JSON(http.StatusUnauthorized, gin.H{
-			"code": "401",
-			"msg":  "商户ID类型错误",
-		})
-		return
-	}
-
-	// 绑定请求参数
-	var params GetStatisticsParams
-	if err := ctx.ShouldBindQuery(&params); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"code": "400",
-			"msg":  "请求参数错误",
-		})
-		return
-	}
-
-	// 解析 begin 和 end 参数为时间格式
-	beginTime, err := time.Parse("2006-01-02", params.Begin)
+	//参数处理
+	merchantID, beginTime, endTime, err := utils.MerchantStatsParams(ctx)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{
 			"code": "400",
-			"msg":  "begin 参数格式错误",
+			"msg":  "参数错误: " + err.Error(),
 		})
 		return
 	}
-
-	endTime, err := time.Parse("2006-01-02", params.End)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"code": "400",
-			"msg":  "end 参数格式错误",
-		})
-		return
-	}
-
-	// 确保 endTime 不早于 beginTime
-	if endTime.Before(beginTime) {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"code": "400",
-			"msg":  "end 参数不能早于 begin 参数",
-		})
-		return
-	}
+	
 
 	// 定义用于接收统计结果的结构体
 	type OrderCountStat struct {
@@ -242,109 +143,35 @@ func GetOrderStatistics(ctx *gin.Context) {
 }
 
 func GetUserData(ctx *gin.Context) {
-	// 获取上下文中的 baseUserID
-	baseUserID, exists := ctx.Get("baseUserID")
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gin.H{
-			"code": "401",
-			"msg":  "未找到商户ID",
-		})
+    merchantID, beginTime, endTime, err := utils.MerchantStatsParams(ctx)
+	if err!=nil{
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
-
-	// 确保 baseUserID 是 uint 类型
-	merchantID, ok := baseUserID.(uint)
-	if !ok {
-		ctx.JSON(http.StatusUnauthorized, gin.H{
-			"code": "401",
-			"msg":  "商户ID类型错误",
-		})
-		return
-	}
-
-	// 绑定请求参数
-	var params GetStatisticsParams
-	if err := ctx.ShouldBindQuery(&params); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"code": "400",
-			"msg":  "请求参数错误",
-		})
-		return
-	}
-
-	// 解析 begin 和 end 参数为时间格式
-	beginTime, err := time.Parse("2006-01-02", params.Begin)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"code": "400",
-			"msg":  "begin 参数格式错误",
-		})
-		return
-	}
-
-	endTime, err := time.Parse("2006-01-02", params.End)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"code": "400",
-			"msg":  "end 参数格式错误",
-		})
-		return
-	}
-
-	// 确保 endTime 不早于 beginTime
-	if endTime.Before(beginTime) {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"code": "400",
-			"msg":  "end 参数不能早于 begin 参数",
-		})
-		return
-	}
-
-	// 查询总用户数和新用户数
-	type UserCount struct {
-		Date       string `json:"date"`
-		TotalUsers int    `json:"total_users"`
-	}
-
-	var userCounts []UserCount
-	if err := global.Db.Table("orders").
-		Where("merchant_id = ? AND DATE(dropof_point) BETWEEN ? AND ?", merchantID, beginTime, endTime).
-		Select("DATE(dropof_point) as date", "COUNT(DISTINCT consignee) as total_users").
-		Group("DATE(dropof_point)").
-		Find(&userCounts).Error; err != nil {
-		log.Printf("查询用户数量失败: %v", err)
-		ctx.JSON(http.StatusInternalServerError, gin.H{
-			"code":    0,
-			"message": "查询失败",
-		})
-		return
-	}
-
-	// 检查查询结果是否为空
-	if len(userCounts) == 0 {
-		log.Printf("查询结果为空")
-	}
-
-	// 提取日期、总用户
-	dateList := make([]string, len(userCounts))
-	totalUserList := make([]int, len(userCounts))
-
-	for i, userCount := range userCounts {
-		dateList[i] = userCount.Date
-		totalUserList[i] = userCount.TotalUsers
-	}
-
-	// 将切片转换为字符串
-	dateListStr := strings.Join(dateList, ",")
-	totalUserListStr := strings.Join(intSliceToStringSlice(totalUserList), ",")
-	// 返回结果
-	ctx.JSON(http.StatusOK, gin.H{
-		"code": "1",
-		"data": gin.H{
-			"dateList":      dateListStr,
-			"totalUserList": totalUserListStr,
-		},
-	})
+    var results []models.Revenue
+	if err:= global.Db.Table("revenues").
+	Where("merchant_id=? AND day BETWEEN ? AND ?",merchantID,beginTime,endTime).
+	Find(&results).Error;err!=nil{
+        ctx.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+        return
+    }
+    fmt.Println(results)
+     // 初始化切片
+    dateList := []string{}
+    userNumbList := []string{}
+    // 遍历查询结果
+    for _, result := range results {
+        dateList = append(dateList, result.Day.Format("2006-01-02"))
+        userNumbList = append(userNumbList, strconv.Itoa(result.Usernumber))
+    }
+	
+    // 返回结果
+    ctx.JSON(http.StatusOK, gin.H{
+        "data": gin.H{
+            "dateList":    strings.Join(dateList, ","),
+            "userNumbList": strings.Join(userNumbList, ","),
+        },
+    })
 }
 
 // 辅助函数：将 int 切片转换为 string 切片
@@ -366,63 +193,18 @@ func GetTopSales(c *gin.Context) {
 	// }
 	typ := "dish"
 	// 绑定请求参数
-	var params GetStatisticsParams
-	if err := c.ShouldBindQuery(&params); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code": "400",
-			"msg":  "请求参数错误",
+    merchantID, beginTime, endTime, err := utils.MerchantStatsParams(c)
+    if err!=nil{
+		c.JSON(http.StatusBadRequest,gin.H{
+			"code":"0",
+			"msg":"参数错误:"+err.Error(),
 		})
-		return
 	}
-
-	// 解析 begin 和 end 参数为时间格式
-	beginTime, err := time.Parse("2006-01-02", params.Begin)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code": "400",
-			"msg":  "begin 参数格式错误",
-		})
-		return
-	}
-
-	endTime, err := time.Parse("2006-01-02", params.End)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code": "400",
-			"msg":  "end 参数格式错误",
-		})
-		return
-	}
-
-	// 确保 endTime 不早于 beginTime
-	if endTime.Before(beginTime) {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"code": "400",
-			"msg":  "end 参数不能早于 begin 参数",
-		})
-		return
-	}
-
 	// limitStr := c.DefaultQuery("limit", "10")
 	limitStr := "10"
 	limit, err := strconv.Atoi(limitStr)
 	if err != nil || limit <= 0 {
 		limit = 10
-	}
-
-	// merchant id 优先从中间件获取
-	var merchantID uint
-	if v, ok := c.Get("baseUserID"); ok {
-		switch id := v.(type) {
-		case uint:
-			merchantID = id
-		case int:
-			merchantID = uint(id)
-		}
-	}
-	if merchantID == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "merchant id required"})
-		return
 	}
 
 	var stats []models.SalesStat
