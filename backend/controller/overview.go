@@ -23,7 +23,7 @@ func GetBusinessData(c *gin.Context) {
      currentDate := time.Now().Format("2006-01-02")
 	 // 查询 revenue 表，获取对应日期的营业额
     if err := global.Db.Model(&models.Revenue{}).
-        Where("merchant_id = ? AND date = ?", baseid, currentDate).
+        Where("merchant_id = ? AND day = ?", baseid, currentDate).
         Select("revenue").
         Scan(&totalRevenue).Error; err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "查询失败"})
