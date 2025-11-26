@@ -282,21 +282,188 @@ func UpdateCartItem(c *gin.Context) {
 	})
 }
 
-// SelectItem - 单个商品选中/取消
+// SelectItem - 单个商品选中/取消，兼容前端请求
 func SelectItem(c *gin.Context) {
+	// 从上下文获取用户ID
 	userID := c.MustGet("baseUserID").(uint)
 
+	// 前端请求体结构，支持数字或字符串
 	var req struct {
-		ItemID   string `json:"dishId" binding:"required"`   // 前端传 dishId
-		Selected bool   `json:"selected" binding:"required"` // true=选中, false=取消
+		StoreID  interface{} `json:"storeId"`
+		DishID   interface{} `json:"dishId" binding:"required"`
+		Selected interface{} `json:"selected" binding:"required"`
 	}
-	//将itemid转换为数字
-	req.ItemID = c.PostForm("dishId")
+
+	// 绑定 JSON
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.Error(c, err)
 		return
 	}
 
+	// --- 转换 storeId 为字符串 ---
+	var storeIDStr string
+	switch v := req.StoreID.(type) {
+	case float64: // 前端传数字
+		storeIDStr = strconv.Itoa(int(v))
+	case string:
+		storeIDStr = v
+	default:
+		storeIDStr = ""
+	}
+
+	// --- 转换 dishId 为 uint ---
+	var dishID uint
+	switch v := req.DishID.(type) {
+	case float64:
+		dishID = uint(v)
+	case string:
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			utils.Error(c, fmt.Errorf("dishId must be numeric: %v", err))
+			return
+		}
+		dishID = uint(n)
+	default:
+		utils.Error(c, fmt.Errorf("invalid type for dishId"))
+		return
+	}
+
+	// --- 转换 selected 为 bool ---
+	var selected bool
+	switch v := req.Selected.(type) {
+	case bool:
+		selected = v
+	case float64: // 前端可能传 0/1
+		selected = v != 0
+	default:
+		utils.Error(c, fmt.Errorf("invalid type for selected"))
+		return
+	}
+
+	// 获取用户购物车
+	var cart models.Cart
+	if err := global.Db.Where("user_id = ?", userID).First(&cart).Error; err != nil {
+		utils.Error(c, err)
+		return
+	}
+
+	// 布尔转 int8 用于数据库
+	selectedInt := int8(0)
+	if selected {
+		selectedInt = 1
+	}
+
+	// 更新数据库
+	if err := global.Db.Model(&models.CartItem{}).
+		Where("cart_id = ? AND dish_id = ?", cart.ID, dishID).
+		Update("selected", selectedInt).Error; err != nil {
+		utils.Error(c, err)
+		return
+	}
+
+	// 返回成功，字段保持和前端一致
+	utils.Success(c, gin.H{
+		"storeId":  storeIDStr,
+		"dishId":   req.DishID,
+		"selected": selected,
+	})
+}
+
+// SelectShop - 单个店铺选中/取消，兼容前端请求
+func SelectShop(c *gin.Context) {
+	userID := c.MustGet("baseUserID").(uint)
+
+	// 前端请求体结构（storeId 可能是数字或字符串）
+	var req struct {
+		StoreID  interface{} `json:"storeId" binding:"required"`
+		Selected interface{} `json:"selected" binding:"required"`
+	}
+
+	// 绑定 JSON
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.Error(c, err)
+		return
+	}
+
+	// --- 转换 storeId 为字符串备用（前端 storeId 可为数字或字符串） ---
+	var storeIDStr string
+	switch v := req.StoreID.(type) {
+	case float64:
+		storeIDStr = strconv.Itoa(int(v))
+	case string:
+		storeIDStr = v
+	default:
+		utils.Error(c, fmt.Errorf("invalid storeId"))
+		return
+	}
+
+	// --- 转换 selected ---
+	var selected bool
+	switch v := req.Selected.(type) {
+	case bool:
+		selected = v
+	case float64: // 兼容 0/1
+		selected = v != 0
+	default:
+		utils.Error(c, fmt.Errorf("invalid selected"))
+		return
+	}
+
+	// bool → int8
+	selectedInt := int8(0)
+	if selected {
+		selectedInt = 1
+	}
+
+	// 获取用户购物车
+	var cart models.Cart
+	if err := global.Db.Where("user_id = ?", userID).First(&cart).Error; err != nil {
+		utils.Error(c, err)
+		return
+	}
+
+	// 根据 storeId 更新所有商品
+	if err := global.Db.Model(&models.CartItem{}).
+		Where("cart_id = ? AND merchant_id = ?", cart.ID, storeIDStr).
+		Update("selected", selectedInt).Error; err != nil {
+		utils.Error(c, err)
+		return
+	}
+
+	// 返回成功
+	utils.Success(c, gin.H{
+		"storeId":  storeIDStr,
+		"selected": selected,
+	})
+}
+
+// SelectAll - 全部商品选中/取消，兼容前端请求
+func SelectAll(c *gin.Context) {
+	userID := c.MustGet("baseUserID").(uint)
+
+	// 前端请求体
+	var req struct {
+		Selected interface{} `json:"selected" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.Error(c, err)
+		return
+	}
+
+	// 转 selected 为 bool
+	var selected bool
+	switch v := req.Selected.(type) {
+	case bool:
+		selected = v
+	case float64:
+		selected = v != 0
+	default:
+		utils.Error(c, fmt.Errorf("invalid type for selected"))
+		return
+	}
+
+	// 获取用户购物车
 	var cart models.Cart
 	if err := global.Db.Where("user_id = ?", userID).First(&cart).Error; err != nil {
 		utils.Error(c, err)
@@ -304,92 +471,21 @@ func SelectItem(c *gin.Context) {
 	}
 
 	// 布尔转 int8
-	selected := int8(0)
-	if req.Selected {
-		selected = 1
+	selectedInt := int8(0)
+	if selected {
+		selectedInt = 1
 	}
 
-	if err := global.Db.Model(&models.CartItem{}).
-		Where("cart_id = ? AND dish_id = ?", cart.ID, req.ItemID).
-		Update("selected", selected).Error; err != nil {
-		utils.Error(c, err)
-		return
-	}
-
-	utils.Success(c, gin.H{
-		"dishId":   req.ItemID,
-		"selected": req.Selected,
-	})
-}
-
-// SelectShop - 店铺内全部商品选中/取消
-func SelectShop(c *gin.Context) {
-	userID := c.MustGet("baseUserID").(uint)
-
-	var req struct {
-		StoreID  uint `json:"storeId" binding:"required"`
-		Selected bool `json:"selected" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.Error(c, err)
-		return
-	}
-
-	var cart models.Cart
-	if err := global.Db.Where("user_id = ?", userID).First(&cart).Error; err != nil {
-		utils.Error(c, err)
-		return
-	}
-
-	selected := int8(0)
-	if req.Selected {
-		selected = 1
-	}
-
-	if err := global.Db.Model(&models.CartItem{}).
-		Where("cart_id = ? AND merchant_id = ?", cart.ID, req.StoreID).
-		Update("selected", selected).Error; err != nil {
-		utils.Error(c, err)
-		return
-	}
-
-	utils.Success(c, gin.H{
-		"storeId":  req.StoreID,
-		"selected": req.Selected,
-	})
-}
-
-// SelectAll - 购物车所有商品选中/取消
-func SelectAll(c *gin.Context) {
-	userID := c.MustGet("baseUserID").(uint)
-
-	var req struct {
-		Selected bool `json:"selected" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.Error(c, err)
-		return
-	}
-
-	var cart models.Cart
-	if err := global.Db.Where("user_id = ?", userID).First(&cart).Error; err != nil {
-		utils.Error(c, err)
-		return
-	}
-
-	selected := int8(0)
-	if req.Selected {
-		selected = 1
-	}
-
+	// 更新该用户所有商品
 	if err := global.Db.Model(&models.CartItem{}).
 		Where("cart_id = ?", cart.ID).
-		Update("selected", selected).Error; err != nil {
+		Update("selected", selectedInt).Error; err != nil {
 		utils.Error(c, err)
 		return
 	}
 
+	// 返回成功
 	utils.Success(c, gin.H{
-		"selected": req.Selected,
+		"selected": selected,
 	})
 }
