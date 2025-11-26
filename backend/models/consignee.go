@@ -6,4 +6,6 @@ type Consignee struct {
 	Name      string `json:"name"`
 	Phone     string `json:"phone"`
 	Addressid int    `json:"addressid"`
+	Tag       string `json:"tag" gorm:"default:''"`
+	IsDefault bool   `json:"is_default" gorm:"default:false"`
 }

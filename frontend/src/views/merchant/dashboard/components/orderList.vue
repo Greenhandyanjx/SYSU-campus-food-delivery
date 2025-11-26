@@ -38,9 +38,9 @@
                     title=""
                     width="200"
                     trigger="hover"
-                    :content="scope.row.dishnames"
+                    :content="scope.row.orderDishes"
                   >
-                    <template v-slot:reference><span>{{ scope.row.dishnames }}</span></template>
+                    <template v-slot:reference><span>{{ scope.row.orderDishes }}</span></template>
                   </el-popover>
                 </div>
               </template>
@@ -72,7 +72,7 @@
               min-width="130"
             >
             </el-table-column>
-            <el-table-column prop="total_price" label="实收金额"> </el-table-column>
+            <el-table-column prop="totalprice" label="实收金额"> </el-table-column>
             <el-table-column label="备注">
               <template v-slot="scope">
                 <div class="ellipsisHidden">
@@ -210,7 +210,7 @@
               <div class="dish-label">菜品</div>
               <div class="dish-list">
                 <div v-for="(item, index) in diaForm.orderDetailList || []" :key="index" class="dish-item">
-                  <span class="dish-name">{{ item.name }}</span>
+                  <span class="dish-name">{{ item.orderDishes }}</span>
                   <span class="dish-num">x{{ item.number || item.qty || item.quantity }}</span>
                   <span class="dish-price">￥{{ item.amount ? (Number(item.amount).toFixed(2)) : '' }}</span>
                 </div>

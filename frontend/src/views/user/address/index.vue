@@ -31,7 +31,7 @@
                   <span :class="['addr-tag', tagColor(a.tag)]">{{ a.tag }}</span>
                   <span v-if="a.isDefault" class="default-tag">默认</span>
                 </div>
-                <div class="addr-detail">{{ a.detail }}</div>
+                                <div class="addr-detail">{{ formatAddress(a) }}</div>
                 <div class="addr-phone">{{ a.phone }}</div>
               </div>
               <div class="addr-actions">
@@ -191,8 +191,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, watch } from 'vue'
+import { ref, computed, nextTick, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { listAddresses, addAddress, editAddress as apiEditAddress, setDefaultAddress, deleteAddress } from '@/api/common/address'
 (window as any)._AMapSecurityConfig = {
   securityJsCode: import.meta.env.VITE_AMAP_SECURITY_CODE || ''
 }
@@ -200,9 +201,8 @@ const activeTab = ref('mine')
 const showDialog = ref(false)
 const searchQuery = ref('')
 
-const myAddresses = ref<any[]>([
-  { name: '张三', phone: '13800000000', detail: '广东省 广州市 中山大学', tag: '家', isDefault: true },
-])
+const myAddresses = ref<any[]>([])
+const editingId = ref<number | null>(null)
 
 const nearbyAddresses = ref<any[]>([
   { name: '教学楼南门', detail: '中山大学南门旁' },
@@ -211,7 +211,80 @@ const nearbyAddresses = ref<any[]>([
 
 const form = ref({ name: '', phone: '', detail: '', tag: '', isDefault: false, lng: 0, lat: 0 })
 
+// helpers: split a raw detail string into address parts, and format for display
+const splitDetailToParts = (detail: string) => {
+  if (!detail) return { province: '', city: '', district: '', street: '' }
+  // split by common delimiters: space, comma, chinese comma
+  const parts = detail.split(/[\s,，]+/).filter(Boolean)
+  const province = parts[0] || ''
+  const city = parts[1] || ''
+  const district = parts[2] || ''
+  const street = parts.slice(3).join(' ') || ''
+  return { province, city, district, street }
+}
+
+const formatAddress = (a: any) => {
+  if (!a) return ''
+  const pieces = [] as string[]
+  if (a.province) pieces.push(a.province)
+  if (a.city) pieces.push(a.city)
+  if (a.district) pieces.push(a.district)
+  if (a.street) pieces.push(a.street)
+  if (a.detail) pieces.push(a.detail)
+  return pieces.filter(Boolean).join(' ')
+}
+
+// Use AMap geocoder (if available) to parse a free-text address into structured fields.
+// Falls back to splitDetailToParts when geocoder is not ready or fails.
+const geocodeAddress = async (detail: string) => {
+  if (!detail) return { province: '', city: '', district: '', street: '', lng: 0, lat: 0, formatted: '' }
+  const AMap = (window as any).AMap
+  if (!AMap || !geocoder) {
+    return { ...splitDetailToParts(detail), lng: 0, lat: 0, formatted: detail }
+  }
+
+  return await new Promise<any>((resolve) => {
+    try {
+      geocoder.getLocation(detail, (status: string, result: any) => {
+        if (status === 'complete' && result && result.geocodes && result.geocodes.length) {
+          const g = result.geocodes[0]
+          // AMap geocode fields: province, city, district, township, street, formattedAddress, location
+              // AMap geocoder returns detailed parts inside `addressComponent`
+              const comp = g.addressComponent || {}
+              const province = comp.province || g.province || ''
+              const city = comp.city || g.city || ''
+              const district = comp.district || g.district || ''
+              // street may be in township/street/streetNumber
+              const street = comp.township || comp.street || (comp.streetNumber && comp.streetNumber.street) || g.township || g.street || ''
+          let lng = 0
+          let lat = 0
+          if (g.location) {
+            // location may be in format 'lng,lat' or an object
+            if (typeof g.location === 'string') {
+              const parts = g.location.split(',')
+              lng = parseFloat(parts[0]) || 0
+              lat = parseFloat(parts[1]) || 0
+            } else if (g.location.lng && g.location.lat) {
+              lng = g.location.lng
+              lat = g.location.lat
+            }
+          }
+          const formatted = g.formattedAddress || g.formatted || detail
+          resolve({ province, city, district, street, lng, lat, formatted })
+          return
+        }
+        // fallback
+        resolve({ ...splitDetailToParts(detail), lng: 0, lat: 0, formatted: detail })
+      })
+    } catch (e) {
+      // any error -> fallback
+      resolve({ ...splitDetailToParts(detail), lng: 0, lat: 0, formatted: detail })
+    }
+  })
+}
+
 function openAdd() {
+  editingId.value = null
   form.value = { name: '', phone: '', detail: '', tag: '', isDefault: false, lng: 0, lat: 0 }
   showDialog.value = true
   nextTick(() => {
@@ -220,24 +293,108 @@ function openAdd() {
 }
 function closeDialog() { showDialog.value = false }
 
-function saveAddress() {
+async function saveAddress() {
   if (!form.value.detail || !form.value.name) {
     ElMessage.warning('请填写完整的收货信息')
     return
   }
-  myAddresses.value.push({ ...form.value })
-  showDialog.value = false
+    // Prefer geocoding via AMap for better structured fields; fallback to simple split
+    const geo = await geocodeAddress(form.value.detail)
+    // If geocoder returned formatted value, update form lng/lat
+    if (geo.lng) form.value.lng = geo.lng
+    if (geo.lat) form.value.lat = geo.lat
+
+    // Strip the high-level parts from the formatted address so `detail` only contains
+    // the specific street/building/room info (we already store province/city/district/street separately).
+    const strippedDetail = stripPrefixFromDetail(geo.formatted || form.value.detail, geo.province || '', geo.city || '', geo.district || '', geo.street || '')
+    const payload: any = {
+      name: form.value.name,
+      phone: form.value.phone,
+      province: geo.province || '',
+      city: geo.city || '',
+      district: geo.district || '',
+      street: geo.street || '',
+      detail: strippedDetail || (geo.formatted || form.value.detail),
+      tag: form.value.tag,
+      is_default: !!form.value.isDefault,
+      lng: form.value.lng,
+      lat: form.value.lat,
+    }
+
+  try {
+    let res: any
+    if (editingId.value) {
+      res = await apiEditAddress(editingId.value, payload)
+    } else {
+      res = await addAddress(payload)
+    }
+    if (res && res.code === 1) {
+      ElMessage.success('保存成功')
+      showDialog.value = false
+      await fetchAddresses()
+    } else {
+      ElMessage.error(res?.msg || '保存失败')
+    }
+  } catch (err) {
+    console.error(err)
+    ElMessage.error('保存地址时发生错误')
+  }
+}
+
+// Remove leading province/city/district/street from a formatted address string.
+// This helps keep `detail` focused on the specific street/room info instead of repeating
+// the high-level administrative parts which are stored separately.
+const stripPrefixFromDetail = (formatted: string, province: string, city: string, district: string, street: string) => {
+  if (!formatted) return ''
+  const parts = [province || '', city || '', district || '', street || '']
+    .map(p => (p || '').trim())
+    .filter(Boolean)
+  if (parts.length === 0) return formatted.trim()
+
+  // Build a regex that allows optional separators (space, comma, Chinese comma) between parts
+  const escapeRegex = (s: string) => s.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
+  const pattern = '^\\s*' + parts.map(p => escapeRegex(p)).join('[\\s,，]*') + '[\\s,，]*'
+  try {
+    const re = new RegExp(pattern)
+    const stripped = formatted.replace(re, '')
+    return (stripped || '').trim()
+  } catch (e) {
+    // If regex construction fails for any reason, just try a naive replace of joined parts
+    const naive = parts.join('')
+    return formatted.replace(naive, '').trim()
+  }
 }
 
 function editAddress(i: number) {
   const a = myAddresses.value[i]
+  if (!a) return
+  editingId.value = a.id || null
   form.value = { ...a }
   showDialog.value = true
   nextTick(initMap)
-  myAddresses.value.splice(i, 1)
 }
 
-function removeAddress(i: number) { myAddresses.value.splice(i, 1) }
+async function removeAddress(i: number) {
+  const a = myAddresses.value[i]
+  if (!a) return
+  const id = a.id
+  if (!id) {
+    myAddresses.value.splice(i, 1)
+    return
+  }
+  try {
+    const res: any = await deleteAddress(id)
+    if (res && res.code === 1) {
+      ElMessage.success('删除成功')
+      await fetchAddresses()
+    } else {
+      ElMessage.error(res?.msg || '删除失败')
+    }
+  } catch (err) {
+    console.error(err)
+    ElMessage.error('删除地址失败')
+  }
+}
 
 function useNearby(a: any) {
   // 尝试从 localStorage 获取用户默认联系人信息（若有）以便快速添加
@@ -249,17 +406,53 @@ function useNearby(a: any) {
   activeTab.value = 'mine'
 }
 
-function setDefault(i: number) {
-  myAddresses.value.forEach(addr => (addr.isDefault = false))
-  myAddresses.value[i].isDefault = true
+async function setDefault(i: number) {
+  const a = myAddresses.value[i]
+  if (!a || !a.id) return
+  try {
+    const res: any = await setDefaultAddress(a.id)
+    if (res && res.code === 1) {
+      ElMessage.success('已设为默认地址')
+      await fetchAddresses()
+    } else {
+      ElMessage.error(res?.msg || '操作失败')
+    }
+  } catch (err) {
+    console.error(err)
+    ElMessage.error('设置默认地址失败')
+  }
+}
+
+async function fetchAddresses() {
+  try {
+    const res: any = await listAddresses()
+    if (res && res.code === 1) {
+      myAddresses.value = Array.isArray(res.data) ? res.data : []
+    } else {
+      myAddresses.value = []
+      // 仅在有错误信息时显示
+      if (res && res.msg) ElMessage.error(res.msg)
+    }
+  } catch (err) {
+    console.error(err)
+    ElMessage.error('加载地址失败')
+    myAddresses.value = []
+  }
 }
 
 const filteredAddresses = computed(() =>
-  myAddresses.value.filter(a =>
-    a.name.includes(searchQuery.value) ||
-    a.detail.includes(searchQuery.value) ||
-    a.tag.includes(searchQuery.value)
-  )
+  myAddresses.value.filter(a => {
+    const q = (searchQuery.value || '').trim()
+    if (!q) return true
+    const name = (a.name || '') as string
+    const tag = (a.tag || '') as string
+    const addrText = formatAddress(a)
+    return (
+      name.includes(q) ||
+      addrText.includes(q) ||
+      tag.includes(q)
+    )
+  })
 )
 
 function applySearch() {
@@ -595,6 +788,10 @@ async function loadNearbyAddresses() {
 }
 
 // 当用户切换标签到 nearby 时，自动加载附近地址
+onMounted(() => {
+  fetchAddresses()
+})
+
 watch(activeTab, (v) => {
   console.log('当前切换 tab：', v)
   if (v === 'nearby') {
