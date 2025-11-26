@@ -281,3 +281,115 @@ func UpdateCartItem(c *gin.Context) {
 		},
 	})
 }
+
+// SelectItem - 单个商品选中/取消
+func SelectItem(c *gin.Context) {
+	userID := c.MustGet("baseUserID").(uint)
+
+	var req struct {
+		ItemID   string `json:"dishId" binding:"required"`   // 前端传 dishId
+		Selected bool   `json:"selected" binding:"required"` // true=选中, false=取消
+	}
+	//将itemid转换为数字
+	req.ItemID = c.PostForm("dishId")
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.Error(c, err)
+		return
+	}
+
+	var cart models.Cart
+	if err := global.Db.Where("user_id = ?", userID).First(&cart).Error; err != nil {
+		utils.Error(c, err)
+		return
+	}
+
+	// 布尔转 int8
+	selected := int8(0)
+	if req.Selected {
+		selected = 1
+	}
+
+	if err := global.Db.Model(&models.CartItem{}).
+		Where("cart_id = ? AND dish_id = ?", cart.ID, req.ItemID).
+		Update("selected", selected).Error; err != nil {
+		utils.Error(c, err)
+		return
+	}
+
+	utils.Success(c, gin.H{
+		"dishId":   req.ItemID,
+		"selected": req.Selected,
+	})
+}
+
+// SelectShop - 店铺内全部商品选中/取消
+func SelectShop(c *gin.Context) {
+	userID := c.MustGet("baseUserID").(uint)
+
+	var req struct {
+		StoreID  uint `json:"storeId" binding:"required"`
+		Selected bool `json:"selected" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.Error(c, err)
+		return
+	}
+
+	var cart models.Cart
+	if err := global.Db.Where("user_id = ?", userID).First(&cart).Error; err != nil {
+		utils.Error(c, err)
+		return
+	}
+
+	selected := int8(0)
+	if req.Selected {
+		selected = 1
+	}
+
+	if err := global.Db.Model(&models.CartItem{}).
+		Where("cart_id = ? AND merchant_id = ?", cart.ID, req.StoreID).
+		Update("selected", selected).Error; err != nil {
+		utils.Error(c, err)
+		return
+	}
+
+	utils.Success(c, gin.H{
+		"storeId":  req.StoreID,
+		"selected": req.Selected,
+	})
+}
+
+// SelectAll - 购物车所有商品选中/取消
+func SelectAll(c *gin.Context) {
+	userID := c.MustGet("baseUserID").(uint)
+
+	var req struct {
+		Selected bool `json:"selected" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.Error(c, err)
+		return
+	}
+
+	var cart models.Cart
+	if err := global.Db.Where("user_id = ?", userID).First(&cart).Error; err != nil {
+		utils.Error(c, err)
+		return
+	}
+
+	selected := int8(0)
+	if req.Selected {
+		selected = 1
+	}
+
+	if err := global.Db.Model(&models.CartItem{}).
+		Where("cart_id = ?", cart.ID).
+		Update("selected", selected).Error; err != nil {
+		utils.Error(c, err)
+		return
+	}
+
+	utils.Success(c, gin.H{
+		"selected": req.Selected,
+	})
+}
