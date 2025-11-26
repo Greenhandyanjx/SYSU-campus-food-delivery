@@ -226,13 +226,14 @@ export async function selectAll(selected: boolean) {
  * 说明: 全局全选/全不选。
  */
 
-export async function checkout() {
+export async function checkout(payload?: any) {
   try {
-    const res = await request.post('/user/cart/checkout')
+    // 调用后端的 createPayOrder 接口，后端会返回 code_url 与 orderId
+    const res = await request.post('/order/createPayOrder', payload)
     return res.data
   } catch (e) {
     // 模拟结算：返回已结算订单 id
-    return { success: true, orderId: 'demo-order-' + Date.now() }
+    return { success: true, orderId: 'demo-order-' + Date.now(), code_url: '' }
   }
 }
 

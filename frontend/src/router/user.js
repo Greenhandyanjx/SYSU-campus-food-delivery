@@ -36,6 +36,7 @@ const routes = [
       { path: 'settings', component: () => import('@/views/user/settings/index.vue') },
       { path: 'vip', component: () => import('@/views/user/vip/index.vue') },
       { path: 'cart', component: () => import('@/views/user/cart/index.vue') },
+      { path: 'payment/success', component: () => import('@/views/user/payment/Success.vue'), meta: { hidden: true } },
       { path: 'my', component: () => import('@/views/user/my/index.vue') },
     ]
   },

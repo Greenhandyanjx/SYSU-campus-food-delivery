@@ -69,6 +69,28 @@
       </div>
     </div>
   </div>
+  <!-- 支付二维码弹窗（放在主 template 内） -->
+  <div v-if="showPayModal" class="pay-modal-overlay" @click.self="closePayModal">
+    <div class="pay-modal">
+      <h3>请使用微信/支付宝扫码付款</h3>
+      <div class="qr-grid" style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:12px;">
+            <div style="text-align:center;">
+              <img :src="'https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=' + encodeURIComponent(payUrl)" alt="pay-qr" style="width:240px;height:240px;border:1px solid #eee;border-radius:6px;" />
+              <div style="margin-top:8px;font-size:13px;color:#333">合计支付金额二维码</div>
+            </div>
+      </div>
+          <div style="margin-top:12px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+            <div v-for="(o, idx) in payOrders" :key="idx" style="min-width:140px;text-align:center;font-size:12px;">
+              <div>商家 {{ o.merchantId }}</div>
+              <div v-if="o.paid" style="color:green;font-weight:600;margin-top:4px">已支付</div>
+              <div v-else style="color:#999;margin-top:4px">未支付</div>
+            </div>
+          </div>
+      <div style="margin-top:12px;display:flex;gap:8px;justify-content:center;">
+        <el-button type="primary" @click="closePayModal">关闭</el-button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -216,14 +238,96 @@ async function onCheckout() {
   const anySelected = (cartData.value.shops || []).some((s: any) => s.items.some((it: any) => it.selected))
   if (!anySelected) { ElMessage({ type: 'warning', message: '请选择要结算的商品' }); return }
   try {
-    const res = await ElMessageBox.confirm('确认要结算已选商品吗？', '结算', { type: 'warning' })
-    // proceed
-    const r = await cartApi.checkout()
-    ElMessage({ type: 'success', message: '结算成功：' + (r.orderId || 'demo') })
-    // reload
-    await load()
+    await ElMessageBox.confirm('确认要结算已选商品吗？', '结算', { type: 'warning' })
+    // 支持多商家结算：构建 shops 数组，后端会为每个商家分别下单并返回多个 code_url
+    const selectedShops = (cartData.value.shops || []).filter((s: any) => s.items.some((it: any) => it.selected))
+    if (selectedShops.length === 0) {
+      ElMessage({ type: 'warning', message: '请选择要结算的商家' })
+      return
+    }
+    // 构建每个商家的总价与 merchantId
+    const shopsPayload = selectedShops.map((s: any) => {
+      // 确保 price 是数字（防御性编程）
+      const total = (s.items || []).reduce((sum: number, it: any) => {
+        const price = Number(it.price) || 0
+        const qty = Number(it.qty) || 0
+        return it.selected ? sum + price * qty : sum
+      }, 0)
+    
+      const merchantId = s.merchant_id || s.storeId || s.merchantId || s.id
+    
+      return {
+        merchantId: Number(merchantId),     // 小驼峰 + 转数字
+        totalPrice: Number(total.toFixed(2))  // 确保是数字，不是四舍五入后的字符串
+      }
+    })
+
+    const payload = {
+      shops: shopsPayload
+    }
+
+// 关键：用 JSON.stringify 打印真实请求体，骗不了人！
+  console.log('【真实请求体】', JSON.stringify(payload, null, 2))
+    const r = await cartApi.checkout(payload)
+    // 后端现在返回 { code_url: ..., orders: [...] }
+    const orders = r?.data?.orders || r?.orders || []
+    const codeUrl = r?.data?.code_url || r?.data?.codeUrl || orders?.[0]?.code_url || orders?.[0]?.CodeURL || orders?.[0]?.codeUrl || orders?.[0]?.out_trade_no || ''
+    if (!orders || orders.length === 0 || !codeUrl) {
+      ElMessage({ type: 'error', message: '创建支付订单失败' })
+      return
+    }
+    // 设置单张二维码地址并轮询订单状态
+    payUrl.value = codeUrl
+    openPayModal(orders)
   } catch (e) {
     // cancel or fail
+  }
+}
+
+// 支付 modal 管理
+const showPayModal = ref(false)
+const payOrders = ref<any[]>([])
+const payUrl = ref<string>('')
+let payPollTimer: any = null
+
+function openPayModal(orders: any) {
+  // orders 可以是单个对象或数组；payUrl 已由 onCheckout 设置
+  payOrders.value = Array.isArray(orders) ? orders : [orders]
+  showPayModal.value = true
+  // 每 2 秒轮询每个订单状态，直到全部支付完成
+  payPollTimer = setInterval(async () => {
+    try {
+      for (const o of payOrders.value) {
+        const id = o.orderId || o.id
+        if (!id) continue
+        const res = await fetch('/api/order/status?orderId=' + encodeURIComponent(id), { credentials: 'include' })
+        if (!res.ok) continue
+        const body = await res.json()
+        const status = body?.data?.status || null
+        const payStatus = body?.data?.pay_status || null
+        if (status === 2 || payStatus === 'paid') {
+          o.paid = true
+        }
+      }
+      // 如果全部 paid，则关闭并跳转
+      if (payOrders.value.every((x: any) => x.paid)) {
+        clearInterval(payPollTimer)
+        showPayModal.value = false
+        ElMessage({ type: 'success', message: '支付成功' })
+        window.location.href = '/#/user/payment/success'
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, 2000)
+}
+
+function closePayModal() {
+  showPayModal.value = false
+  payOrders.value = []
+  if (payPollTimer) {
+    clearInterval(payPollTimer)
+    payPollTimer = null
   }
 }
 
@@ -503,4 +607,10 @@ body {
   .cart-page { width: 92%; padding: 12px; }
   .cart-bottom-inner { width: 92%; }
 }
+
+/* 支付弹窗样式 */
+.pay-modal-overlay{
+  position:fixed;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.45);z-index:1200;
+}
+.pay-modal{background:#fff;padding:18px;border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,0.2);text-align:center}
 </style>

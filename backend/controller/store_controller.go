@@ -123,14 +123,14 @@ func GetStoreByQuery(c *gin.Context) {
 	}
 
 	resp := map[string]interface{}{
-		"id":           m.ID,
-		"base_id":      m.BaseID,
-		"name":         m.ShopName,
-		"desc":         m.ShopLocation,
+		"id":            m.ID,
+		"base_id":       m.BaseID,
+		"name":          m.ShopName,
+		"desc":          m.ShopLocation,
 		"shop_location": m.ShopLocation,
-		"logo":         m.Logo,
-		"phone":        m.Phone,
-		"menu_count":   m.MenuCount,
+		"logo":          m.Logo,
+		"phone":         m.Phone,
+		"menu_count":    m.MenuCount,
 	}
 
 	// cache for 60s
