@@ -15,11 +15,12 @@
 import { defineProps, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
 
-const props = defineProps<{ userdata: any }>()
+const props = defineProps<{ data: any }>()
 
 watch(
-  () => props.userdata,
+  () => props.data,
   async () => {
+    console.log("用户数据",props.data)
     await nextTick()
     initChart()
   },
@@ -43,12 +44,12 @@ function initChart() {
       boundaryGap: false,
       axisLabel: { textStyle: { color: '#666', fontSize: '12px' } },
       axisLine: { lineStyle: { color: '#E5E4E4', width: 1 } },
-      data: props.userdata?.dateList || [],
+      data: props.data?.dateList.split(',') || [],
     },
     yAxis: [{ type: 'value', min: 0, axisLabel: { textStyle: { color: '#666', fontSize: '12px' } } }],
     series: [
-      { name: '用户总量', type: 'line', smooth: false, showSymbol: false, symbolSize: 10, itemStyle: { normal: { color: '#FFD000', lineStyle: { color: '#FFD000' } }, emphasis: { color: '#fff', borderWidth: 5, borderColor: '#FFC100' } }, data: props.userdata?.totalUserList || [] },
-      { name: '新增用户', type: 'line', smooth: false, showSymbol: false, symbolSize: 10, itemStyle: { normal: { color: '#FD7F7F', lineStyle: { color: '#FD7F7F' } }, emphasis: { color: '#fff', borderWidth: 5, borderColor: '#FD7F7F' } }, data: props.userdata?.newUserList || [] },
+      { name: '用户总量', type: 'line', smooth: false, showSymbol: false, symbolSize: 10, itemStyle: { normal: { color: '#FFD000', lineStyle: { color: '#FFD000' } }, emphasis: { color: '#fff', borderWidth: 5, borderColor: '#FFC100' } }, data: props.data?.userNumbList.split(',') || [] },
+      // { name: '新增用户', type: 'line', smooth: false, showSymbol: false, symbolSize: 10, itemStyle: { normal: { color: '#FD7F7F', lineStyle: { color: '#FD7F7F' } }, emphasis: { color: '#fff', borderWidth: 5, borderColor: '#FD7F7F' } }, data: props.data?.newUserList || [] },
     ],
   }
   option && myChart.setOption(option)
