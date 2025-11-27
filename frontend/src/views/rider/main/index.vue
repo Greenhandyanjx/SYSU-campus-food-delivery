@@ -219,10 +219,18 @@ const initData = async () => {
       waitingPickup.value = dashboardData.data.waitPickup || 0
     }
 
-    // 获取新订单数量
-    const newOrdersData = await riderApi.getNewOrders()
-    if (newOrdersData.code === 1 && newOrdersData.data) {
-      pendingOrders.value = newOrdersData.data.length
+    // 获取新订单数量（使用真实API）
+    try {
+      const response = await riderApi.getNewOrders()
+      if (response.code === 1 && Array.isArray(response.data)) {
+        pendingOrders.value = response.data.length
+      } else {
+        pendingOrders.value = 0
+        console.warn('新订单数据格式不正确:', response)
+      }
+    } catch (error) {
+      console.error('获取新订单数量失败:', error)
+      pendingOrders.value = 0
     }
 
   } catch (error) {

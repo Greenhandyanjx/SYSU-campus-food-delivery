@@ -1,4 +1,5 @@
 import request from '@/utils/request'
+import { enhancedAPI } from '@/utils/enhanced-api'
 
 // 骑手API接口
 const riderApi = {
@@ -38,6 +39,17 @@ const riderApi = {
     })
   },
 
+  // 增强版本的新订单API（带演示数据回退）
+  getNewOrdersEnhanced() {
+    return enhancedAPI.wrapApiMethod(() => request({
+      url: '/rider/orders/new',
+      method: 'get'
+    }), {
+      context: '获取新订单',
+      fallbackData: this.getNewOrdersWithDemo().data
+    })();
+  },
+
   // POST /rider/orders/:orderId/accept
   acceptOrder(orderId) {
     return request({
@@ -54,11 +66,11 @@ const riderApi = {
     })
   },
 
-  // PUT /rider/orders/:orderId/pickup
+  // POST /rider/orders/:orderId/pickup
   pickupOrder(orderId) {
     return request({
       url: `/rider/orders/${orderId}/pickup`,
-      method: 'put'
+      method: 'post'
     })
   },
 
@@ -75,6 +87,22 @@ const riderApi = {
     return request({
       url: '/rider/orders/delivering',
       method: 'get'
+    })
+  },
+
+  // POST /rider/orders/:orderId/accept (新增)
+  acceptOrder(orderId) {
+    return request({
+      url: `/rider/orders/${orderId}/accept`,
+      method: 'post'
+    })
+  },
+
+  // POST /rider/orders/:orderId/accept_safe (新增)
+  acceptOrderSafe(orderId) {
+    return request({
+      url: `/rider/orders/${orderId}/accept_safe`,
+      method: 'post'
     })
   },
 
@@ -101,6 +129,19 @@ const riderApi = {
       method: 'get',
       params
     })
+  },
+
+  // 增强版本的历史订单API（带演示数据回退）
+  getOrderHistoryEnhanced(params) {
+    return enhancedAPI.wrapApiMethod((queryParams) => request({
+      url: '/rider/orders/history',
+      method: 'get',
+      params: queryParams
+    }), {
+      context: '获取历史订单',
+      useCache: true,
+      fallbackData: this.getOrderHistoryWithDemo().data
+    })(params);
   },
 
   // 配送状态扩展
@@ -148,6 +189,17 @@ const riderApi = {
     })
   },
 
+  // 增强版本的Dashboard API
+  getDashboardEnhanced() {
+    return enhancedAPI.wrapApiMethod(() => request({
+      url: '/rider/dashboard',
+      method: 'get'
+    }), {
+      context: '获取工作台数据',
+      useCache: true
+    })();
+  },
+
   // 收入相关
   // GET /rider/income/today
   getTodayIncome() {
@@ -179,6 +231,17 @@ const riderApi = {
       url: '/rider/income/stats',
       method: 'get'
     })
+  },
+
+  // 增强版本的收入统计API
+  getIncomeStatsEnhanced() {
+    return enhancedAPI.wrapApiMethod(() => request({
+      url: '/rider/income/stats',
+      method: 'get'
+    }), {
+      context: '获取收入统计',
+      fallbackData: this.getIncomeStatsWithDemo().data
+    })();
   },
 
   // GET /rider/income/details
@@ -250,6 +313,31 @@ const riderApi = {
       method: 'get',
       params
     })
+  },
+
+  // 增强版本的工作统计API
+  getWorkStatsEnhanced(params) {
+    return enhancedAPI.wrapApiMethod((queryParams) => request({
+      url: '/rider/stats/work',
+      method: 'get',
+      params: queryParams
+    }), {
+      context: '获取工作统计',
+      useCache: true,
+      fallbackData: {
+        code: 1,
+        data: {
+          completedOrders: 125,
+          cancelledOrders: 8,
+          totalIncome: 3456.78,
+          efficiency: 95.5,
+          avgDeliveryTime: 18.5,
+          totalDistance: 1250.5,
+          workDays: 15,
+          dailyIncome: 230.45
+        }
+      }
+    })(params);
   },
 
   // GET /rider/stats/monthly
@@ -448,6 +536,74 @@ const riderApi = {
           createdAt: new Date().toISOString()
         }
       ]
+    })
+  },
+
+  getOrderHistoryWithDemo() {
+    return Promise.resolve({
+      code: 1,
+      data: {
+        items: [
+          {
+            id: 1,
+            orderId: 1,
+            amount: 12.50,
+            type: 'delivery',
+            time: '2024-11-28T10:30:00Z',
+            remark: '麦当劳订单配送完成',
+            restaurant: '麦当劳',
+            customer: '张同学',
+            status: 4
+          },
+          {
+            id: 2,
+            orderId: 2,
+            amount: 8.00,
+            type: 'delivery',
+            time: '2024-11-28T14:15:00Z',
+            remark: '肯德基订单配送完成',
+            restaurant: '肯德基',
+            customer: '李老师',
+            status: 4
+          },
+          {
+            id: 3,
+            orderId: 3,
+            amount: 15.00,
+            type: 'delivery',
+            time: '2024-11-28T18:45:00Z',
+            remark: '星巴克订单配送完成',
+            restaurant: '星巴克',
+            customer: '王同学',
+            status: 4
+          },
+          {
+            id: 4,
+            orderId: 4,
+            amount: 10.00,
+            type: 'delivery',
+            time: '2024-11-28T11:20:00Z',
+            remark: '必胜客订单配送完成',
+            restaurant: '必胜客',
+            customer: '赵同学',
+            status: 4
+          },
+          {
+            id: 5,
+            orderId: 5,
+            amount: 7.50,
+            type: 'delivery',
+            time: '2024-11-28T12:10:00Z',
+            remark: '汉堡王订单配送完成',
+            restaurant: '汉堡王',
+            customer: '钱同学',
+            status: 4
+          }
+        ],
+        total: 5,
+        currentPage: 1,
+        pageSize: 20
+      }
     })
   }
 }
