@@ -527,7 +527,7 @@ onMounted(() => {
   }, 30000)
 
   // 保存定时器以便清理
-  timer.orderTimer = orderTimer
+  timer = orderTimer
 })
 
 onUnmounted(() => {
