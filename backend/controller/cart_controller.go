@@ -108,25 +108,92 @@ func AddToCart(c *gin.Context) {
 	fmt.Println("UserID:", userID, "Request:", req)
 
 	// 从 map 中读取前端实际传的字段
-	merchantIDFloat, ok := req["storeId"].(float64)
-	if !ok {
-		utils.Fail(c, "storeId 参数错误")
-		return
+	// 解析前端传入的商家标识（兼容多种字段名与类型）
+	var merchantBaseID uint = 0
+	// helper to resolve numeric value from interface
+	resolveUint := func(v interface{}) (uint, bool) {
+		switch t := v.(type) {
+		case float64:
+			return uint(t), true
+		case int:
+			return uint(t), true
+		case int64:
+			return uint(t), true
+		case uint:
+			return t, true
+		case string:
+			if parsed, err := strconv.ParseUint(t, 10, 32); err == nil {
+				return uint(parsed), true
+			}
+		}
+		return 0, false
 	}
-	dishIDFloat, ok := req["dishId"].(float64)
-	if !ok {
+
+	var dishID uint
+	var qty int
+
+	// dishId
+	if v, ok := req["dishId"]; ok {
+		if dv, ok2 := resolveUint(v); ok2 {
+			dishID = dv
+		}
+	}
+	if dishID == 0 {
 		utils.Fail(c, "dishId 参数错误")
 		return
 	}
-	qtyFloat, ok := req["qty"].(float64)
-	if !ok {
+
+	// qty
+	if v, ok := req["qty"]; ok {
+		switch t := v.(type) {
+		case float64:
+			qty = int(t)
+		case int:
+			qty = t
+		case int64:
+			qty = int(t)
+		case string:
+			if p, err := strconv.Atoi(t); err == nil {
+				qty = p
+			}
+		}
+	}
+	if qty == 0 {
 		utils.Fail(c, "qty 参数错误")
 		return
 	}
 
-	merchantID := uint(merchantIDFloat)
-	dishID := uint(dishIDFloat)
-	qty := int(qtyFloat)
+	// 尝试从多个可能的字段名解析商家标识
+	var storeCandidates = []interface{}{req["storeId"], req["merchantId"], req["merchant_id"], req["merchantID"], req["store_id"]}
+	var found bool
+	for _, cand := range storeCandidates {
+		if cand == nil {
+			continue
+		}
+		if v, ok := resolveUint(cand); ok {
+			// 优先尝试按 base_id 查找商家
+			var m models.Merchant
+			if err := global.Db.Where("base_id = ?", v).First(&m).Error; err == nil {
+				merchantBaseID = m.BaseID
+				found = true
+				break
+			}
+			// 如果按 base_id 未找到，尝试按主键 id 查找并取其 BaseID
+			if err := global.Db.Where("id = ?", v).First(&m).Error; err == nil {
+				merchantBaseID = m.BaseID
+				found = true
+				break
+			}
+			// 最后退回使用该数字作为 base_id（兼容直接传 base_id 的情形）
+			merchantBaseID = v
+			found = true
+			break
+		}
+	}
+	if !found || merchantBaseID == 0 {
+		utils.Fail(c, "storeId 参数错误或无法解析对应商家")
+		return
+	}
 
 	// 1. 找用户的购物车
 	var cart models.Cart
@@ -147,7 +214,7 @@ func AddToCart(c *gin.Context) {
 	var item models.CartItem
 	err := global.Db.Where(
 		"cart_id = ? AND merchant_id = ? AND dish_id = ?",
-		cart.ID, merchantID, dishID,
+		cart.ID, merchantBaseID, dishID,
 	).First(&item).Error
 
 	if err == nil {
@@ -180,7 +247,7 @@ func AddToCart(c *gin.Context) {
 	// 4. 新增购物车 item
 	newItem := models.CartItem{
 		CartID:     cart.ID,
-		MerchantID: merchantID,
+		MerchantID: merchantBaseID,
 		DishID:     dishID,
 		Name:       dish.DishName,
 		Price:      dish.Price, // 已经是 string
@@ -488,4 +555,29 @@ func SelectAll(c *gin.Context) {
 	utils.Success(c, gin.H{
 		"selected": selected,
 	})
+}
+
+// DeleteSelected - 删除当前用户购物车中所有被标记为 selected 的项
+func DeleteSelected(c *gin.Context) {
+	userID := c.MustGet("baseUserID").(uint)
+
+	// 找到用户的 cart
+	var cart models.Cart
+	if err := global.Db.Where("user_id = ?", userID).First(&cart).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			utils.Success(c, gin.H{"success": true, "removed": 0})
+			return
+		}
+		utils.Error(c, err)
+		return
+	}
+
+	// 删除标记 selected 的 cart_items
+	res := global.Db.Where("cart_id = ? AND selected = ?", cart.ID, 1).Delete(&models.CartItem{})
+	if res.Error != nil {
+		utils.Error(c, res.Error)
+		return
+	}
+
+	utils.Success(c, gin.H{"success": true, "removed": res.RowsAffected})
 }

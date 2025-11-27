@@ -74,10 +74,10 @@
     <div class="pay-modal">
       <h3>请使用微信/支付宝扫码付款</h3>
       <div class="qr-grid" style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:12px;">
-            <div style="text-align:center;">
-              <img :src="'https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=' + encodeURIComponent(payUrl)" alt="pay-qr" style="width:240px;height:240px;border:1px solid #eee;border-radius:6px;" />
-              <div style="margin-top:8px;font-size:13px;color:#333">合计支付金额二维码</div>
-            </div>
+        <div style="text-align:center;">
+          <img src="/src/assets/qrcode.png" alt="pay-qr" style="width:200px;height:200px;border:1px solid #eee;border-radius:6px;" />
+          <div style="margin-top:8px;font-size:14px;color:#333;font-weight:600">应付金额：¥{{ payAmount.toFixed(2) }}</div>
+        </div>
       </div>
           <div style="margin-top:12px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
             <div v-for="(o, idx) in payOrders" :key="idx" style="min-width:140px;text-align:center;font-size:12px;">
@@ -237,57 +237,27 @@ const totalPrice = computed(() => {
 async function onCheckout() {
   const anySelected = (cartData.value.shops || []).some((s: any) => s.items.some((it: any) => it.selected))
   if (!anySelected) { ElMessage({ type: 'warning', message: '请选择要结算的商品' }); return }
-  try {
-    await ElMessageBox.confirm('确认要结算已选商品吗？', '结算', { type: 'warning' })
-    // 支持多商家结算：构建 shops 数组，后端会为每个商家分别下单并返回多个 code_url
-    const selectedShops = (cartData.value.shops || []).filter((s: any) => s.items.some((it: any) => it.selected))
-    if (selectedShops.length === 0) {
-      ElMessage({ type: 'warning', message: '请选择要结算的商家' })
-      return
-    }
-    // 构建每个商家的总价与 merchantId
-    const shopsPayload = selectedShops.map((s: any) => {
-      // 确保 price 是数字（防御性编程）
-      const total = (s.items || []).reduce((sum: number, it: any) => {
-        const price = Number(it.price) || 0
-        const qty = Number(it.qty) || 0
-        return it.selected ? sum + price * qty : sum
-      }, 0)
-    
-      const merchantId = s.merchant_id || s.storeId || s.merchantId || s.id
-    
-      return {
-        merchantId: Number(merchantId),     // 小驼峰 + 转数字
-        totalPrice: Number(total.toFixed(2))  // 确保是数字，不是四舍五入后的字符串
-      }
-    })
-
-    const payload = {
-      shops: shopsPayload
-    }
-
-// 关键：用 JSON.stringify 打印真实请求体，骗不了人！
-  console.log('【真实请求体】', JSON.stringify(payload, null, 2))
-    const r = await cartApi.checkout(payload)
-    // 后端现在返回 { code_url: ..., orders: [...] }
-    const orders = r?.data?.orders || r?.orders || []
-    const codeUrl = r?.data?.code_url || r?.data?.codeUrl || orders?.[0]?.code_url || orders?.[0]?.CodeURL || orders?.[0]?.codeUrl || orders?.[0]?.out_trade_no || ''
-    if (!orders || orders.length === 0 || !codeUrl) {
-      ElMessage({ type: 'error', message: '创建支付订单失败' })
-      return
-    }
-    // 设置单张二维码地址并轮询订单状态
-    payUrl.value = codeUrl
-    openPayModal(orders)
-  } catch (e) {
-    // cancel or fail
-  }
+  // 构建被选中的商家与菜品信息并保存在 sessionStorage，支付页优先使用该数据
+  const selectedShops = (cartData.value.shops || []).filter((s: any) => s.items.some((it: any) => it.selected))
+  const shopsPayload = selectedShops.map((s: any) => ({
+    storeId: s.storeId || s.merchant_id || s.id,
+    name: s.name || s.merchant_name || s.storeName || '',
+    items: (s.items || []).filter((it: any) => it.selected).map((it: any) => ({
+      dishId: it.dishId || it.dish_id || it.id,
+      name: it.name || it.dishName || '',
+      price: Number(it.price || 0),
+      qty: it.qty
+    }))
+  }))
+  sessionStorage.setItem('checkout_payload', JSON.stringify({ shops: shopsPayload }))
+  router.push('/user/payment/confirm')
 }
 
 // 支付 modal 管理
 const showPayModal = ref(false)
 const payOrders = ref<any[]>([])
 const payUrl = ref<string>('')
+const payAmount = ref<number>(0)
 let payPollTimer: any = null
 
 function openPayModal(orders: any) {

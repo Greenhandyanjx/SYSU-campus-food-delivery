@@ -192,12 +192,15 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { listAddresses, addAddress, editAddress as apiEditAddress, setDefaultAddress, deleteAddress } from '@/api/common/address'
 (window as any)._AMapSecurityConfig = {
   securityJsCode: import.meta.env.VITE_AMAP_SECURITY_CODE || ''
 }
 const activeTab = ref('mine')
+const route = useRoute()
+const router = useRouter()
 const showDialog = ref(false)
 const searchQuery = ref('')
 
@@ -332,6 +335,7 @@ async function saveAddress() {
       ElMessage.success('保存成功')
       showDialog.value = false
       await fetchAddresses()
+      // 完成后返回地址管理主界面（不自动回跳）
     } else {
       ElMessage.error(res?.msg || '保存失败')
     }
@@ -790,6 +794,7 @@ async function loadNearbyAddresses() {
 // 当用户切换标签到 nearby 时，自动加载附近地址
 onMounted(() => {
   fetchAddresses()
+  // 已移除 route-based 自动打开逻辑（结算页直接内嵌对话）
 })
 
 watch(activeTab, (v) => {
