@@ -189,7 +189,10 @@
   <div v-if="showPayModal" class="pay-modal-overlay" @click.self="closePayModal">
     <div class="pay-modal">
       <h3>请使用微信/支付宝扫码付款</h3>
-      <img :src="payQrImg" alt="pay-qr" style="width:280px;height:280px;" />
+      <div style="text-align:center; margin-top:8px;">
+        <img :src="payQrImg" alt="pay-qr" style="width:200px;height:200px;border:1px solid #eee;border-radius:6px;" />
+        <div style="margin-top:8px;font-size:14px;color:#333;font-weight:600">应付金额：¥{{ payAmount.toFixed(2) }}</div>
+      </div>
       <div style="margin-top:12px;display:flex;gap:8px;justify-content:center;">
         <el-button type="primary" @click="closePayModal">关闭</el-button>
       </div>
@@ -200,8 +203,9 @@
 
 <script setup lang="ts">
 import { reactive, ref, computed, onMounted,onBeforeUnmount } from 'vue'
+import qrImg from '@/assets/qrcode.png'
 import ChatLauncher from '@/components/Chat/ChatLauncher.vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getStoreByName, getDishesByStore, addToCart, removeFromCart, getCart } from '@/api/user/store'
 import * as cartApi from '@/api/user/cart'
@@ -216,6 +220,7 @@ const cart = ref<any[]>([])
 const selectedCategory = ref('all')
 const query = ref('')
 const route = useRoute()
+const router = useRouter()
 /* ------------------ Demo 数据备用 ------------------ */
 const demoStore = {
   id: 1,
@@ -434,7 +439,9 @@ async function refreshCart() {
       const shop = data.shops.find((s: any) => (s.storeId == storeIdToSend || s.id == storeIdToSend || s.merchant_id == storeIdToSend || s.merchantId == storeIdToSend))
       items = shop ? shop.items || [] : []
     }
-    cart.value = items
+    // 保留并规范 selected 字段，方便页面按已选项结算
+    // 如果某项存在于购物车且数量大于 0，则在进入店铺页时自动将其视为已选中，避免进入店铺后出现购物车中有商品但未被选中从而结算页缺失的问题
+    cart.value = (items || []).map((it: any) => ({ ...it, selected: !!it.selected || (!!(it.qty || it.Qty || it.quantity) && Number(it.qty || it.Qty || it.quantity) > 0) }))
     // 同步购物车数量到菜品：兼容多种返回键名（dish_id / dishId / id）
     for (const d of dishes.value) {
       const item = cart.value.find((c: any) => {
@@ -556,42 +563,32 @@ function openShop() {
 }
 
 async function checkout() {
-  if (cart.value.length === 0) {
-    ElMessage.warning('购物车为空')
-    return
-  }
-  try {
-    // 仅支持单商家结算（本页面即为该店铺）——统一使用 shops 数组（长度为 1）
-    const total = cartTotal.value
-    const merchantId = store.value.base_id || store.value.id
-    const payload = { shops: [{ merchantId: Number(merchantId), totalPrice: Number(total.toFixed(2)) }] }
-    console.log('Checkout payload (store):', JSON.stringify(payload))
-    const r = await cartApi.checkout(payload)
-    // 后端返回 { data: { orders: [ ... ] } }
-    const first = r?.data?.orders?.[0] || r?.orders?.[0] || null
-    if (!first) {
-      ElMessage.error('创建支付订单失败')
-      return
-    }
-    const orderId = first.orderId || first.OrderID || first.id || null
-    const codeUrl = first.code_url || first.CodeURL || first.codeUrl || first.out_trade_no || ''
-    if (!orderId || !codeUrl) {
-      ElMessage.error('创建支付订单失败')
-      return
-    }
-    openPayModal(orderId, codeUrl)
-  } catch (e) {
-    ElMessage.error('结算失败')
-  }
+  if (!(cart.value || []).some((it: any) => !!it.selected)) { ElMessage.warning('请选择要结算的商品'); return }
+  // 将当前店铺被选中的商品存入 sessionStorage，支付页读取并展示
+  const selectedItems = (cart.value || []).filter((it: any) => !!it.selected)
+  const payload = [{
+    merchantId: store.value.base_id || store.value.id,
+    storeId: store.value.base_id || store.value.id,
+    name: store.value.name || '',
+    items: selectedItems.map((it: any) => ({
+      dishId: it.dishId || it.id || it.dish_id,
+      name: it.name || it.dishName || '',
+      price: Number(it.price || 0),
+      qty: it.qty
+    }))
+  }]
+  sessionStorage.setItem('checkout_payload', JSON.stringify({ shops: payload }))
+  router.push('/user/payment/confirm')
 }
 
 // 支付 modal 管理（与购物车页面相同逻辑）
 const showPayModal = ref(false)
-const payQrImg = ref('')
+const payQrImg = ref(qrImg)
+const payAmount = ref<number>(0)
 let payPollTimer: any = null
 
 function openPayModal(orderId: any, codeUrl: string) {
-  payQrImg.value = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=' + encodeURIComponent(codeUrl)
+  payQrImg.value = qrImg
   showPayModal.value = true
   payPollTimer = setInterval(async () => {
     try {
@@ -604,7 +601,7 @@ function openPayModal(orderId: any, codeUrl: string) {
         clearInterval(payPollTimer)
         showPayModal.value = false
         ElMessage({ type: 'success', message: '支付成功' })
-        window.location.href = '/#/user/payment/success'
+        window.location.href = '/user/payment/success'
       }
     } catch (e) {}
   }, 2000)
