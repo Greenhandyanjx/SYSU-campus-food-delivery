@@ -14,6 +14,7 @@ func main() {
 
 	// 2. 初始化数据库连接并执行自动建表（AutoMigrate 是幂等的，可以每次启动都跑）
 	// config.InitDB()
+	// // // 3. 执行自动建表（AutoMigrate 是幂等的，可以每次启动都跑，不会清空数据）
 	// if err := config.Initalldb(); err != nil {
 	// 	log.Fatalf("Initalldb failed: %v", err)
 	// }
