@@ -141,8 +141,9 @@
         <span v-if="store.minOrder && cartTotal > 0" class="gap">还差 ¥{{ (store.minOrder - cartTotal).toFixed(2) }}</span>
       </div>
       <div class="text-top" v-else>
-        <strong>共 ¥{{ cartTotal.toFixed(2) }}</strong>
-      </div>
+            <strong>共 ¥{{ (cartTotal + (store.deliveryFee || 0)).toFixed(2) }}</strong>
+            <span>{{store.deliveryFee?`  配送费 ¥${store.deliveryFee}`:'免配送费'}}</span>
+          </div>
     </div>
   </div>
 
@@ -207,7 +208,7 @@ import qrImg from '@/assets/qrcode.png'
 import ChatLauncher from '@/components/Chat/ChatLauncher.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getStoreByName, getDishesByStore, addToCart, removeFromCart, getCart } from '@/api/user/store'
+import { getStoreByName, getStoreById, getDishesByStore, addToCart, removeFromCart, getCart, getDeliveryConfig } from '@/api/user/store'
 import * as cartApi from '@/api/user/cart'
 
 /* ------------------ 核心数据定义 ------------------ */
@@ -230,6 +231,7 @@ const demoStore = {
   rating: 4.9,
   deliveryTime: '25~35 分钟',
   minOrder: 15,
+  deliveryFee: 2,
   openTime: '10:30 - 21:00',
   phone: '138-8888-6666',
   bg: '/src/assets/demo/store_bg.jpg'
@@ -290,13 +292,20 @@ const categoryLabels: Record<number, string> = {
 }
 /* ------------------ 页面加载与接口请求 ------------------ */
 async function load() {
-  const name = decodeURIComponent(String(route.params.name || ''))
+  const rawParam = String(route.params.name || '')
+  const name = decodeURIComponent(rawParam)
   if (!name) {
     useDemoData()
     return
   }
   try {
-    const res = await getStoreByName(name)
+    // 如果参数看起来像 numeric id，优先按 id 查询；否则按 name 查询
+    let res: any
+    if (/^\d+$/.test(rawParam)) {
+      res = await getStoreById(rawParam)
+    } else {
+      res = await getStoreByName(name)
+    }
     const data = res && res.data ? res.data.data || res.data : res
     if (!data) throw new Error('无返回数据')
 
@@ -310,10 +319,29 @@ async function load() {
       shop_location: data.shop_location || data.ShopLocation || data.shop_location,
       rating: data.rating || 4.8,
       minOrder: data.minOrder || data.min_order || data.min_order_value,
+      deliveryFee: data.deliveryFee || data.delivery_fee,
+      deliveryRange: data.deliveryRange || data.delivery_range,
       deliveryTime: data.deliveryTime || data.delivery_time,
       openTime: data.openTime || data.open_time,
       phone: data.phone || data.Phone || (data.merchant && (data.merchant.phone || data.merchant.Phone)),
       bg: data.bg || data.background,
+    }
+
+    // 尝试从后端获取商家配送配置（minOrder / deliveryFee / deliveryRange），覆盖可能存在的后端字段
+    try {
+      const b = store.value.id || store.value.base_id || store.value.baseId
+      if (b) {
+        const cfgRes = await getDeliveryConfig(b)
+        const cfg = cfgRes && cfgRes.data ? cfgRes.data.data || cfgRes.data : cfgRes
+        store.value.minOrder = cfg?.min_price ?? cfg?.minPrice ?? store.value.minOrder ?? 15
+        store.value.deliveryFee = cfg?.delivery_fee ?? cfg?.deliveryFee ?? 2
+        store.value.deliveryRange = cfg?.delivery_range ?? cfg?.deliveryRange ?? 2000
+      }
+    } catch (e) {
+      console.warn('fetch delivery config failed', e)
+      store.value.minOrder = store.value.minOrder || 15
+      store.value.deliveryFee = store.value.deliveryFee || 2
+      store.value.deliveryRange = store.value.deliveryRange || 2000
     }
 
     const id = store.value.id
@@ -429,7 +457,7 @@ function generateCategories() {
 // 刷新购物车（仅加载当前店铺相关项并同步到菜品）
 async function refreshCart() {
   try {
-    const storeIdToSend = store.value.base_id || store.value.id
+    const storeIdToSend = store.value.id || store.value.base_id
     const r = await getCart({ storeId: storeIdToSend })
     const data = r && r.data ? r.data.data || r.data : r
     let items: any[] = []
@@ -493,7 +521,8 @@ async function refreshCart() {
 // }
 async function add(d: any) {
   try {
-    const storeIdToSend = store.value.base_id || store.value.id
+    // prefer primary key id when sending to backend
+    const storeIdToSend = store.value.id || store.value.base_id || store.value.baseId
     await addToCart({ storeId: storeIdToSend, dishId: d.id, name: d.name, price: d.price, qty: 1 })
     // 本地乐观更新并刷新购物车以保持一致
     d.count = (d.count || 0) + 1
@@ -507,7 +536,7 @@ async function add(d: any) {
 async function dec(d: any) {
   if ((d.count || 0) <= 0) return
   try {
-    const storeIdToSend = store.value.base_id || store.value.id
+    const storeIdToSend = store.value.id || store.value.base_id || store.value.baseId
     await removeFromCart({ storeId: storeIdToSend, dishId: d.id, qty: 1 })
     d.count = Math.max(0, (d.count || 0) - 1)
     await refreshCart()
@@ -544,6 +573,11 @@ const cartTotal = computed(() => {
   return cart.value.reduce((sum, item) => sum + item.qty * item.price, 0)
 })
 
+// 显示用总价（含配送费）
+const cartTotalWithDelivery = computed(() => {
+  return Number(cartTotal.value || 0) + Number(store.value.deliveryFee || 0)
+})
+
 /* ------------------ 其他UI事件 ------------------ */
 
 function selectCategory(id: string) {
@@ -567,8 +601,8 @@ async function checkout() {
   // 将当前店铺被选中的商品存入 sessionStorage，支付页读取并展示
   const selectedItems = (cart.value || []).filter((it: any) => !!it.selected)
   const payload = [{
-    merchantId: store.value.base_id || store.value.id,
-    storeId: store.value.base_id || store.value.id,
+    merchantId: store.value.id || store.value.base_id,
+    storeId: store.value.id || store.value.base_id,
     name: store.value.name || '',
     items: selectedItems.map((it: any) => ({
       dishId: it.dishId || it.id || it.dish_id,

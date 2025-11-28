@@ -53,6 +53,8 @@ func SetRouter() *gin.Engine {
 		noAuth.GET("/order/status", controller.GetOrderStatus)
 		// lookup endpoints for frontend
 		noAuth.GET("/merchant/detail", controller.GetMerchantDetail)
+		// 获取商家配送配置（前端展示起送价/配送费/配送范围）
+		noAuth.GET("/merchant/delivery_config", controller.GetMerchantDeliveryConfig)
 		noAuth.GET("/baseuser/detail", controller.GetBaseUserDetail)
 		// debug: list active websocket connections (base_user ids)
 		noAuth.GET("/debug/ws/connections", controller.DebugConnections)
@@ -152,6 +154,8 @@ func SetRouter() *gin.Engine {
 
 		// 支付相关接口
 		auth.POST("/order/createPayOrder", controller.CreatePayOrder)
+		// 创建 pending（用户进入结算但未完成支付时持久化的订单）
+		auth.POST("/order/createPending", controller.CreatePendingOrder)
 
 		// User address management
 		auth.GET("/user/addresses", controller.GetUserAddresses)

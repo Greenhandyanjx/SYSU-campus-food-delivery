@@ -9,7 +9,8 @@ import (
 type Order struct {
 	gorm.Model
 
-	Consigneeid int `json:"consigneeid" gorm:"not null"`
+	Consigneeid int  `json:"consigneeid" gorm:"not null"`
+	Userid      uint `json:"userid" gorm:"not null; default:1"`
 
 	PickupPoint  time.Time `json:"pickuppoint" gorm:"type:datetime;not null;default:current_timestamp"`
 	DropofPoint  time.Time `json:"dropofpoint" gorm:"type:datetime;not null;default:current_timestamp"`
@@ -33,5 +34,4 @@ type Order struct {
 	PickupAt   *time.Time `json:"pickupAt"`   // 取货时间
 	DeliverAt  *time.Time `json:"deliverAt"`  // 开始配送时间
 	FinishAt   *time.Time `json:"finishAt"`   // 完成时间 （已派送）
-
 }
