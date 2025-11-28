@@ -48,16 +48,46 @@ func GetUserCart(c *gin.Context) {
 		utils.Error(c, err)
 		return
 	}
-	// 如果指定了商家，直接返回
+	// 如果指定了商家，直接返回（并用 dish_id 关联菜品表以补充 category）
 	if storeID != "" {
 		merchantID, _ := strconv.ParseUint(storeID, 10, 32)
 		var merchant models.Merchant
-		global.Db.Where("base_id = ?", uint(merchantID)).First(&merchant)
+		global.Db.Where("id = ?", uint(merchantID)).First(&merchant)
+
+		// 构建items响应，关联 dishes 表以补全 category/categoryId/image/name
+		respItems := make([]gin.H, 0, len(items))
+		for _, it := range items {
+			var dish models.Dish
+			var categoryName string = ""
+			var categoryId int = 0
+			var imagePath string = ""
+			if err := global.Db.Where("id = ?", it.DishID).First(&dish).Error; err == nil {
+				categoryId = dish.Category
+				imagePath = dish.ImagePath
+				// 尝试查 category 名称
+				var cat models.Category
+				if dish.Category != 0 {
+					if err := global.Db.Where("id = ?", dish.Category).First(&cat).Error; err == nil {
+						categoryName = cat.Name
+					}
+				}
+			}
+			respItems = append(respItems, gin.H{
+				"dishId":     it.DishID,
+				"name":       it.Name,
+				"price":      it.Price,
+				"qty":        it.Qty,
+				"selected":   it.Selected,
+				"categoryId": categoryId,
+				"category":   categoryName,
+				"image":      imagePath,
+			})
+		}
 
 		utils.Success(c, gin.H{
 			"merchant_id":   storeID,
 			"merchant_name": merchant.ShopName, // 使用 shop_name
-			"items":         items,
+			"items":         respItems,
 		})
 		return
 	}
@@ -66,9 +96,9 @@ func GetUserCart(c *gin.Context) {
 	for _, item := range items {
 		merchantID := item.MerchantID
 		if _, exists := shopsMap[merchantID]; !exists {
-			// 查询商家信息
+			// 查询商家信息：Merchant 主键 id
 			var merchant models.Merchant
-			global.Db.Where("base_id = ?", merchantID).First(&merchant)
+			global.Db.Where("id = ?", merchantID).First(&merchant)
 
 			shopsMap[merchantID] = gin.H{
 				"merchant_id":   merchantID,
@@ -78,11 +108,36 @@ func GetUserCart(c *gin.Context) {
 				"phone":         merchant.Phone,
 				"logo":          merchant.Logo,
 				"status":        merchant.Status,
-				"items":         []models.CartItem{},
+				"items":         []gin.H{},
 			}
 		}
+		// enrich item with dish metadata
+		var dish models.Dish
+		var categoryName string = ""
+		var categoryId int = 0
+		var imagePath string = ""
+		if err := global.Db.Where("id = ?", item.DishID).First(&dish).Error; err == nil {
+			categoryId = dish.Category
+			imagePath = dish.ImagePath
+			var cat models.Category
+			if dish.Category != 0 {
+				if err := global.Db.Where("id = ?", dish.Category).First(&cat).Error; err == nil {
+					categoryName = cat.Name
+				}
+			}
+		}
+		respItem := gin.H{
+			"dishId":     item.DishID,
+			"name":       item.Name,
+			"price":      item.Price,
+			"qty":        item.Qty,
+			"selected":   item.Selected,
+			"categoryId": categoryId,
+			"category":   categoryName,
+			"image":      imagePath,
+		}
 		shop := shopsMap[merchantID]
-		shop["items"] = append(shop["items"].([]models.CartItem), item)
+		shop["items"] = append(shop["items"].([]gin.H), respItem)
 		shopsMap[merchantID] = shop
 	}
 	// 转换为数组
@@ -109,7 +164,7 @@ func AddToCart(c *gin.Context) {
 
 	// 从 map 中读取前端实际传的字段
 	// 解析前端传入的商家标识（兼容多种字段名与类型）
-	var merchantBaseID uint = 0
+	var merchantID uint = 0
 	// helper to resolve numeric value from interface
 	resolveUint := func(v interface{}) (uint, bool) {
 		switch t := v.(type) {
@@ -163,7 +218,7 @@ func AddToCart(c *gin.Context) {
 		return
 	}
 
-	// 尝试从多个可能的字段名解析商家标识
+	// 尝试从多个可能的字段名解析商家标识，最终以商家主键 `id` 为准并存入购物车
 	var storeCandidates = []interface{}{req["storeId"], req["merchantId"], req["merchant_id"], req["merchantID"], req["store_id"]}
 	var found bool
 	for _, cand := range storeCandidates {
@@ -171,27 +226,24 @@ func AddToCart(c *gin.Context) {
 			continue
 		}
 		if v, ok := resolveUint(cand); ok {
-			// 优先尝试按 base_id 查找商家
 			var m models.Merchant
-			if err := global.Db.Where("base_id = ?", v).First(&m).Error; err == nil {
-				merchantBaseID = m.BaseID
-				found = true
-				break
-			}
-			// 如果按 base_id 未找到，尝试按主键 id 查找并取其 BaseID
+			// 优先按主键 id 查找
 			if err := global.Db.Where("id = ?", v).First(&m).Error; err == nil {
-				merchantBaseID = m.BaseID
+				merchantID = m.ID
 				found = true
 				break
 			}
-			// 最后退回使用该数字作为 base_id（兼容直接传 base_id 的情形）
-			merchantBaseID = v
-			found = true
-			break
+			// 兼容：再按 base_id 查找并取到其主键 id
+			if err := global.Db.Where("base_id = ?", v).First(&m).Error; err == nil {
+				merchantID = m.ID
+				found = true
+				break
+			}
+			// 未找到匹配的商家，继续尝试下一个候选
 		}
 	}
-	if !found || merchantBaseID == 0 {
-		utils.Fail(c, "storeId 参数错误或无法解析对应商家")
+	if !found || merchantID == 0 {
+		utils.Fail(c, "storeId 参数错误或无法解析对应商家（请传入正确的商家 id 或 base_id）")
 		return
 	}
 
@@ -214,7 +266,7 @@ func AddToCart(c *gin.Context) {
 	var item models.CartItem
 	err := global.Db.Where(
 		"cart_id = ? AND merchant_id = ? AND dish_id = ?",
-		cart.ID, merchantBaseID, dishID,
+		cart.ID, merchantID, dishID,
 	).First(&item).Error
 
 	if err == nil {
@@ -247,7 +299,7 @@ func AddToCart(c *gin.Context) {
 	// 4. 新增购物车 item
 	newItem := models.CartItem{
 		CartID:     cart.ID,
-		MerchantID: merchantBaseID,
+		MerchantID: merchantID,
 		DishID:     dishID,
 		Name:       dish.DishName,
 		Price:      dish.Price, // 已经是 string
@@ -489,12 +541,22 @@ func SelectShop(c *gin.Context) {
 		return
 	}
 
-	// 根据 storeId 更新所有商品
-	if err := global.Db.Model(&models.CartItem{}).
-		Where("cart_id = ? AND merchant_id = ?", cart.ID, storeIDStr).
-		Update("selected", selectedInt).Error; err != nil {
-		utils.Error(c, err)
-		return
+	// 根据 storeId 更新所有商品（优先按数字 id 匹配）
+	if sid, errp := strconv.ParseUint(storeIDStr, 10, 32); errp == nil {
+		if err := global.Db.Model(&models.CartItem{}).
+			Where("cart_id = ? AND merchant_id = ?", cart.ID, uint(sid)).
+			Update("selected", selectedInt).Error; err != nil {
+			utils.Error(c, err)
+			return
+		}
+	} else {
+		// 退回兼容字符串形式（不常见）
+		if err := global.Db.Model(&models.CartItem{}).
+			Where("cart_id = ? AND merchant_id = ?", cart.ID, storeIDStr).
+			Update("selected", selectedInt).Error; err != nil {
+			utils.Error(c, err)
+			return
+		}
 	}
 
 	// 返回成功

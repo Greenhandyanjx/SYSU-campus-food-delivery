@@ -83,6 +83,30 @@ func Initalldb() error {
 		return err
 	}
 
+	// 商家配送配置表：保存各商家起送、配送费、配送范围
+	if err := migrate("MerchantDeliveryConfig", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.MerchantDeliveryConfig{})
+	}); err != nil {
+		return err
+	}
+
+	// 为已有商家填充默认配送配置（若不存在）
+	var merchants []models.Merchant
+	if err := global.Db.Find(&merchants).Error; err == nil {
+		for _, m := range merchants {
+			var cnt int64
+			global.Db.Model(&models.MerchantDeliveryConfig{}).Where("base_id = ?", m.BaseID).Count(&cnt)
+			if cnt == 0 {
+				global.Db.Create(&models.MerchantDeliveryConfig{
+					BaseID:        m.BaseID,
+					MinPrice:      15,
+					DeliveryFee:   2,
+					DeliveryRange: 2000,
+				})
+			}
+		}
+	}
+
 	// 3. 分类
 	if err := migrate("Category", func(db *gorm.DB) error {
 		return db.AutoMigrate(&models.Category{})

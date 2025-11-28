@@ -223,6 +223,7 @@ import qrImg from '@/assets/qrcode.png'
 import { useRouter } from 'vue-router'
 import * as addressApi from '@/api/common/address'
 import * as cartApi from '@/api/user/cart'
+import { getDeliveryConfig } from '@/api/user/store'
 import { showToast } from 'vant'
 
 const router = useRouter()
@@ -327,6 +328,22 @@ async function loadCart() {
         shopList.value = list
         // 使用完后清理临时数据
         sessionStorage.removeItem('checkout_payload')
+        // 为每个店铺获取配送配置（覆盖 deliveryFee / minPrice 等）
+        try {
+          await Promise.all(shopList.value.map(async (s: any) => {
+            const bid = s.storeId || s.merchantId || s.store_id || s.storeId
+            if (!bid) return
+            const r = await getDeliveryConfig(bid)
+            const cfg = r && r.data ? r.data.data || r.data : r
+            s.deliveryFee = Number(cfg?.delivery_fee ?? cfg?.deliveryFee ?? s.deliveryFee ?? 2)
+            s.minPrice = Number(cfg?.min_price ?? cfg?.minPrice ?? s.minPrice ?? 15)
+            s.deliveryRange = Number(cfg?.delivery_range ?? cfg?.deliveryRange ?? s.deliveryRange ?? 2000)
+            // recalc shopTotal based on items + packing + delivery
+            const itemsTotal = (s.items || []).reduce((sm: number, it: any) => sm + Number(it.price || 0) * Number(it.qty || 0), 0)
+            const packing = Number(s.packingFee || s.packing_fee || 0)
+            s.shopTotal = itemsTotal + packing + Number(s.deliveryFee || 0)
+          }))
+        } catch (e) { console.warn('fetch shop delivery configs failed', e) }
         return
       } catch (err) {
         console.warn('解析 checkout_payload 失败，回退到 getCart', err)
@@ -358,6 +375,21 @@ async function loadCart() {
           }))
         }
       })
+    // 为每个店铺补充配送配置并重新计算 shopTotal
+    try {
+      await Promise.all(shopList.value.map(async (s: any) => {
+        const bid = s.storeId || s.merchant_id || s.id || s.storeId
+        if (!bid) return
+        const r = await getDeliveryConfig(bid)
+        const cfg = r && r.data ? r.data.data || r.data : r
+        s.deliveryFee = Number(cfg?.delivery_fee ?? cfg?.deliveryFee ?? s.deliveryFee ?? 2)
+        s.minPrice = Number(cfg?.min_price ?? cfg?.minPrice ?? s.minPrice ?? 15)
+        s.deliveryRange = Number(cfg?.delivery_range ?? cfg?.deliveryRange ?? s.deliveryRange ?? 2000)
+        const itemsTotal = (s.items || []).reduce((sm: number, it: any) => sm + Number(it.price || 0) * Number(it.qty || 0), 0)
+        const packing = Number(s.packingFee || s.packing_fee || 0)
+        s.shopTotal = itemsTotal + packing + Number(s.deliveryFee || 0)
+      }))
+    } catch (e) { console.warn('fetch shop delivery configs failed', e) }
   } catch (e) {
     console.error(e)
   }
@@ -371,6 +403,17 @@ const totalAmount = computed(() => {
 onMounted(async () => {
   await loadAddresses()
   await loadCart()
+  // 在用户进入结算页时，尝试在后端创建 pending 订单以便持久化尝试（若后端不可达则忽略）
+  try {
+    if (shopList.value && shopList.value.length > 0 && selectedAddress.value) {
+      const payloadShops = shopList.value.map((s: any) => ({ merchantId: s.storeId || s.merchantId || s.id, totalPrice: s.shopTotal }))
+      const payload = { shops: payloadShops, consigneeid: selectedAddress.value.id, totalPrice: totalAmount.value, remarks: form.value.remark }
+      await cartApi.createPending(payload)
+    }
+  } catch (e) {
+    // ignore errors creating pending
+    console.warn('create pending order failed', e)
+  }
 })
 
 function openAddressManager() {

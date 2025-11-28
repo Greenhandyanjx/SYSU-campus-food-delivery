@@ -32,6 +32,11 @@ func GetOrderListByStatus(c *gin.Context) {
 	var count int64
 	// 计算分页偏移量
 	offset := (page - 1) * size
+	// 如果请求 status==0（pending），为了避免商家/骑手看到用户未完成的 pending 订单，直接返回空
+	if status == "0" {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"items": []models.Order{}, "total": 0}})
+		return
+	}
 	// 查询订单列表
 	result := global.Db.Model(&models.Order{}).Where("status = ?", status).Limit(size).Offset(offset).Find(&orders)
 	if result.Error != nil {
@@ -506,8 +511,33 @@ func CreatePayOrder(c *gin.Context) {
 		return
 	}
 
-	// 为每个商家创建 order，关联同一个 payinfo
+	// 为每个商家创建或升级 order，关联同一个 payinfo
+	// 先查找当前用户是否已有 pending (status=0) 订单，若存在并匹配 merchant，则升级该订单为待支付状态并关联本次 payinfo
+	var pendingOrders []models.Order
+	if err := tx.Where("status = ? AND consigneeid = ?", 0, req.Consigneeid).Find(&pendingOrders).Error; err == nil {
+		// pendingOrders loaded
+	}
+
+	// 构建一个 map 以便快速匹配商家
+	pendingMap := make(map[uint]*models.Order)
+	for i := range pendingOrders {
+		o := &pendingOrders[i]
+		pendingMap[o.MerchantID] = o
+	}
+
 	for _, s := range req.Shops {
+		if po, ok := pendingMap[s.MerchantID]; ok {
+			// 升级现有 pending order
+			if err := tx.Model(&models.Order{}).Where("id = ?", po.ID).Updates(map[string]interface{}{"status": 1, "pay_infoid": int(pay.ID), "total_price": s.TotalPrice}).Error; err != nil {
+				tx.Rollback()
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to upgrade pending order"})
+				return
+			}
+			resp = append(resp, RespItem{OrderID: uint(po.ID), OutTradeNo: outTradeNo, CodeURL: codeURL, MerchantID: s.MerchantID})
+			continue
+		}
+
+		// 无 pending order，创建新 order
 		order := models.Order{
 			Consigneeid:  req.Consigneeid,
 			PickupPoint:  time.Now(),
@@ -518,6 +548,7 @@ func CreatePayOrder(c *gin.Context) {
 			MerchantID:   s.MerchantID,
 			Notes:        req.Remarks,
 			PayInfoid:    int(pay.ID),
+			Userid:       baseUserID,
 		}
 		if err := tx.Create(&order).Error; err != nil {
 			tx.Rollback()
@@ -533,6 +564,133 @@ func CreatePayOrder(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"code_url": codeURL, "out_trade_no": outTradeNo, "orders": resp}})
+}
+
+// CreatePendingOrder 创建一个“预览/待支付”订单，用于用户进入结算页时持久化未完成的尝试。
+func CreatePendingOrder(c *gin.Context) {
+	type ShopReq struct {
+		MerchantID uint    `json:"merchantId" binding:"required"`
+		TotalPrice float64 `json:"totalPrice" binding:"required"`
+	}
+	type Req struct {
+		Shops       []ShopReq `json:"shops"`
+		MerchantID  uint      `json:"merchantId"` // 兼容旧字段
+		Consigneeid int       `json:"consigneeid"`
+		TotalPrice  float64   `json:"totalPrice"`
+		Remarks     string    `json:"remarks"`
+	}
+
+	var req Req
+	if err := c.ShouldBind(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid request", "error": err.Error()})
+		return
+	}
+
+	// 获取用户 ID（中间件写入的 baseUserID），并校验 consignee 属于该用户
+	baseUserIDIface, exists := c.Get("baseUserID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "message": "not authenticated"})
+		return
+	}
+	baseUserID := baseUserIDIface.(uint)
+
+	// 如果没有传 consigneeid，尝试查找当前用户的第一个 consignee
+	var consignee models.Consignee
+	if req.Consigneeid == 0 {
+		if err := global.Db.Where("userid = ?", baseUserID).First(&consignee).Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "no consignee found for user, please provide consigneeid"})
+			return
+		}
+		req.Consigneeid = int(consignee.ID)
+	} else {
+		if err := global.Db.First(&consignee, req.Consigneeid).Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid consignee"})
+			return
+		}
+		if consignee.Userid != baseUserID {
+			c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "message": "consignee does not belong to user"})
+			return
+		}
+	}
+
+	// 兼容：如果没有提供 shops 数组，但提供了单个 merchantId+totalPrice，转为单元素 shops
+	if len(req.Shops) == 0 && req.MerchantID != 0 && req.TotalPrice > 0 {
+		req.Shops = []ShopReq{{MerchantID: req.MerchantID, TotalPrice: req.TotalPrice}}
+	}
+
+	if len(req.Shops) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "no shops provided"})
+		return
+	}
+
+	// 创建一个 payinfo 记录以便关联（schema 要求 payinfoid 非空）
+	tx := global.Db.Begin()
+	pay := models.PayInfo{
+		Paymethod:      0,
+		Packamount:     0,
+		CheckoutTime:   time.Now(),
+		Deliveryamount: 0,
+		OutTradeNo:     "",
+		CodeURL:        "",
+		Status:         "pending",
+	}
+	exp := time.Now().Add(24 * time.Hour)
+	pay.ExpiresAt = &exp
+	if err := tx.Create(&pay).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to create payinfo"})
+		return
+	}
+
+	var resp []map[string]interface{}
+	for _, s := range req.Shops {
+		order := models.Order{
+			Consigneeid:  req.Consigneeid,
+			PickupPoint:  time.Now(),
+			DropofPoint:  time.Now(),
+			ExpectedTime: time.Now(),
+			Status:       0, // 0 = pending (user initiated, not visible to merchant/rider)
+			TotalPrice:   s.TotalPrice,
+			MerchantID:   s.MerchantID,
+			Notes:        req.Remarks,
+			PayInfoid:    int(pay.ID),
+			Userid:       baseUserID,
+		}
+		if err := tx.Create(&order).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to create pending order"})
+			return
+		}
+		// 将该用户购物车中对应商家的 items 迁移为 order_dishes（并删除购物车项），以便在 pending 状态下保留商品明细
+		var cart models.Cart
+		if err := tx.Where("user_id = ?", baseUserID).First(&cart).Error; err == nil {
+			var items []models.CartItem
+			if err := tx.Where("cart_id = ? AND merchant_id = ?", cart.ID, s.MerchantID).Find(&items).Error; err == nil {
+				for _, it := range items {
+					od := models.OrderDish{OrderID: int(order.ID), DishID: int(it.DishID), Num: it.Qty}
+					if err := tx.Create(&od).Error; err != nil {
+						tx.Rollback()
+						c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to create order dish"})
+						return
+					}
+				}
+				// 删除已迁移的购物车项，避免后续重复迁移
+				if err := tx.Where("cart_id = ? AND merchant_id = ?", cart.ID, s.MerchantID).Delete(&models.CartItem{}).Error; err != nil {
+					tx.Rollback()
+					c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to cleanup cart items after pending creation"})
+					return
+				}
+			}
+		}
+		resp = append(resp, map[string]interface{}{"orderId": order.ID, "merchantId": s.MerchantID})
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to commit"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"orders": resp}})
 }
 
 // GetOrderStatus 返回订单支付及状态信息
@@ -620,20 +778,25 @@ func PaymentNotify(c *gin.Context) {
 				var cart models.Cart
 				if err := tx.Where("user_id = ?", consignee.Userid).First(&cart).Error; err == nil {
 					var items []models.CartItem
-					if err := tx.Where("cart_id = ? AND merchant_id = ?", cart.ID, order.MerchantID).Find(&items).Error; err == nil {
-						for _, it := range items {
-							od := models.OrderDish{OrderID: int(order.ID), DishID: int(it.DishID), Num: it.Qty}
-							if err := tx.Create(&od).Error; err != nil {
+					// 如果该订单已存在 order_dishes（可能在 pending 创建时已迁移），则跳过迁移以避免重复
+					var existCount int64
+					tx.Model(&models.OrderDish{}).Where("order_id = ?", order.ID).Count(&existCount)
+					if existCount == 0 {
+						if err := tx.Where("cart_id = ? AND merchant_id = ?", cart.ID, order.MerchantID).Find(&items).Error; err == nil {
+							for _, it := range items {
+								od := models.OrderDish{OrderID: int(order.ID), DishID: int(it.DishID), Num: it.Qty}
+								if err := tx.Create(&od).Error; err != nil {
+									tx.Rollback()
+									c.String(http.StatusInternalServerError, "failed to create order dish")
+									return
+								}
+							}
+							// 删除已迁移的购物车项
+							if err := tx.Where("cart_id = ? AND merchant_id = ?", cart.ID, order.MerchantID).Delete(&models.CartItem{}).Error; err != nil {
 								tx.Rollback()
-								c.String(http.StatusInternalServerError, "failed to create order dish")
+								c.String(http.StatusInternalServerError, "failed to cleanup cart items")
 								return
 							}
-						}
-						// 删除已迁移的购物车项
-						if err := tx.Where("cart_id = ? AND merchant_id = ?", cart.ID, order.MerchantID).Delete(&models.CartItem{}).Error; err != nil {
-							tx.Rollback()
-							c.String(http.StatusInternalServerError, "failed to cleanup cart items")
-							return
 						}
 					}
 				}

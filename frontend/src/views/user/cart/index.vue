@@ -12,12 +12,12 @@
     </div>
 
     <div class="cart-list">
-      <div v-for="(shop, sIdx) in visibleShops" :key="shop.merchant_id" class="shop-card">
+      <div v-for="(shop, sIdx) in visibleShops" :key="shop.storeId || shop.id || shop.merchant_id" class="shop-card">
         <div class="shop-header">
                 <el-checkbox v-model="shop.selected" @change="onToggleShop(shop)" />
                 <div class="shop-name" @click="goStore(shop)">
                   <img class="shop-logo" :src="shop.logo || '/src/assets/noImg.png'" @error="onImgError" />
-                  {{ shop.merchant_name }}
+                  {{ shop.name || shop.merchant_name }}
                 </div>
               </div>
 
@@ -95,8 +95,10 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { CATEGORIES } from '@/constants/categories'
 import { useRouter } from 'vue-router'
 import * as cartApi from '@/api/user/cart'
+import { getDishesByStore } from '@/api/user/store'
 import { ElMessageBox, ElMessage } from 'element-plus'
 
 const router = useRouter()
@@ -106,9 +108,37 @@ const manageMode = ref(false)
 const activeCategory = ref('全部')
 
 function buildCategoriesFromCart(data: any) {
-  const set = new Set<string>()
-  data.shops.forEach((s: any) => s.items.forEach((it: any) => set.add(it.category || '其它')))
-  return Array.from(set)
+  // Build categories from canonical list CATEGORIES (exclude id 0 which is "全部")
+  console.log('buildCategoriesFromCart', data.shops)
+  console.log('CATEGORIES', CATEGORIES)
+  const present: string[] = []
+  const seen = new Set<string>()
+  let unmatched = false
+  ;(data.shops || []).forEach((s: any) => {
+    (s.items || []).forEach((it: any) => {
+      const catName = it.category || it.categoryName || it.cat || it.name||''
+      const catId = it.id||it.categoryId || it.category_id || it.catId ||null
+      let matched = false
+      for (const c of CATEGORIES) {
+        if (c.id === 0) continue
+        // match by id if available
+        if (catId != null && String(c.id) === String(catId)) {
+          if (!seen.has(c.label)) { present.push(c.label); seen.add(c.label) }
+          matched = true
+          break
+        }
+        // match by textual label/key/filter
+        if (catName && (String(c.label) === String(catName) || String(c.key) === String(catName) || String(c.filter) === String(catName))) {
+          if (!seen.has(c.label)) { present.push(c.label); seen.add(c.label) }
+          matched = true
+          break
+        }
+      }
+      if (!matched) unmatched = true
+    })
+  })
+  if (unmatched && !seen.has('其它')) present.push('其它')
+  return present
 }
 
 const categories = ref<string[]>([])
@@ -139,12 +169,65 @@ async function load() {
     })
     // determine shop selected based on selectable items
     const selectable = items.filter(isSelectableItem)
+    // normalize shop fields to canonical keys used across the frontend
+    const storeId = s.storeId || s.merchant_id || s.id || s.merchantId || s.base_id || s.baseId
+    const name = s.name || s.merchant_name || s.storeName || s.store_name || s.shop_name || s.store || ''
+    const logo = s.logo || s.storeLogo || s.store_logo || s.logo_url || s.img || ''
     return {
       ...s,
+      storeId,
+      id: s.id || storeId,
+      base_id: s.base_id || s.baseId || storeId,
+      name,
+      logo,
       items,
       selected: selectable.length > 0 ? selectable.every((it: any) => !!it.selected) : false
     }
   }) }
+
+  // Try to enrich each shop's items with dish metadata (category/categoryId/img/name)
+  try {
+    // For each shop, fetch its dishes and merge by id
+    await Promise.all((cartData.value.shops || []).map(async (s: any) => {
+      const sid = s.storeId || s.id || s.base_id || s.baseId || s.merchant_id || s.merchantId
+      if (!sid) return
+      try {
+        const res: any = await getDishesByStore(sid)
+        let dishes: any[] = []
+        if (!res) return
+        if (Array.isArray(res)) dishes = res
+        else if (res.data && Array.isArray(res.data)) dishes = res.data
+        else if (res.data && res.data.data && Array.isArray(res.data.data)) dishes = res.data.data
+
+        const map = new Map()
+        dishes.forEach((d: any) => {
+          const id = d.id || d.dishId || d.DishId
+          if (id != null) map.set(String(id), d)
+        });
+
+        // merge
+        (s.items || []).forEach((it: any) => {
+          const key = String(it.dishId || it.dish_id || it.id || '')
+          const d = map.get(key)
+          if (d) {
+            // keep existing fields but add category info and image if missing
+            if (d.categoryId != null) it.categoryId = d.categoryId
+            else if (d.category != null) it.categoryId = d.category
+            if (!it.name && (d.name || d.dishName)) it.name = d.name || d.dishName
+            if (!it.img && (d.image || d.imageUrl || d.img)) it.img = d.image || d.imageUrl || d.img
+            if (!it.categoryName && (d.categoryName || d.categoryLabel || d.category)) it.categoryName = d.categoryName || d.categoryLabel || d.category
+            // if dish has an explicit category id but shop item lacks it, set it
+            if (!it.categoryId && (d.categoryId || d.category)) it.categoryId = d.categoryId || d.category
+          }
+        })
+      } catch (e) {
+        // ignore per-shop failure
+        console.warn('getDishesByStore failed for', sid, e)
+      }
+    }))
+  } catch (e) {
+    console.warn('enrich cart items failed', e)
+  }
 
   categories.value = buildCategoriesFromCart(cartData.value)
 }
@@ -153,7 +236,7 @@ onMounted(() => { load() })
 
 const visibleShops = computed(() => {
   if (activeCategory.value === '全部') return cartData.value.shops || []
-  return (cartData.value.shops || []).map((s: any) => ({ ...s, items: s.items.filter((it: any) => it.category === activeCategory.value) })).filter((s: any) => s.items.length > 0)
+  return (cartData.value.shops || []).map((s: any) => ({ ...s, items: s.items.filter((it: any) => showItemByCategory(it)) })).filter((s: any) => s.items.length > 0)
 })
 
 function isSelectableItem(it: any) {
@@ -165,7 +248,17 @@ function setCategory(c: string) {
 }
 
 function showItemByCategory(item: any) {
-  return activeCategory.value === '全部' || item.category === activeCategory.value
+  if (activeCategory.value === '全部') return true
+  // If item has textual category, compare directly
+  if (item.category && String(item.category) === String(activeCategory.value)) return true
+  if (item.categoryName && String(item.categoryName) === String(activeCategory.value)) return true
+  // Otherwise try numeric category id match against CATEGORIES
+  const catObj = CATEGORIES.find((c: any) => String(c.label) === String(activeCategory.value))
+  if (catObj) {
+    const cid = catObj.id
+    if (String(item.categoryId) === String(cid) || String(item.category_id) === String(cid)) return true
+  }
+  return false
 }
 
 async function onToggleShop(shop: any) {
@@ -316,8 +409,15 @@ async function onDeleteSelected() {
 
 function toggleManage() { manageMode.value = !manageMode.value }
 
-function goStore(shop: any) 
-{ router.push('/user/store/' + encodeURIComponent(shop.name)) }
+function goStore(shop: any) {
+  console.log('goStore', shop)
+  const id = shop.storeId || shop.id || shop.base_id || shop.baseId || shop.merchant_id || shop.merchantId
+  if (id) {
+    router.push('/user/store/' + encodeURIComponent(String(id)))
+  } else {
+    router.push('/user/store/' + encodeURIComponent(shop.name || ''))
+  }
+}
 
 function canceledItems(shop: any) {
   return (shop.items || []).map((it: any) => ({ dishId: it.dishId, name: it.name, canceledQty: Math.max(0, (it.originalQty || 0) - (it.qty || 0)) })).filter((x: any) => x.canceledQty > 0)
