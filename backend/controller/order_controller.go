@@ -652,3 +652,78 @@ func PaymentNotify(c *gin.Context) {
 	// 返回平台要求的响应
 	c.String(http.StatusOK, "success")
 }
+
+// GetUserOrderList 获取用户订单列表
+func GetUserOrderList(c *gin.Context) {
+	// 获取用户 ID（通过中间件）
+	baseUserIDIface, exists := c.Get("baseUserID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "message": "not authenticated"})
+		return
+	}
+	baseUserID := baseUserIDIface.(uint)
+
+	// 获取查询参数
+	status := c.Query("status")
+	pageStr := c.Query("page")
+	sizeStr := c.Query("size")
+
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page < 1 {
+		page = 1
+	}
+	size, err := strconv.Atoi(sizeStr)
+	if err != nil || size < 1 {
+		size = 20
+	}
+
+	// 计算分页偏移量
+	offset := (page - 1) * size
+
+	// 构建查询条件
+	query := global.Db.Table("orders o").
+		Select("o.*, c.name as consignee_name, c.phone as consignee_phone, a.address as consignee_address").
+		Joins("LEFT JOIN consignees c ON o.consigneeid = c.id").
+		Joins("LEFT JOIN addresses a ON c.addressid = a.id").
+		Where("c.userid = ?", baseUserID)
+
+	// 如果指定了状态，添加状态过滤
+	if status != "" {
+		statusInt, err := strconv.Atoi(status)
+		if err == nil {
+			query = query.Where("o.status = ?", statusInt)
+		}
+	}
+
+	// 查询订单列表
+	var orders []map[string]interface{}
+	result := query.Limit(size).Offset(offset).Order("o.id DESC").Find(&orders)
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get user order list", "data": nil})
+		return
+	}
+
+	// 查询总订单数
+	var count int64
+	countQuery := global.Db.Table("orders o").
+		Joins("LEFT JOIN consignees c ON o.consigneeid = c.id").
+		Where("c.userid = ?", baseUserID)
+
+	if status != "" {
+		statusInt, err := strconv.Atoi(status)
+		if err == nil {
+			countQuery = countQuery.Where("o.status = ?", statusInt)
+		}
+	}
+
+	countQuery.Count(&count)
+
+	// 返回结果
+	c.JSON(http.StatusOK, gin.H{
+		"code": 1,
+		"data": gin.H{
+			"items": orders,
+			"total": count,
+		},
+	})
+}

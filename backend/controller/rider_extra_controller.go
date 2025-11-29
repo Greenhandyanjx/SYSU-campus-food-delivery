@@ -356,6 +356,37 @@ func GetWorkStats(c *gin.Context) {
 		Where("rider_id = ? AND status = 4 AND finish_at >= ?", riderID, start).
 		Count(&totalOrders)
 
+	// 计算在线天数（有订单记录的天数）
+	type Day struct {
+		Day time.Time
+	}
+	var days []Day
+	global.Db.Model(&models.Order{}).
+		Select("DATE(finish_at) AS day").
+		Where("rider_id = ? AND status = 4 AND finish_at >= ?", riderID, start).
+		Group("DATE(finish_at)").Scan(&days)
+
+	// 计算平均配送时间（分钟）
+	var avgDeliveryTime float64
+	global.Db.Model(&models.Order{}).
+		Where("rider_id = ? AND status = 4 AND finish_at >= ?", riderID, start).
+		Select("AVG(TIMESTAMPDIFF(MINUTE, created_at, finish_at))").Scan(&avgDeliveryTime)
+
+	// 计算平均配送距离（公里）
+	var avgDistance float64
+	global.Db.Model(&models.Order{}).
+		Where("rider_id = ? AND status = 4 AND finish_at >= ?", riderID, start).
+		Select("AVG(distance)").Scan(&avgDistance)
+
+	// 计算在线时长（小时） - 按有订单的时间估算
+	var onlineHours float64 = float64(len(days)) * 8 // 假设每天工作8小时
+
+	// 计算效率（单/小时）
+	var efficiency float64
+	if onlineHours > 0 {
+		efficiency = float64(totalOrders) / onlineHours
+	}
+
 	// 暂时把完成率视为 100%，有更多数据源可以再优化
 	completionRate := 100.0
 	if totalOrders == 0 {
@@ -365,9 +396,15 @@ func GetWorkStats(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"code": 1,
 		"data": gin.H{
-			"totalOrders":    totalOrders,
-			"totalIncome":    totalIncome,
-			"completionRate": completionRate,
+			"completedOrders":     totalOrders,
+			"cancelledOrders":     0, // 暂时固定为0，可后续扩展
+			"totalIncome":        totalIncome,
+			"completionRate":     completionRate,
+			"onlineHours":        onlineHours,
+			"workDays":          len(days),
+			"avgDeliveryTime":    int(avgDeliveryTime),
+			"avgDistance":        avgDistance,
+			"efficiency":        efficiency,
 		},
 	})
 }
