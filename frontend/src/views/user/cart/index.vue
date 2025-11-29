@@ -342,7 +342,35 @@ async function onCheckout() {
       qty: it.qty
     }))
   }))
+  // persist payload for checkout page
   sessionStorage.setItem('checkout_payload', JSON.stringify({ shops: shopsPayload }))
+
+  // Also proactively create pending orders on the server so cart items are migrated and removed immediately.
+  try {
+    const pendingShops = selectedShops.map((s: any) => ({
+      merchantId: s.storeId || s.merchant_id || s.id,
+      totalPrice: (s.items || []).filter((it: any) => it.selected).reduce((sum: number, it: any) => sum + Number(it.price || 0) * Number(it.qty || 0), 0),
+      deliveryAmount: Number(s.deliveryFee || s.delivery_fee || 0),
+      items: (s.items || []).filter((it: any) => it.selected).map((it: any) => ({ dishId: it.dishId || it.dish_id || it.id, qty: it.qty, price: Number(it.price || 0) }))
+    }))
+    if (pendingShops.length > 0) {
+      const res: any = await cartApi.createPending({ shops: pendingShops })
+      // 尝试解析响应中的 orders 字段并保存到 session，供 Checkout 使用
+      const orders = (res && res.data && (res.data.orders || res.data.orders)) || res.orders || res
+      let ids: any[] = []
+      if (Array.isArray(orders)) {
+        ids = orders.map((o: any) => String(o.orderId || o.OrderID || o.order_id || o.id || o))
+      }
+      if (ids.length > 0) {
+        sessionStorage.setItem('pending_orders', JSON.stringify(ids))
+      }
+      // 刷新本地购物车展示（后端的 createPending 已迁移并删除了对应 cart items）
+      try { await load() } catch (e) { /* ignore */ }
+    }
+  } catch (e) {
+    console.warn('createPending from cart failed', e)
+  }
+
   router.push('/user/payment/confirm')
 }
 

@@ -14,10 +14,11 @@ func main() {
 
 	// 2. 初始化数据库连接并执行自动建表（AutoMigrate 是幂等的，可以每次启动都跑）
 	// config.InitDB()
-	// // // 3. 执行自动建表（AutoMigrate 是幂等的，可以每次启动都跑，不会清空数据）
+	// // 3. 执行自动建表（AutoMigrate 是幂等的，可以每次启动都跑，不会清空数据）
 	// if err := config.Initalldb(); err != nil {
 	// 	log.Fatalf("Initalldb failed: %v", err)
 	// }
+	//
 
 	// 启动后台清理 goroutine：定期清除过期的 pending 订单及其关联的 order_dishes/order_meals
 	// 启动后台清理 goroutine

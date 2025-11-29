@@ -157,6 +157,14 @@ func SetRouter() *gin.Engine {
 		// 创建 pending（用户进入结算但未完成支付时持久化的订单）
 		auth.POST("/order/createPending", controller.CreatePendingOrder)
 
+		// 用户端订单接口：列表与详情
+		auth.GET("/user/order/list", controller.GetUserOrderList)
+		auth.GET("/user/order/:id", controller.GetUserOrderDetail)
+		// 用户端订单操作：取消、支付、更新收货人/地址
+		auth.POST("/user/order/cancel", controller.CancelOrder)
+		auth.POST("/user/order/pay", controller.PayOrder)
+		auth.POST("/user/order/updateAddress", controller.UpdateOrderAddress)
+
 		// User address management
 		auth.GET("/user/addresses", controller.GetUserAddresses)
 		auth.POST("/user/address", controller.AddUserAddress)

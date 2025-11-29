@@ -598,7 +598,58 @@ function openShop() {
 
 async function checkout() {
   if (!(cart.value || []).some((it: any) => !!it.selected)) { ElMessage.warning('请选择要结算的商品'); return }
-  // 将当前店铺被选中的商品存入 sessionStorage，支付页读取并展示
+    try {
+      // Build shops payload from current cart (this view shows single store's cart)
+      const items = (cart.value || []).map((it: any) => ({
+        dishId: it.dishId || it.id || it.dish_id,
+        qty: it.qty || it.count || it.originalQty || 1,
+        price: Number(it.price || it.unitPrice || 0),
+      }))
+
+      if (!items || items.length === 0) {
+        ElMessage.warning('购物车为空，无法结算')
+        return
+      }
+
+      const payload = {
+        shops: [
+          {
+            merchantId: store.value.id || store.value.storeId || store.value.merchant_id,
+            totalPrice: Number(cartTotalWithDelivery.value || 0),
+            deliveryAmount: Number(store.value.deliveryFee || store.value.delivery_amount || 0),
+            items,
+          },
+        ],
+      }
+
+      // Call createPending to persist pending orders (same behavior as cart 页面)
+      const res = await cartApi.createPending(payload)
+      const data = res && res.data ? (res.data.data || res.data) : res
+      // Expect returned shape like { orders: [{ id, ... }] } or array of ids
+      let pendingIds = []
+      if (data) {
+        if (Array.isArray(data)) {
+          // array of orders or ids
+          pendingIds = data.map((o: any) => (o && o.id) || o)
+        } else if (Array.isArray(data.orders)) {
+          pendingIds = data.orders.map((o: any) => o.id || o)
+        } else if (data.id) {
+          pendingIds = [data.id]
+        }
+      }
+
+      if (pendingIds.length > 0) {
+        try { sessionStorage.setItem('pending_orders', JSON.stringify(pendingIds)) } catch (e) {}
+      }
+
+      // Backend may have removed cart items; refresh local cart
+      await refreshCart()
+
+      // Navigate to checkout/confirm page
+      router.push({ path: '/user/payment/confirm' })
+    } catch (e: any) {
+      ElMessage.error('创建待支付订单失败: ' + (e && e.message ? e.message : '请重试'))
+    }
   const selectedItems = (cart.value || []).filter((it: any) => !!it.selected)
   const payload = [{
     merchantId: store.value.id || store.value.base_id,
