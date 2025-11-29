@@ -6,7 +6,7 @@
           <i class="el-icon-arrow-left"></i> 返回
         </el-button>
         <h2>订单详情 #{{ order?.id || id }}</h2>
-        <div class="status-badge" :class="order?.status">{{ order?.statusText }}</div>
+        <div class="status-badge" :class="statusClass(order?.status)">{{ order?.statusText }}</div>
       </div>
 
       <div v-if="order" class="detail-card">
@@ -51,11 +51,11 @@
           </div>
           <div class="delivery-info">
             <div class="delivery-status">
-              <i class="el-icon-location status-icon"></i>
+              <img src="/src/assets/icons/delivery.svg" style="width: 20px ;height: 20px;">
               <div class="status-text">{{ getDeliveryStatus(order.status) }}</div>
             </div>
             <div class="address-info">
-              <i class="el-icon-map-location"></i>
+              <img src="/src/assets/icons/address.svg" style="width: 15px ;height: 15px;">
               <span>{{ order.address }}</span>
             </div>
             <div v-if="order.rider" class="rider-info">
@@ -71,7 +71,7 @@
         <!-- 操作按钮组：不同状态显示不同按钮 -->
         <div class="action-bar">
           <!-- 待付款 -->
-          <template v-if="order.status === 'pending'">
+          <template v-if="order.status === 1">
             <div class="countdown" v-if="countdown">
               剩余支付时间：<strong>{{ countdown }}</strong>
             </div>
@@ -79,22 +79,22 @@
             <el-button type="primary" @click="onPay">去付款</el-button>
           </template>
 
-          <!-- 配送中 -->
-          <template v-if="order.status === 'shipping'">
+          <!-- 配送中/待接单/待派送 -->
+          <template v-if="order.status >= 2 && order.status <= 4">
             <el-button @click="contactRider" plain>联系骑手</el-button>
             <el-button @click="onReorder" plain>再次购买</el-button>
             <el-button type="primary" @click="onConfirm">确认收货</el-button>
           </template>
 
           <!-- 已完成 -->
-          <template v-if="order.status === 'completed'">
+          <template v-if="order.status === 5">
             <el-button @click="contactRider" plain>联系骑手</el-button>
             <el-button @click="onReorder" plain>再次购买</el-button>
             <el-button type="warning" v-if="!order.reviewed" @click="onReview">评价晒单</el-button>
           </template>
 
           <!-- 退款/售后 -->
-          <template v-if="order.status === 'refund'">
+          <template v-if="order.status === 'refund' || order.status === 7">
             <el-button type="info" plain @click="onViewRefund">查看售后详情</el-button>
           </template>
         </div>
@@ -118,28 +118,68 @@ const id = route.params.id
 const order = ref(null)
 const countdown = ref('')
 
-const totalPrice = computed(() =>
-  (order.value?.items || []).reduce((s, it) => s + it.price * it.count, 0)
-)
+const totalPrice = computed(() => {
+  const itemsTotal = (order.value?.items || []).reduce((s, it) => s + (Number(it.price || 0) * Number(it.count || 0)), 0)
+  const fee = Number(order.value?.deliveryFee || order.value?.delivery_fee || order.value?.delivery || 0)
+  return itemsTotal + fee
+})
+
+function mapStatusText(status) {
+  const s = Number(status)
+  switch (s) {
+  case 1:
+    return '待付款'
+  case 2:
+    return '待接单'
+  case 3:
+    return '待派送'
+  case 4:
+    return '派送中'
+  case 5:
+    return '已完成'
+  case 6:
+    return '已取消'
+  default:
+    return ''
+  }
+}
+
+function statusClass(status) {
+  const s = Number(status)
+  if (s === 1) return 'pending'
+  if (s >= 2 && s <= 4) return 'shipping'
+  if (s === 5) return 'completed'
+  if (s === 6) return 'refund'
+  return ''
+}
 
 function getDeliveryStatus(status) {
-  switch(status) {
-    case 'pending': return '等待支付'
-    case 'shipping': return '正在配送中'
-    case 'completed': return '订单已完成'
-    case 'refund': return '退款处理中'
-    default: return '未知状态'
+  const s = Number(status)
+  switch (s) {
+  case 1:
+    return '等待支付'
+  case 2:
+    return '等待商家接单'
+  case 3:
+    return '正在分配骑手'
+  case 4:
+    return '正在配送中'
+  case 5:
+    return '订单已完成'
+  case 6:
+    return '已取消'
+  default:
+    return '未知状态'
   }
 }
 
 // 按钮事件处理器 - 从列表页复用逻辑
 async function onPay() {
+  // 跳转到结算页面，使用 checkout 流程进行支付（前端会模拟支付并调用后端标记为已支付）
   try {
-    await orderApi.payOrder(order.value.id)
-    ElMessage.success('支付成功')
-    await fetch() // 刷新订单状态
-  } catch(e) {
-    ElMessage.error('支付失败，请重试')
+    router.push({ path: '/user/payment/confirm', query: { orderId: order.value.id } })
+  } catch (e) {
+    ElMessage.error('无法跳转到支付页面')
   }
 }
 
@@ -245,9 +285,35 @@ let timer = null
 async function fetch() {
   try {
     const res = await orderApi.getOrderDetail(id)
-    order.value = res?.data || res || null
-    
-    if (order.value?.status === 'pending') {
+    const payload = res && res.data && (res.data.data || res.data)
+      if (payload) {
+        // normalize fields: items come as orderDetailList
+        const items = payload.orderDetailList || payload.items || []
+        const statusNum = Number(payload.status || 0)
+        // format friendly time for display
+        function formatFriendlyTime(iso) {
+          if (!iso) return ''
+          const d = new Date(iso)
+          if (isNaN(d.getTime())) return iso
+          const M = d.getMonth() + 1
+          const D = d.getDate()
+          const hh = String(d.getHours()).padStart(2, '0')
+          const mm = String(d.getMinutes()).padStart(2, '0')
+          return `${M}月${D}日 ${hh}:${mm}`
+        }
+        const rawTime = payload.orderTime || payload.time || payload.createdAt || ''
+        order.value = {
+          ...payload,
+          items,
+          status: statusNum,
+          statusText: payload.statusText || mapStatusText(statusNum),
+          time: formatFriendlyTime(rawTime),
+        }
+      } else {
+        order.value = null
+      }
+
+    if (order.value?.status === 1) {
       updateCountdown()
       if (!timer) {
         timer = setInterval(updateCountdown, 1000)

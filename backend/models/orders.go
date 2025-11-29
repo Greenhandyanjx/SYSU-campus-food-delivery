@@ -17,8 +17,10 @@ type Order struct {
 	ExpectedTime time.Time `json:"expectedtime" gorm:"type:datetime;not null;default:current_timestamp"`
 	Status       int       `json:"status" gorm:"not null default:'1'"`
 	TotalPrice   float64   `json:"totalprice" gorm:"not null"`
-	MerchantID   uint      `json:"merchantid" gorm:"not null"`
-	Notes        string    `json:"notes"`
+	// 配送费（订单级别），单位: 元
+	DeliveryFee float64 `json:"delivery_fee" gorm:"type:decimal(8,2);default:2"`
+	MerchantID  uint    `json:"merchantid" gorm:"not null"`
+	Notes       string  `json:"notes"`
 
 	Numberoftableware int `json:"numberoftableware" gorm:"not null default:'0'"`
 

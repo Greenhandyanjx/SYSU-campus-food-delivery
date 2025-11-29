@@ -142,19 +142,31 @@ func GetOrderDetail(c *gin.Context) {
 	items := make([]gin.H, 0)
 	for _, orderMeal := range orderMeals {
 		meal := orderMeal.Meal // 假设OrderMeal表中预加载了Meal信息
+		var priceNum float64 = 0
+		if meal.Price != "" {
+			if p, err := strconv.ParseFloat(meal.Price, 64); err == nil {
+				priceNum = p
+			}
+		}
 		items = append(items, gin.H{
 			"skuId": "m" + strconv.Itoa(orderMeal.MealID),
 			"name":  meal.Mealname,
 			"qty":   orderMeal.Num,
-			"price": meal.Price, // 也可以根据需要添加价格信息
+			"price": priceNum,
 		})
 	}
 	for _, dish := range orderDishes {
+		var priceNum float64 = 0
+		if dish.Dish.Price != "" {
+			if p, err := strconv.ParseFloat(dish.Dish.Price, 64); err == nil {
+				priceNum = p
+			}
+		}
 		items = append(items, gin.H{
 			"skuId": "d" + strconv.Itoa(dish.DishID),
 			"name":  dish.Dish.DishName,
 			"qty":   dish.Num,
-			"price": dish.Dish.Price,
+			"price": priceNum,
 		})
 	}
 	// 获取配送员信息
@@ -164,32 +176,294 @@ func GetOrderDetail(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get rider detail", "data": nil})
 		return
 	}
-	// 构建最终返回的数据
-	fmt.Println(order.PayInfo.Paymethod, order.PayInfo.CheckoutTime, order.PayInfo.Packamount)
+	// 构建最终返回的数据（注意：id 不再带前缀 o，使用纯数字 id）
+	// 同时返回商家信息以便前端展示
+	var merchant models.Merchant
+	_ = global.Db.First(&merchant, order.MerchantID)
+
 	response := gin.H{
 		"code": 1,
 		"data": gin.H{
-			"id":              "o" + strconv.Itoa(int(order.ID)),
+			"id":              order.ID,
+			"orderId":         order.ID,
 			"number":          order.CreatedAt.Format("20060102") + fmt.Sprintf("%06d", order.ID),
-			"amount":          order.TotalPrice, // 假设Order表有TotalAmount字段
+			"amount":          order.TotalPrice,
 			"status":          order.Status,
 			"orderTime":       order.CreatedAt.Format(time.RFC3339),
 			"phone":           consignee.Phone,
 			"expected_time":   order.ExpectedTime,
 			"orderDetailList": items,
+			"items":           items,
 			"remark":          order.Notes,
 			"consignee":       consignee.Name,
 			"address":         address.Province + " " + address.City + " " + address.District + " " + address.Street + " " + address.Detail,
 			"delivery": gin.H{
-				"courierId":    "r" + strconv.Itoa(int(rider.ID)), // 使用rider.ID
-				"courierName":  rider.RealName,                    // 使用rider.Name
-				"courierPhone": rider.Phone,                       // 使用rider.Phone
+				"courierId":    "r" + strconv.Itoa(int(rider.ID)),
+				"courierName":  rider.RealName,
+				"courierPhone": rider.Phone,
 			},
+			"merchantId":     order.MerchantID,
+			"storeName":      merchant.ShopName,
+			"storeLogo":      merchant.Logo,
 			"payMethod":      order.PayInfo.Paymethod,
 			"checkoutTime":   order.PayInfo.CheckoutTime,
 			"packAmount":     order.PayInfo.Packamount,
 			"deliveryAmount": order.PayInfo.Deliveryamount,
 		},
+	}
+	c.JSON(http.StatusOK, response)
+}
+
+// GetUserOrderList 返回当前登录用户的订单列表，支持分页与按 status 过滤
+func GetUserOrderList(c *gin.Context) {
+	// 解析分页参数
+	pageStr := c.Query("page")
+	sizeStr := c.Query("size")
+	status := c.Query("status")
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page < 1 {
+		page = 1
+	}
+	size, err := strconv.Atoi(sizeStr)
+	if err != nil || size < 1 {
+		size = 20
+	}
+	offset := (page - 1) * size
+
+	// 获取当前用户
+	baseUserIDIface, exists := c.Get("baseUserID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "message": "not authenticated"})
+		return
+	}
+	baseUserID := baseUserIDIface.(uint)
+
+	var orders []models.Order
+	var count int64
+	query := global.Db.Model(&models.Order{}).Where("userid = ?", baseUserID)
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	if err := query.Count(&count).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to count orders"})
+		return
+	}
+	if err := query.Preload("PayInfo").Order("created_at desc").Limit(size).Offset(offset).Find(&orders).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to query orders"})
+		return
+	}
+
+	// 构建商家信息映射以便在列表中展示店铺名称/Logo
+	merchantIDs := make([]uint, 0)
+	for _, o := range orders {
+		merchantIDs = append(merchantIDs, o.MerchantID)
+	}
+	var merchants []models.Merchant
+	if len(merchantIDs) > 0 {
+		global.Db.Where("id IN ?", merchantIDs).Find(&merchants)
+	}
+	merchantMap := make(map[uint]models.Merchant)
+	for _, m := range merchants {
+		merchantMap[m.ID] = m
+	}
+
+	// 构建简要列表（附带商家名称/Logo，前端可用详情接口获取 items）
+	items := make([]gin.H, 0, len(orders))
+	for _, o := range orders {
+		// number/format
+		num := o.CreatedAt.Format("20060102") + fmt.Sprintf("%06d", o.ID)
+		m := merchantMap[o.MerchantID]
+
+		// 查询该订单的菜品/套餐明细，合并为 items 返回，方便订单卡片直接展示
+		var orderMeals []models.OrderMeal
+		_ = global.Db.Preload("Meal").Where("order_id = ?", o.ID).Find(&orderMeals).Error
+		var orderDishes []models.OrderDish
+		_ = global.Db.Preload("Dish").Where("order_id = ?", o.ID).Find(&orderDishes).Error
+		itms := make([]gin.H, 0)
+		for _, om := range orderMeals {
+			var priceNum float64 = 0
+			if om.Meal.Price != "" {
+				if p, err := strconv.ParseFloat(om.Meal.Price, 64); err == nil {
+					priceNum = p
+				}
+			}
+			itms = append(itms, gin.H{"id": om.MealID, "skuId": fmt.Sprintf("m%d", om.MealID), "name": om.Meal.Mealname, "count": om.Num, "qty": om.Num, "price": priceNum, "image": om.Meal.ImagePath})
+		}
+		for _, od := range orderDishes {
+			var priceNum float64 = 0
+			if od.Dish.Price != "" {
+				if p, err := strconv.ParseFloat(od.Dish.Price, 64); err == nil {
+					priceNum = p
+				}
+			}
+			itms = append(itms, gin.H{"id": od.DishID, "skuId": fmt.Sprintf("d%d", od.DishID), "name": od.Dish.DishName, "count": od.Num, "qty": od.Num, "price": priceNum, "image": od.Dish.ImagePath})
+		}
+
+		payDeadline := ""
+		if o.PayInfo.ExpiresAt != nil {
+			payDeadline = o.PayInfo.ExpiresAt.Format(time.RFC3339)
+		}
+
+		items = append(items, gin.H{
+			"id":          o.ID,
+			"number":      num,
+			"amount":      o.TotalPrice,
+			"status":      o.Status,
+			"orderTime":   o.CreatedAt.Format(time.RFC3339),
+			"createdAt":   o.CreatedAt.Format(time.RFC3339),
+			"created_at":  o.CreatedAt.Format(time.RFC3339),
+			"time":        o.CreatedAt.Format(time.RFC3339),
+			"payDeadline": payDeadline,
+			"merchantId":  o.MerchantID,
+			"storeName":   m.ShopName,
+			"storeLogo":   m.Logo,
+			"items":       itms,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"items": items, "total": count}})
+}
+
+// GetUserOrderDetail 通过路径参数返回单个订单详细信息（包括 order_dishes 与 order_meals）
+func GetUserOrderDetail(c *gin.Context) {
+	idStr := c.Param("id")
+	if idStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "order id required"})
+		return
+	}
+	oid, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid order id"})
+		return
+	}
+
+	// 验证用户权限：订单必须属于当前用户
+	baseUserIDIface, exists := c.Get("baseUserID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "message": "not authenticated"})
+		return
+	}
+	baseUserID := baseUserIDIface.(uint)
+
+	var order models.Order
+	if err := global.Db.Preload("PayInfo").First(&order, oid).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"code": 0, "message": "order not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get order"})
+		return
+	}
+	if order.Userid != baseUserID {
+		c.JSON(http.StatusForbidden, gin.H{"code": 0, "message": "forbidden"})
+		return
+	}
+
+	// consignee
+	var consignee models.Consignee
+	if err := global.Db.First(&consignee, "id = ?", order.Consigneeid).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get consignee"})
+		return
+	}
+	var address models.Address
+	if err := global.Db.First(&address, consignee.Addressid).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get address"})
+		return
+	}
+
+	// order meals
+	var orderMeals []models.OrderMeal
+	if err := global.Db.Preload("Meal").Where("order_id = ?", order.ID).Find(&orderMeals).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get order meals"})
+		return
+	}
+	var orderDishes []models.OrderDish
+	if err := global.Db.Preload("Dish").Where("order_id = ?", order.ID).Find(&orderDishes).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get order dishes"})
+		return
+	}
+
+	// build items from order_meals and order_dishes
+	items := make([]gin.H, 0)
+	for _, om := range orderMeals {
+		// Meal.Price stored as string in model; parse to float
+		var priceNum float64 = 0
+		if om.Meal.Price != "" {
+			if p, err := strconv.ParseFloat(om.Meal.Price, 64); err == nil {
+				priceNum = p
+			}
+		}
+		items = append(items, gin.H{
+			"id":    om.MealID,
+			"skuId": fmt.Sprintf("m%d", om.MealID),
+			"name":  om.Meal.Mealname,
+			"count": om.Num,
+			"qty":   om.Num,
+			"price": priceNum,
+			"image": om.Meal.ImagePath,
+		})
+	}
+	for _, od := range orderDishes {
+		// Dish.Price is stored as string in model, try to convert to float
+		var priceNum float64 = 0
+		if od.Dish.Price != "" {
+			// try parse
+			if p, err := strconv.ParseFloat(od.Dish.Price, 64); err == nil {
+				priceNum = p
+			}
+		}
+		items = append(items, gin.H{
+			"id":    od.DishID,
+			"skuId": fmt.Sprintf("d%d", od.DishID),
+			"name":  od.Dish.DishName,
+			"count": od.Num,
+			"qty":   od.Num,
+			"price": priceNum,
+			"image": od.Dish.ImagePath,
+		})
+	}
+
+	var rider models.Rider
+	_ = global.Db.First(&rider, order.RiderID)
+
+	// include merchant info and return numeric id (no leading 'o')
+	var merchant models.Merchant
+	_ = global.Db.First(&merchant, order.MerchantID)
+
+	response := gin.H{
+		"code": 1,
+		"data": gin.H{
+			"id":              order.ID,
+			"orderId":         order.ID,
+			"number":          order.CreatedAt.Format("20060102") + fmt.Sprintf("%06d", order.ID),
+			"amount":          order.TotalPrice,
+			"status":          order.Status,
+			"orderTime":       order.CreatedAt.Format(time.RFC3339),
+			"createdAt":       order.CreatedAt.Format(time.RFC3339),
+			"created_at":      order.CreatedAt.Format(time.RFC3339),
+			"time":            order.CreatedAt.Format(time.RFC3339),
+			"phone":           consignee.Phone,
+			"orderDetailList": items,
+			"items":           items,
+			"remark":          order.Notes,
+			"consignee":       consignee.Name,
+			"address":         address.Province + " " + address.City + " " + address.District + " " + address.Street + " " + address.Detail,
+			"delivery":        gin.H{"courierId": "r" + fmt.Sprintf("%d", rider.ID), "courierName": rider.RealName, "courierPhone": rider.Phone},
+			"merchantId":      order.MerchantID,
+			"storeName":       merchant.ShopName,
+			"storeLogo":       merchant.Logo,
+			"payMethod":       order.PayInfo.Paymethod,
+			"checkoutTime":    order.PayInfo.CheckoutTime,
+			"payDeadline":     nil,
+			"pay_deadline":    nil,
+			"packAmount":      order.PayInfo.Packamount,
+			"deliveryAmount":  order.PayInfo.Deliveryamount,
+		},
+	}
+	// 填充 payDeadline 字段（如果存在）
+	if order.PayInfo.ExpiresAt != nil {
+		response["data"].(gin.H)["payDeadline"] = order.PayInfo.ExpiresAt.Format(time.RFC3339)
+		response["data"].(gin.H)["pay_deadline"] = order.PayInfo.ExpiresAt.Format(time.RFC3339)
 	}
 	c.JSON(http.StatusOK, response)
 }
@@ -410,9 +684,17 @@ func Orderadd(c *gin.Context) {
 
 // CreatePayOrder 创建一个支付订单（预下单），兼容单商家和批量 shops 格式
 func CreatePayOrder(c *gin.Context) {
+	type ItemReq struct {
+		DishID uint    `json:"dishId"`
+		MealID uint    `json:"mealId"`
+		Qty    int     `json:"qty"`
+		Price  float64 `json:"price"`
+	}
 	type ShopReq struct {
-		MerchantID uint    `json:"merchantId" binding:"required"`
-		TotalPrice float64 `json:"totalPrice" binding:"required"`
+		MerchantID     uint      `json:"merchantId" binding:"required"`
+		TotalPrice     float64   `json:"totalPrice" binding:"required"`
+		Items          []ItemReq `json:"items"`
+		DeliveryAmount float64   `json:"deliveryAmount"`
 	}
 	type Req struct {
 		Shops       []ShopReq `json:"shops"`
@@ -474,33 +756,20 @@ func CreatePayOrder(c *gin.Context) {
 		MerchantID uint   `json:"merchantId"`
 	}
 	var resp []RespItem
-	// 计算总价
-	var totalSum float64 = 0
-	for _, s := range req.Shops {
-		totalSum += s.TotalPrice
-	}
-
-	// 生成单个 out_trade_no/code_url
-	b := make([]byte, 12)
-	if _, err := rand.Read(b); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to generate out_trade_no"})
-		return
-	}
-	outTradeNo := fmt.Sprintf("o_%d_%s", time.Now().Unix(), hex.EncodeToString(b))
-	codeURL := fmt.Sprintf("https://pay.example.local/qr?out_trade_no=%s", outTradeNo)
-
-	// 创建单个 payinfo
+	// 生成 out_trade_no/code_url 并准备创建 payinfo
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	outTradeNo := hex.EncodeToString(b)
+	codeURL := "" // 支付二维码链接；集成真实支付时替换为支付网关返回值
 	tx := global.Db.Begin()
 	pay := models.PayInfo{
-		Paymethod:      1,
+		Paymethod:      0,
 		Packamount:     0,
 		CheckoutTime:   time.Now(),
 		Deliveryamount: 0,
 		OutTradeNo:     outTradeNo,
 		CodeURL:        codeURL,
 		Status:         "pending",
-		// 可扩展字段记录总价
-		// TotalAmount:    totalSum, // 如果模型有该字段
 	}
 	exp := time.Now().Add(15 * time.Minute)
 	pay.ExpiresAt = &exp
@@ -568,9 +837,17 @@ func CreatePayOrder(c *gin.Context) {
 
 // CreatePendingOrder 创建一个“预览/待支付”订单，用于用户进入结算页时持久化未完成的尝试。
 func CreatePendingOrder(c *gin.Context) {
+	type ItemReq struct {
+		DishID uint    `json:"dishId"`
+		MealID uint    `json:"mealId"`
+		Qty    int     `json:"qty"`
+		Price  float64 `json:"price"`
+	}
 	type ShopReq struct {
-		MerchantID uint    `json:"merchantId" binding:"required"`
-		TotalPrice float64 `json:"totalPrice" binding:"required"`
+		MerchantID     uint      `json:"merchantId" binding:"required"`
+		TotalPrice     float64   `json:"totalPrice" binding:"required"`
+		Items          []ItemReq `json:"items"`
+		DeliveryAmount float64   `json:"deliveryAmount"`
 	}
 	type Req struct {
 		Shops       []ShopReq `json:"shops"`
@@ -634,7 +911,8 @@ func CreatePendingOrder(c *gin.Context) {
 		CodeURL:        "",
 		Status:         "pending",
 	}
-	exp := time.Now().Add(24 * time.Hour)
+	// 为便于调试，pending 订单设为 1 分钟后过期（生产环境请调整）
+	exp := time.Now().Add(1 * time.Minute)
 	pay.ExpiresAt = &exp
 	if err := tx.Create(&pay).Error; err != nil {
 		tx.Rollback()
@@ -643,14 +921,17 @@ func CreatePendingOrder(c *gin.Context) {
 	}
 
 	var resp []map[string]interface{}
+	var deliveryTotal float64 = 0
 	for _, s := range req.Shops {
+		// include delivery amount into order total if provided
+		deliveryTotal += s.DeliveryAmount
 		order := models.Order{
 			Consigneeid:  req.Consigneeid,
 			PickupPoint:  time.Now(),
 			DropofPoint:  time.Now(),
 			ExpectedTime: time.Now(),
-			Status:       0, // 0 = pending (user initiated, not visible to merchant/rider)
-			TotalPrice:   s.TotalPrice,
+			Status:       1, // 1 = unpaid/created (用户已创建，待付款)
+			TotalPrice:   s.TotalPrice + s.DeliveryAmount,
 			MerchantID:   s.MerchantID,
 			Notes:        req.Remarks,
 			PayInfoid:    int(pay.ID),
@@ -661,28 +942,56 @@ func CreatePendingOrder(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to create pending order"})
 			return
 		}
-		// 将该用户购物车中对应商家的 items 迁移为 order_dishes（并删除购物车项），以便在 pending 状态下保留商品明细
-		var cart models.Cart
-		if err := tx.Where("user_id = ?", baseUserID).First(&cart).Error; err == nil {
-			var items []models.CartItem
-			if err := tx.Where("cart_id = ? AND merchant_id = ?", cart.ID, s.MerchantID).Find(&items).Error; err == nil {
-				for _, it := range items {
+
+		// If frontend supplied explicit items in payload (store page may not persist cart in DB), use them to create order_dishes/order_meals
+		if len(s.Items) > 0 {
+			for _, it := range s.Items {
+				if it.DishID != 0 {
 					od := models.OrderDish{OrderID: int(order.ID), DishID: int(it.DishID), Num: it.Qty}
 					if err := tx.Create(&od).Error; err != nil {
 						tx.Rollback()
-						c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to create order dish"})
+						c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to create order dish from payload"})
+						return
+					}
+				} else if it.MealID != 0 {
+					om := models.OrderMeal{OrderID: int(order.ID), MealID: int(it.MealID), Num: it.Qty}
+					if err := tx.Create(&om).Error; err != nil {
+						tx.Rollback()
+						c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to create order meal from payload"})
 						return
 					}
 				}
-				// 删除已迁移的购物车项，避免后续重复迁移
-				if err := tx.Where("cart_id = ? AND merchant_id = ?", cart.ID, s.MerchantID).Delete(&models.CartItem{}).Error; err != nil {
-					tx.Rollback()
-					c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to cleanup cart items after pending creation"})
-					return
+			}
+		} else {
+			// Fallback: migrate from persisted cart (existing behavior)
+			var cart models.Cart
+			if err := tx.Where("user_id = ?", baseUserID).First(&cart).Error; err == nil {
+				var items []models.CartItem
+				if err := tx.Where("cart_id = ? AND merchant_id = ?", cart.ID, s.MerchantID).Find(&items).Error; err == nil {
+					for _, it := range items {
+						od := models.OrderDish{OrderID: int(order.ID), DishID: int(it.DishID), Num: it.Qty}
+						if err := tx.Create(&od).Error; err != nil {
+							tx.Rollback()
+							c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to create order dish"})
+							return
+						}
+					}
+					// 删除已迁移的购物车项，避免后续重复迁移
+					if err := tx.Where("cart_id = ? AND merchant_id = ?", cart.ID, s.MerchantID).Delete(&models.CartItem{}).Error; err != nil {
+						tx.Rollback()
+						c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to cleanup cart items after pending creation"})
+						return
+					}
 				}
 			}
 		}
+
 		resp = append(resp, map[string]interface{}{"orderId": order.ID, "merchantId": s.MerchantID})
+	}
+
+	// persist aggregated delivery amount into payinfo
+	if deliveryTotal > 0 {
+		tx.Model(&models.PayInfo{}).Where("id = ?", pay.ID).Update("deliveryamount", deliveryTotal)
 	}
 
 	if err := tx.Commit().Error; err != nil {
@@ -690,7 +999,59 @@ func CreatePendingOrder(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"orders": resp}})
+	// 启动后台 goroutine：到期时清理未支付订单及相关数据（order, order_dishes, order_meals, cart_items）
+	go func(payID int) {
+		// 读取 payinfo 获取过期时间
+		var p models.PayInfo
+		if err := global.Db.First(&p, payID).Error; err != nil {
+			return
+		}
+		if p.ExpiresAt == nil {
+			return
+		}
+		wait := time.Until(*p.ExpiresAt)
+		if wait > 0 {
+			time.Sleep(wait)
+		}
+
+		// 重新加载，确认仍为 pending
+		if err := global.Db.First(&p, payID).Error; err != nil {
+			return
+		}
+		if p.Status != "pending" {
+			return
+		}
+
+		var ordersToDelete []models.Order
+		if err := global.Db.Where("pay_infoid = ?", p.ID).Find(&ordersToDelete).Error; err != nil {
+			return
+		}
+
+		for _, od := range ordersToDelete {
+			tx2 := global.Db.Begin()
+			// 删除 order_meals
+			_ = tx2.Where("order_id = ?", od.ID).Delete(&models.OrderMeal{}).Error
+			// 删除 order_dishes
+			_ = tx2.Where("order_id = ?", od.ID).Delete(&models.OrderDish{}).Error
+			// 清理购物车项（通过 consignee -> user -> cart）
+			var consignee models.Consignee
+			if err := tx2.First(&consignee, od.Consigneeid).Error; err == nil {
+				var cart models.Cart
+				if err := tx2.Where("user_id = ?", consignee.Userid).First(&cart).Error; err == nil {
+					_ = tx2.Where("cart_id = ? AND merchant_id = ?", cart.ID, od.MerchantID).Delete(&models.CartItem{}).Error
+				}
+			}
+			// 删除订单
+			_ = tx2.Delete(&models.Order{}, od.ID).Error
+			_ = tx2.Commit().Error
+		}
+
+		// 标记 payinfo 为 expired
+		p.Status = "expired"
+		_ = global.Db.Save(&p).Error
+	}(int(pay.ID))
+
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"orders": resp, "pay_deadline": pay.ExpiresAt}})
 }
 
 // GetOrderStatus 返回订单支付及状态信息
@@ -814,4 +1175,243 @@ func PaymentNotify(c *gin.Context) {
 
 	// 返回平台要求的响应
 	c.String(http.StatusOK, "success")
+}
+
+// CancelOrder 用户取消订单（删除订单及相关明细）
+func CancelOrder(c *gin.Context) {
+	var body struct {
+		ID interface{} `json:"id"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid request body", "data": nil})
+		return
+	}
+	// parse id
+	var oid int
+	switch v := body.ID.(type) {
+	case float64:
+		oid = int(v)
+	case string:
+		if n, err := strconv.Atoi(v); err == nil {
+			oid = n
+		}
+	case int:
+		oid = v
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid id", "data": nil})
+		return
+	}
+
+	// auth
+	baseUserIDIface, exists := c.Get("baseUserID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "message": "not authenticated"})
+		return
+	}
+	baseUserID := baseUserIDIface.(uint)
+
+	var order models.Order
+	if err := global.Db.First(&order, oid).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"code": 0, "message": "order not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "db error"})
+		return
+	}
+	if order.Userid != baseUserID {
+		c.JSON(http.StatusForbidden, gin.H{"code": 0, "message": "forbidden"})
+		return
+	}
+
+	tx := global.Db.Begin()
+	// delete order_meals and order_dishes
+	_ = tx.Where("order_id = ?", order.ID).Delete(&models.OrderMeal{}).Error
+	_ = tx.Where("order_id = ?", order.ID).Delete(&models.OrderDish{}).Error
+	// delete order
+	if err := tx.Delete(&models.Order{}, order.ID).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to delete order"})
+		return
+	}
+
+	// If associated payinfo has no other orders, mark expired
+	var pay models.PayInfo
+	if order.PayInfoid != 0 {
+		if err := tx.First(&pay, order.PayInfoid).Error; err == nil {
+			var cnt int64
+			tx.Model(&models.Order{}).Where("pay_infoid = ?", pay.ID).Count(&cnt)
+			if cnt == 0 {
+				pay.Status = "expired"
+				_ = tx.Save(&pay).Error
+			}
+		}
+	}
+
+	_ = tx.Commit().Error
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"success": true}})
+}
+
+// PayOrder 标记订单为已支付（用于前端测试/伪支付）
+func PayOrder(c *gin.Context) {
+	var body struct {
+		ID interface{} `json:"id"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid request body", "data": nil})
+		return
+	}
+	var oid int
+	switch v := body.ID.(type) {
+	case float64:
+		oid = int(v)
+	case string:
+		if n, err := strconv.Atoi(v); err == nil {
+			oid = n
+		}
+	case int:
+		oid = v
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid id"})
+		return
+	}
+
+	baseUserIDIface, exists := c.Get("baseUserID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "message": "not authenticated"})
+		return
+	}
+	baseUserID := baseUserIDIface.(uint)
+
+	var order models.Order
+	if err := global.Db.First(&order, oid).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"code": 0, "message": "order not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "db error"})
+		return
+	}
+	if order.Userid != baseUserID {
+		c.JSON(http.StatusForbidden, gin.H{"code": 0, "message": "forbidden"})
+		return
+	}
+
+	tx := global.Db.Begin()
+	// update order status to 2
+	if err := tx.Model(&models.Order{}).Where("id = ?", order.ID).Update("status", 2).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to update order status"})
+		return
+	}
+
+	// mark payinfo as paid if present
+	if order.PayInfoid != 0 {
+		var pay models.PayInfo
+		if err := tx.First(&pay, order.PayInfoid).Error; err == nil {
+			now := time.Now()
+			pay.Status = "paid"
+			pay.PaidAt = &now
+			_ = tx.Save(&pay).Error
+		}
+	}
+
+	// Migrate cart items to order_dishes if the order has none yet (restore original behavior)
+	var consignee models.Consignee
+	if err := tx.First(&consignee, order.Consigneeid).Error; err == nil {
+		var cart models.Cart
+		if err := tx.Where("user_id = ?", consignee.Userid).First(&cart).Error; err == nil {
+			var existCount int64
+			tx.Model(&models.OrderDish{}).Where("order_id = ?", order.ID).Count(&existCount)
+			if existCount == 0 {
+				var items []models.CartItem
+				if err := tx.Where("cart_id = ? AND merchant_id = ?", cart.ID, order.MerchantID).Find(&items).Error; err == nil {
+					for _, it := range items {
+						od := models.OrderDish{OrderID: int(order.ID), DishID: int(it.DishID), Num: it.Qty}
+						if err := tx.Create(&od).Error; err != nil {
+							tx.Rollback()
+							c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to create order dish"})
+							return
+						}
+					}
+					// 删除已迁移的购物车项
+					if err := tx.Where("cart_id = ? AND merchant_id = ?", cart.ID, order.MerchantID).Delete(&models.CartItem{}).Error; err != nil {
+						tx.Rollback()
+						c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to cleanup cart items"})
+						return
+					}
+				}
+			}
+		}
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "commit failed"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"success": true}})
+}
+
+// UpdateOrderAddress 更新订单的 consigneeid（用于 checkout 时用户更换地址）
+func UpdateOrderAddress(c *gin.Context) {
+	var body struct {
+		ID          interface{} `json:"id"`
+		Consigneeid int         `json:"consigneeid"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid request body"})
+		return
+	}
+	var oid int
+	switch v := body.ID.(type) {
+	case float64:
+		oid = int(v)
+	case string:
+		if n, err := strconv.Atoi(v); err == nil {
+			oid = n
+		}
+	case int:
+		oid = v
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid id"})
+		return
+	}
+
+	baseUserIDIface, exists := c.Get("baseUserID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "message": "not authenticated"})
+		return
+	}
+	baseUserID := baseUserIDIface.(uint)
+
+	var order models.Order
+	if err := global.Db.First(&order, oid).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"code": 0, "message": "order not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "db error"})
+		return
+	}
+	if order.Userid != baseUserID {
+		c.JSON(http.StatusForbidden, gin.H{"code": 0, "message": "forbidden"})
+		return
+	}
+
+	// check consignee belongs to user
+	var consignee models.Consignee
+	if err := global.Db.First(&consignee, body.Consigneeid).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid consignee"})
+		return
+	}
+	if consignee.Userid != baseUserID {
+		c.JSON(http.StatusForbidden, gin.H{"code": 0, "message": "consignee not belong to user"})
+		return
+	}
+
+	if err := global.Db.Model(&models.Order{}).Where("id = ?", order.ID).Update("consigneeid", body.Consigneeid).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to update order address"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"success": true}})
 }

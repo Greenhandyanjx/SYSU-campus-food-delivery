@@ -220,7 +220,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from 'vue'
 import qrImg from '@/assets/qrcode.png'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
+import orderApi from '@/api/user/order'
 import * as addressApi from '@/api/common/address'
 import * as cartApi from '@/api/user/cart'
 import { getDeliveryConfig } from '@/api/user/store'
@@ -248,6 +249,7 @@ const form = ref({ remark: '', tableware: 0 })
 const showPayModal = ref(false)
 const payQrImg = ref(qrImg)
 const payAmount = ref(0)
+const pendingOrders = ref<string[]>([])
 
 // 格式化地址
 function formatFullAddress(a: any) {
@@ -403,16 +405,70 @@ const totalAmount = computed(() => {
 onMounted(async () => {
   await loadAddresses()
   await loadCart()
-  // 在用户进入结算页时，尝试在后端创建 pending 订单以便持久化尝试（若后端不可达则忽略）
+  // 如果在跳转前已由购物车页创建了 pending orders，则优先使用它们并从 sessionStorage 清除
   try {
-    if (shopList.value && shopList.value.length > 0 && selectedAddress.value) {
-      const payloadShops = shopList.value.map((s: any) => ({ merchantId: s.storeId || s.merchantId || s.id, totalPrice: s.shopTotal }))
-      const payload = { shops: payloadShops, consigneeid: selectedAddress.value.id, totalPrice: totalAmount.value, remarks: form.value.remark }
-      await cartApi.createPending(payload)
+    const pendingRaw = sessionStorage.getItem('pending_orders')
+    if (pendingRaw) {
+      const parsed = JSON.parse(pendingRaw)
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        pendingOrders.value = parsed.map((x: any) => String(x))
+        sessionStorage.removeItem('pending_orders')
+      }
+    }
+  } catch (e) { console.warn('read pending_orders from session failed', e) }
+  // 在用户进入结算页时：如果带有 orderId（从订单卡片/详情跳转），不创建新的 pending，而是直接加载该订单用于支付；
+  // 否则按照购物车内容创建 pending 以便持久化未完成的结算尝试。
+  try {
+    const route = useRoute()
+    const qid = route.query.orderId
+    if (qid) {
+      // 支付已有订单 —— 不创建新的 pending，只将该订单 id 作为待支付目标
+      try {
+        const od: any = await orderApi.getOrderDetail(String(qid))
+        const odata = od && od.data && (od.data.data || od.data)
+        if (odata) {
+          // 构建页面展示数据（兼容旧后端结构）
+          shopList.value = [{
+            storeId: odata.merchantId || odata.merchantid || odata.merchantID || 0,
+            name: odata.storeName || odata.shopName || '',
+            items: (odata.items || odata.orderDetailList || []).map((it: any) => ({
+              dishId: it.id || it.skuId || null,
+              name: it.name,
+              spec: it.spec || it.sku || '',
+              qty: it.qty || it.count || it.num || 1,
+              price: Number(it.price || 0)
+            })),
+            packingFee: Number(odata.packAmount || odata.pack_amount || 0),
+            deliveryFee: Number(odata.deliveryAmount || odata.delivery_amount || 0),
+            shopTotal: Number(odata.amount || odata.total || 0)
+          }]
+          pendingOrders.value = [String(qid)]
+          payAmount.value = Number(odata.amount || 0)
+        }
+      } catch (e) {
+        console.warn('failed to fetch order detail for checkout', e)
+      }
+    } else {
+      // 原购物车结算路径：为当前选中项创建 pending（持久化尝试）
+      let payloadShops: any[] = []
+      payloadShops = shopList.value.map((s: any) => ({ merchantId: s.storeId || s.merchantId || s.id, totalPrice: s.shopTotal }))
+
+      if (payloadShops && payloadShops.length > 0 && selectedAddress.value) {
+        const payload = { shops: payloadShops, consigneeid: selectedAddress.value.id, totalPrice: totalAmount.value, remarks: form.value.remark }
+        try {
+          const cp: any = await cartApi.createPending(payload)
+          if (cp && cp.data && cp.data.orders) {
+            pendingOrders.value = (cp.data.orders || []).map((x: any) => String(x.orderId || x.OrderID || x.order_id))
+          } else if (cp && cp.orders) {
+            pendingOrders.value = (cp.orders || []).map((x: any) => String(x.orderId || x.OrderID || x.order_id))
+          }
+        } catch (e) {
+          console.warn('create pending order failed', e)
+        }
+      }
     }
   } catch (e) {
-    // ignore errors creating pending
-    console.warn('create pending order failed', e)
+    console.warn('checkout onMounted error', e)
   }
 })
 
@@ -421,9 +477,17 @@ function openAddressManager() {
   showAddressModal.value = true
 }
 
-function pickAddress(a: any) {
+async function pickAddress(a: any) {
   selectedAddress.value = a
   showAddressModal.value = false
+  // 如果已有 pending orders，更新它们的 consigneeid
+  try {
+    if (pendingOrders.value && pendingOrders.value.length > 0) {
+      for (const oid of pendingOrders.value) {
+        await orderApi.updateOrderAddress(String(oid), { consigneeid: a.id }).catch(() => {})
+      }
+    }
+  } catch (e) { console.warn('update pending order address failed', e) }
 }
 
 async function addNewAddress() {
@@ -679,6 +743,26 @@ async function onPay() {
   }
 
   try {
+    // 若存在 pendingOrders（例如来自已有订单或已创建的 pending），直接标记这些订单为已支付
+    if (pendingOrders.value && pendingOrders.value.length > 0) {
+      payAmount.value = totalAmount.value || payAmount.value || 0
+      payQrImg.value = qrImg
+      showPayModal.value = true
+
+      setTimeout(async () => {
+        showPayModal.value = false
+        for (const oid of pendingOrders.value) {
+          try { await orderApi.payOrder(String(oid)) } catch (e) { console.warn('payOrder failed', e) }
+        }
+        // 清理购物车中已结算的项
+        try { await cartApi.deleteSelected() } catch (e) {}
+        await loadCart()
+        router.push('/user/payment/success')
+      }, 3000)
+      return
+    }
+
+    // 否则走购物车结算流程（createPayOrder）
     const payloadShops = shopList.value.map(s => ({
       storeId: s.storeId,
       items: s.items.map((it: any) => ({ dishId: it.dishId, qty: it.qty }))
@@ -693,13 +777,21 @@ async function onPay() {
 
     const resp: any = await cartApi.checkout(payload)
     payAmount.value = totalAmount.value
-    // 统一使用本地静态二维码资源（演示用）
     payQrImg.value = qrImg
     showPayModal.value = true
 
-    // 模拟支付成功
     setTimeout(async () => {
       showPayModal.value = false
+      try {
+        const orders = (resp && resp.data && (resp.data.orders || resp.data.orders)) || resp.orders || []
+        for (const o of orders) {
+          const oid = o.orderId || o.OrderID || o.orderID || o.id || o
+          if (oid) {
+            try { await orderApi.payOrder(String(oid)) } catch (e) { console.warn('payOrder failed', e) }
+          }
+        }
+      } catch (e) { console.warn('mark orders paid failed', e) }
+
       await cartApi.deleteSelected()
       await loadCart()
       router.push('/user/payment/success')
