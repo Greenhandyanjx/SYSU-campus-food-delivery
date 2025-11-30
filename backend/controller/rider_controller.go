@@ -470,7 +470,7 @@ func GetOrderHistory(c *gin.Context) {
 	}
 
 	if date != "" {
-		query = query.Where("DATE(finish_at) = ?", date)
+		query = query.Where("finish_at = ?", date)
 	}
 
 	query.Count(&total)
@@ -904,16 +904,22 @@ func GetIncomeHistory(c *gin.Context) {
 	}
 
 	// 手动组装前端期望的字段：
-	// { id, orderId, amount, type, time, remark }
+	// { id, orderId, amount, type, time, remark, restaurant, customer, status }
 	items := make([]gin.H, 0, len(records))
 	for _, r := range records {
+		// 由于这是收入记录表，不包含Status字段，默认为completed
+		status := "completed"
+
 		items = append(items, gin.H{
-			"id":      r.ID,
-			"orderId": r.OrderID,
-			"amount":  r.Amount,
-			"type":    r.Type,
-			"time":    r.CreatedAt, // ⭐ 关键：映射为 time
-			"remark":  r.Remark,
+			"id":           r.ID,
+			"orderId":      r.OrderID,
+			"amount":       r.Amount,
+			"type":         r.Type,
+			"time":         r.CreatedAt, // 前端期望 time 字段
+			"remark":       r.Remark,
+			"restaurant":   "餐厅", // 暂时固定值，可后续从订单表关联
+			"customer":     "顾客", // 暂时固定值，可后续从订单表关联
+			"status":       status, // 添加状态字段供筛选
 		})
 	}
 

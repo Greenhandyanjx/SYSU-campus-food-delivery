@@ -147,7 +147,9 @@ func SetRouter() *gin.Engine {
 
 		auth.GET("/user/cart", controller.GetUserCart)
 		auth.POST("/user/cart/add", controller.AddToCart) // 添加到购物车
-		auth.POST("/user/cart/deleteSelected", controller.DeleteSelected)
+
+		// User order management
+		auth.GET("/user/order/list", controller.GetUserOrderList) // 获取用户订单列表
 		auth.POST("/user/cart/selectAll", controller.SelectAll)
 		auth.POST("/user/cart/selectItem", controller.SelectItem)
 		auth.POST("/user/cart/selectShop", controller.SelectShop)
