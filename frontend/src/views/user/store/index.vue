@@ -141,8 +141,9 @@
         <span v-if="store.minOrder && cartTotal > 0" class="gap">还差 ¥{{ (store.minOrder - cartTotal).toFixed(2) }}</span>
       </div>
       <div class="text-top" v-else>
-        <strong>共 ¥{{ cartTotal.toFixed(2) }}</strong>
-      </div>
+            <strong>共 ¥{{ (cartTotal + (store.deliveryFee || 0)).toFixed(2) }}</strong>
+            <span>{{store.deliveryFee?`  配送费 ¥${store.deliveryFee}`:'免配送费'}}</span>
+          </div>
     </div>
   </div>
 
@@ -189,7 +190,10 @@
   <div v-if="showPayModal" class="pay-modal-overlay" @click.self="closePayModal">
     <div class="pay-modal">
       <h3>请使用微信/支付宝扫码付款</h3>
-      <img :src="payQrImg" alt="pay-qr" style="width:280px;height:280px;" />
+      <div style="text-align:center; margin-top:8px;">
+        <img :src="payQrImg" alt="pay-qr" style="width:200px;height:200px;border:1px solid #eee;border-radius:6px;" />
+        <div style="margin-top:8px;font-size:14px;color:#333;font-weight:600">应付金额：¥{{ payAmount.toFixed(2) }}</div>
+      </div>
       <div style="margin-top:12px;display:flex;gap:8px;justify-content:center;">
         <el-button type="primary" @click="closePayModal">关闭</el-button>
       </div>
@@ -200,10 +204,11 @@
 
 <script setup lang="ts">
 import { reactive, ref, computed, onMounted,onBeforeUnmount } from 'vue'
+import qrImg from '@/assets/qrcode.png'
 import ChatLauncher from '@/components/Chat/ChatLauncher.vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getStoreByName, getDishesByStore, addToCart, removeFromCart, getCart } from '@/api/user/store'
+import { getStoreByName, getStoreById, getDishesByStore, addToCart, removeFromCart, getCart, getDeliveryConfig } from '@/api/user/store'
 import * as cartApi from '@/api/user/cart'
 
 /* ------------------ 核心数据定义 ------------------ */
@@ -216,6 +221,7 @@ const cart = ref<any[]>([])
 const selectedCategory = ref('all')
 const query = ref('')
 const route = useRoute()
+const router = useRouter()
 /* ------------------ Demo 数据备用 ------------------ */
 const demoStore = {
   id: 1,
@@ -225,6 +231,7 @@ const demoStore = {
   rating: 4.9,
   deliveryTime: '25~35 分钟',
   minOrder: 15,
+  deliveryFee: 2,
   openTime: '10:30 - 21:00',
   phone: '138-8888-6666',
   bg: '/src/assets/demo/store_bg.jpg'
@@ -285,13 +292,20 @@ const categoryLabels: Record<number, string> = {
 }
 /* ------------------ 页面加载与接口请求 ------------------ */
 async function load() {
-  const name = decodeURIComponent(String(route.params.name || ''))
+  const rawParam = String(route.params.name || '')
+  const name = decodeURIComponent(rawParam)
   if (!name) {
     useDemoData()
     return
   }
   try {
-    const res = await getStoreByName(name)
+    // 如果参数看起来像 numeric id，优先按 id 查询；否则按 name 查询
+    let res: any
+    if (/^\d+$/.test(rawParam)) {
+      res = await getStoreById(rawParam)
+    } else {
+      res = await getStoreByName(name)
+    }
     const data = res && res.data ? res.data.data || res.data : res
     if (!data) throw new Error('无返回数据')
 
@@ -305,10 +319,29 @@ async function load() {
       shop_location: data.shop_location || data.ShopLocation || data.shop_location,
       rating: data.rating || 4.8,
       minOrder: data.minOrder || data.min_order || data.min_order_value,
+      deliveryFee: data.deliveryFee || data.delivery_fee,
+      deliveryRange: data.deliveryRange || data.delivery_range,
       deliveryTime: data.deliveryTime || data.delivery_time,
       openTime: data.openTime || data.open_time,
       phone: data.phone || data.Phone || (data.merchant && (data.merchant.phone || data.merchant.Phone)),
       bg: data.bg || data.background,
+    }
+
+    // 尝试从后端获取商家配送配置（minOrder / deliveryFee / deliveryRange），覆盖可能存在的后端字段
+    try {
+      const b = store.value.id || store.value.base_id || store.value.baseId
+      if (b) {
+        const cfgRes = await getDeliveryConfig(b)
+        const cfg = cfgRes && cfgRes.data ? cfgRes.data.data || cfgRes.data : cfgRes
+        store.value.minOrder = cfg?.min_price ?? cfg?.minPrice ?? store.value.minOrder ?? 15
+        store.value.deliveryFee = cfg?.delivery_fee ?? cfg?.deliveryFee ?? 2
+        store.value.deliveryRange = cfg?.delivery_range ?? cfg?.deliveryRange ?? 2000
+      }
+    } catch (e) {
+      console.warn('fetch delivery config failed', e)
+      store.value.minOrder = store.value.minOrder || 15
+      store.value.deliveryFee = store.value.deliveryFee || 2
+      store.value.deliveryRange = store.value.deliveryRange || 2000
     }
 
     const id = store.value.id
@@ -424,7 +457,7 @@ function generateCategories() {
 // 刷新购物车（仅加载当前店铺相关项并同步到菜品）
 async function refreshCart() {
   try {
-    const storeIdToSend = store.value.base_id || store.value.id
+    const storeIdToSend = store.value.id || store.value.base_id
     const r = await getCart({ storeId: storeIdToSend })
     const data = r && r.data ? r.data.data || r.data : r
     let items: any[] = []
@@ -434,7 +467,9 @@ async function refreshCart() {
       const shop = data.shops.find((s: any) => (s.storeId == storeIdToSend || s.id == storeIdToSend || s.merchant_id == storeIdToSend || s.merchantId == storeIdToSend))
       items = shop ? shop.items || [] : []
     }
-    cart.value = items
+    // 保留并规范 selected 字段，方便页面按已选项结算
+    // 如果某项存在于购物车且数量大于 0，则在进入店铺页时自动将其视为已选中，避免进入店铺后出现购物车中有商品但未被选中从而结算页缺失的问题
+    cart.value = (items || []).map((it: any) => ({ ...it, selected: !!it.selected || (!!(it.qty || it.Qty || it.quantity) && Number(it.qty || it.Qty || it.quantity) > 0) }))
     // 同步购物车数量到菜品：兼容多种返回键名（dish_id / dishId / id）
     for (const d of dishes.value) {
       const item = cart.value.find((c: any) => {
@@ -486,7 +521,8 @@ async function refreshCart() {
 // }
 async function add(d: any) {
   try {
-    const storeIdToSend = store.value.base_id || store.value.id
+    // prefer primary key id when sending to backend
+    const storeIdToSend = store.value.id || store.value.base_id || store.value.baseId
     await addToCart({ storeId: storeIdToSend, dishId: d.id, name: d.name, price: d.price, qty: 1 })
     // 本地乐观更新并刷新购物车以保持一致
     d.count = (d.count || 0) + 1
@@ -500,7 +536,7 @@ async function add(d: any) {
 async function dec(d: any) {
   if ((d.count || 0) <= 0) return
   try {
-    const storeIdToSend = store.value.base_id || store.value.id
+    const storeIdToSend = store.value.id || store.value.base_id || store.value.baseId
     await removeFromCart({ storeId: storeIdToSend, dishId: d.id, qty: 1 })
     d.count = Math.max(0, (d.count || 0) - 1)
     await refreshCart()
@@ -537,6 +573,11 @@ const cartTotal = computed(() => {
   return cart.value.reduce((sum, item) => sum + item.qty * item.price, 0)
 })
 
+// 显示用总价（含配送费）
+const cartTotalWithDelivery = computed(() => {
+  return Number(cartTotal.value || 0) + Number(store.value.deliveryFee || 0)
+})
+
 /* ------------------ 其他UI事件 ------------------ */
 
 function selectCategory(id: string) {
@@ -556,42 +597,106 @@ function openShop() {
 }
 
 async function checkout() {
-  if (cart.value.length === 0) {
-    ElMessage.warning('购物车为空')
-    return
-  }
-  try {
-    // 仅支持单商家结算（本页面即为该店铺）——统一使用 shops 数组（长度为 1）
-    const total = cartTotal.value
-    const merchantId = store.value.base_id || store.value.id
-    const payload = { shops: [{ merchantId: Number(merchantId), totalPrice: Number(total.toFixed(2)) }] }
-    console.log('Checkout payload (store):', JSON.stringify(payload))
-    const r = await cartApi.checkout(payload)
-    // 后端返回 { data: { orders: [ ... ] } }
-    const first = r?.data?.orders?.[0] || r?.orders?.[0] || null
-    if (!first) {
-      ElMessage.error('创建支付订单失败')
-      return
+  if (!(cart.value || []).some((it: any) => !!it.selected)) { ElMessage.warning('请选择要结算的商品'); return }
+    try {
+      // Build shops payload from current cart (this view shows single store's cart)
+      const items = (cart.value || []).map((it: any) => ({
+        dishId: it.dishId || it.id || it.dish_id,
+        qty: it.qty || it.count || it.originalQty || 1,
+        price: Number(it.price || it.unitPrice || 0),
+      }))
+
+      if (!items || items.length === 0) {
+        ElMessage.warning('购物车为空，无法结算')
+        return
+      }
+
+      const payload = {
+        shops: [
+          {
+            merchantId: store.value.id || store.value.storeId || store.value.merchant_id,
+            // totalPrice should be items total (exclude delivery), deliveryAmount sent separately
+            totalPrice: Number(cartTotal.value || 0),
+            deliveryAmount: Number(store.value.deliveryFee || store.value.delivery_amount || 0),
+            items,
+          },
+        ],
+      }
+
+      // Call createPending to persist pending orders (same behavior as cart 页面)
+      const res = await cartApi.createPending(payload)
+      const data = res && res.data ? (res.data.data || res.data) : res
+      // Expect returned shape like { orders: [{ id, ... }] } or array of ids
+      // Extract primitive ids robustly from various possible backend shapes
+      const extractId = (o: any) => {
+        if (o == null) return null
+        if (typeof o === 'number') return String(o)
+        if (typeof o === 'string') return o
+        // common fields
+        const candidates = [o.orderId, o.id, o.OrderID, o.order_id, o.OrderId, o.ID]
+        for (const c of candidates) {
+          if (c !== undefined && c !== null) return String(c)
+        }
+        // nested shapes
+        if (o.data && (o.data.id || o.data.orderId)) return String(o.data.id || o.data.orderId)
+        if (o.order && (o.order.id || o.order.orderId)) return String(o.order.id || o.order.orderId)
+        return null
+      }
+
+      const pendingIds: string[] = []
+      if (data) {
+        if (Array.isArray(data)) {
+          for (const o of data) {
+            const id = extractId(o)
+            if (id) pendingIds.push(id)
+          }
+        } else if (Array.isArray(data.orders)) {
+          for (const o of data.orders) {
+            const id = extractId(o)
+            if (id) pendingIds.push(id)
+          }
+        } else {
+          const id = extractId(data) || extractId(data.data)
+          if (id) pendingIds.push(id)
+        }
+      }
+
+      if (pendingIds.length > 0) {
+        try { sessionStorage.setItem('pending_orders', JSON.stringify(pendingIds)) } catch (e) {}
+      }
+
+      // Backend may have removed cart items; refresh local cart
+      await refreshCart()
+
+      // Navigate to checkout/confirm page
+      router.push({ path: '/user/payment/confirm' })
+    } catch (e: any) {
+      ElMessage.error('创建待支付订单失败: ' + (e && e.message ? e.message : '请重试'))
     }
-    const orderId = first.orderId || first.OrderID || first.id || null
-    const codeUrl = first.code_url || first.CodeURL || first.codeUrl || first.out_trade_no || ''
-    if (!orderId || !codeUrl) {
-      ElMessage.error('创建支付订单失败')
-      return
-    }
-    openPayModal(orderId, codeUrl)
-  } catch (e) {
-    ElMessage.error('结算失败')
-  }
+  const selectedItems = (cart.value || []).filter((it: any) => !!it.selected)
+  const payload = [{
+    merchantId: store.value.id || store.value.base_id,
+    storeId: store.value.id || store.value.base_id,
+    name: store.value.name || '',
+    items: selectedItems.map((it: any) => ({
+      dishId: it.dishId || it.id || it.dish_id,
+      name: it.name || it.dishName || '',
+      price: Number(it.price || 0),
+      qty: it.qty
+    }))
+  }]
+  sessionStorage.setItem('checkout_payload', JSON.stringify({ shops: payload }))
+  router.push('/user/payment/confirm')
 }
 
 // 支付 modal 管理（与购物车页面相同逻辑）
 const showPayModal = ref(false)
-const payQrImg = ref('')
+const payQrImg = ref(qrImg)
+const payAmount = ref<number>(0)
 let payPollTimer: any = null
 
 function openPayModal(orderId: any, codeUrl: string) {
-  payQrImg.value = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=' + encodeURIComponent(codeUrl)
+  payQrImg.value = qrImg
   showPayModal.value = true
   payPollTimer = setInterval(async () => {
     try {
@@ -604,7 +709,7 @@ function openPayModal(orderId: any, codeUrl: string) {
         clearInterval(payPollTimer)
         showPayModal.value = false
         ElMessage({ type: 'success', message: '支付成功' })
-        window.location.href = '/#/user/payment/success'
+        window.location.href = '/user/payment/success'
       }
     } catch (e) {}
   }, 2000)

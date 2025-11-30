@@ -29,11 +29,13 @@
 
       <!-- 标签页 -->
       <div class="tabs">
-        <el-button :type="activeTab==='all'? 'warning':''" plain @click="setTab('all')">全部</el-button>
-        <el-button :type="activeTab==='pending'? 'warning':''" plain @click="setTab('pending')">待付款</el-button>
-        <el-button :type="activeTab==='shipping'? 'warning':''" plain @click="setTab('shipping')">待收货</el-button>
-        <el-button :type="activeTab==='completed'? 'warning':''" plain @click="setTab('completed')">已完成</el-button>
-        <el-button :type="activeTab==='refund'? 'warning':''" plain @click="setTab('refund')">退款/售后</el-button>
+        <el-button :type="activeTab===0? 'warning':''" plain @click="setTab(0)">全部</el-button>
+        <el-button :type="activeTab===1? 'warning':''" plain @click="setTab(1)">待付款</el-button>
+        <el-button :type="activeTab===2? 'warning':''" plain @click="setTab(2)">待接单</el-button>
+        <el-button :type="activeTab===3? 'warning':''" plain @click="setTab(3)">待派送</el-button>
+        <el-button :type="activeTab===4? 'warning':''" plain @click="setTab(4)">派送中</el-button>
+        <el-button :type="activeTab===5? 'warning':''" plain @click="setTab(5)">已完成</el-button>
+        <el-button :type="activeTab===6? 'warning':''" plain @click="setTab(6)">已取消</el-button>
       </div>
 
       <!-- 列表 -->
@@ -74,62 +76,45 @@ const router = useRouter()
 
 const searchMode = ref(false)
 const keyword = ref('')
-const activeTab = ref('all')
+const activeTab = ref(0)
 
 // Chat state moved into OrderCard
 
-// mock orders data
-const rawOrders = ref([
-  {
-    id: 'ORD20251027001',
-    storeId: '1',
-    storeName: '川味小馆',
-    storeLogo: '/src/assets/noImg.png',
-    status: 'pending',
-    statusText: '待付款',
-    time: '2025-10-27 11:20',
-    payDeadline: new Date(Date.now() + 1000 * 60 * 15).toISOString(),
-    items: [ { name: '宫保鸡丁', price: 28, count:1, img: '' }, { name: '米饭', price: 3, count:2, img: '' } ]
-  },
-  {
-    id: 'ORD20251027002',
-    storeId: '2',
-    storeName: '鲜甜水果',
-    storeLogo: '/src/assets/noImg.png',
-    status: 'shipping',
-    statusText: '配送中',
-    time: '2025-10-26 18:05',
-    items: [ { name: '水果拼盘', price: 56, count:1, img: '' } ]
-  },
-  {
-    id: 'ORD20251026003',
-    storeId: '3',
-    storeName: '芝士工坊',
-    storeLogo: '/src/assets/noImg.png',
-    status: 'completed',
-    statusText: '已完成',
-    time: '2025-10-25 12:10',
-    items: [ { name: '披萨(大)', price: 88, count:1, img: '' } ]
-  }
-])
+// orders loaded from backend
+const rawOrders = ref([])
 
 onMounted(()=>{
   const oq = route.query.oq
   if (oq && typeof oq === 'string') keyword.value = oq
+  loadOrders()
 })
 
 watch(()=>route.query.oq, (v)=>{ if (v && typeof v === 'string') keyword.value = v })
 
-function setTab(t) { activeTab.value = t }
+function setTab(t) { activeTab.value = t; loadOrders() }
+async function loadOrders(page = 1, size = 20) {
+  const params = { page, size }
+  // activeTab uses numeric status codes (0 = all)
+  if (activeTab.value && activeTab.value !== 0) params.status = activeTab.value
+  try {
+    const res = await orderApi.getOrderList(params)
+    const payload = res && res.data && (res.data.data || res.data)
+    const items = (payload && payload.items) ? payload.items : (res && res.data && res.data.items) || []
+    rawOrders.value = items.map(mapBackendOrder)
+  } catch (e) {
+    console.error('加载订单失败', e)
+    rawOrders.value = []
+  }
+}
 function toggleSearch() { searchMode.value = !searchMode.value }
-function applySearch() { /* filter applied by computed */ }
+function applySearch() { loadOrders(1) }
 function onClear() { keyword.value = '' }
 function openNotices() { /* placeholder */ }
 
 const filteredOrders = computed(() => {
   const k = keyword.value.trim().toLowerCase()
   return rawOrders.value.filter(o => {
-    if (activeTab.value !== 'all' && o.status !== activeTab.value) return false
+    if (activeTab.value !== 0 && o.status !== activeTab.value) return false
     if (!k) return true
     return (o.id && o.id.toLowerCase().includes(k)) || (o.storeName && o.storeName.toLowerCase().includes(k)) || (o.items && o.items.some(it=> (it.name||'').toLowerCase().includes(k)))
   })
@@ -142,21 +127,91 @@ function mapOrder(o) {
   }
 }
 
+function mapBackendOrder(o) {
+  // try common field mappings, be defensive about backend shape
+  const items = []
+  const sourceItems = o.items || o.order_dishes || o.orderDishes || []
+  if (Array.isArray(sourceItems)) {
+    for (const it of sourceItems) {
+      items.push({
+        id: it.id || it.dish_id || it.dishId || null,
+        name: it.name || it.dish_name || it.title || '',
+        price: it.price || it.unit_price || it.amount || 0,
+        count: it.qty || it.count || it.quantity || 1,
+        img: it.image || it.img || it.picture || ''
+      })
+    }
+  }
+
+  const statusNum = Number(o.status || o.order_status || 0)
+  function formatFriendlyTime(iso) {
+    if (!iso) return ''
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return iso
+    const M = d.getMonth() + 1
+    const D = d.getDate()
+    const hh = String(d.getHours()).padStart(2, '0')
+    const mm = String(d.getMinutes()).padStart(2, '0')
+    return `${M}月${D}日 ${hh}:${mm}`
+  }
+
+  const rawTime = o.created_at || o.time || o.createdAt || ''
+  return {
+    id: o.id || o.order_no || o.orderNo || '',
+    storeId: o.store_id || o.storeId || o.merchant_id || o.merchantId || '',
+    storeName: o.store_name || o.storeName || o.shop_name || '',
+    storeLogo: o.store_logo || o.logo || '/src/assets/noImg.png',
+    status: statusNum,
+    statusText: o.status_text || o.statusText || mapStatusText(statusNum),
+    time: formatFriendlyTime(rawTime),
+    payDeadline: o.pay_deadline || o.payDeadline || null,
+    // delivery fee: support multiple backend field names
+    delivery_fee: o.delivery_fee ?? o.deliveryFee ?? o.deliveryAmount ?? o.delivery ?? o.fee ?? 0,
+    // keep legacy aliases for safety
+    deliveryFee: o.delivery_fee ?? o.deliveryFee ?? o.deliveryAmount ?? o.delivery ?? o.fee ?? 0,
+    items
+  }
+}
+
 function mapStatusText(status) {
-  switch(status) {
-    case 'pending': return '待付款'
-    case 'shipping': return '待收货'
-    case 'completed': return '已完成'
-    case 'refund': return '退款/售后'
-    default: return ''
+  const s = Number(status)
+  switch (s) {
+  case 1:
+    return '待付款'
+  case 2:
+    return '待接单'
+  case 3:
+    return '待派送'
+  case 4:
+    return '派送中'
+  case 5:
+    return '已完成'
+  case 6:
+    return '已取消'
+  default:
+    return ''
   }
 }
 
 // actions
-function onPay(order) { router.push({ path: '/user/pay', query: { orderId: order.id } }) }
+function onPay(order) {
+  try {
+    // 直接复用已有订单：写入 pending_orders，结算页会优先使用该项并直接支付
+    const oid = order && (order.id || order.ID || order.orderId)
+    if (oid) {
+      try { sessionStorage.setItem('pending_orders', JSON.stringify([String(oid)])) } catch (e) {}
+    }
+    router.push('/user/payment/confirm')
+  } catch (e) {
+    console.warn('prepare checkout payload from order failed', e)
+    // fallback: navigate to confirm page without payload
+    router.push('/user/payment/confirm')
+  }
+}
 async function onCancel(order) {
   try { await orderApi.cancelOrder(order.id) } catch (e) {}
-  order.status = 'cancelled'
+  // set numeric cancelled status
+  order.status = 6
   alert('已取消: ' + order.id)
 }
 function onConfirm(order) { order.status='completed'; alert('确认收货: ' + order.id) }
@@ -171,8 +226,20 @@ async function onReorder(order) {
 }
 function onReview(order) { alert('去评价: ' + order.id) }
 function onViewRefund(order) { alert('查看退款详情: ' + order.id) }
-function openStore(id) { router.push({ name: 'userStore', params: { name: id } }) }
-function onAutoCancel(order) { order.status = 'cancelled'; alert('支付超时，订单已取消：' + order.id) }
+function openStore(id) { 
+  // prefer path-based navigation using numeric id to avoid relying on 'name' param
+  if (id === undefined || id === null) {
+    // fallback: try to navigate by raw id otherwise do nothing
+    console.warn('openStore called with undefined id')
+    return
+  }
+  router.push({ path: `/user/store/${id}` })
+}
+async function onAutoCancel(order) {
+  try { await orderApi.cancelOrder(order.id) } catch (e) {}
+  order.status = 6
+  alert('支付超时，订单已取消：' + order.id)
+}
 function onView(order) { router.push({ path: `/user/order/${order.id}` }) }
 // openChat moved to ChatLauncher inside OrderCard
 

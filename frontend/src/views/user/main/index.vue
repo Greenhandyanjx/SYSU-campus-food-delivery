@@ -126,6 +126,7 @@ import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { addToCart, removeFromCart } from '@/api/user/store'
+import { getCart } from '@/api/user/cart'
 import Carousel from '@/components/Carousel.vue'
 import SearchSuggest from '@/components/SearchSuggest.vue'
 import { Search } from '@element-plus/icons-vue'
@@ -136,6 +137,7 @@ import banner3 from '@/assets/banners/images/banner3.png'
 import banner4 from '@/assets/banners/images/banner4.png'
 import banner5 from '@/assets/banners/images/banner5.png'
 import axios from 'axios'
+import { getDeliveryConfig } from '@/api/user/store'
 import noImg from '@/assets/noImg.png'
 const images = [
   {
@@ -305,6 +307,35 @@ async function loadData() {
           dishes,
         }
       })
+      // 补充每个商家的配送配置（避免首页显示为 0）
+      try {
+        await Promise.all(stores.value.map(async (st: any) => {
+          const bid = st.id || st.base_id || st.baseId
+          if (!bid) return
+          const r = await getDeliveryConfig(bid)
+          const cfg = r && r.data ? r.data.data || r.data : r
+          st.minOrder = cfg?.min_price ?? cfg?.minPrice ?? st.minOrder ?? 15
+          st.deliveryFee = cfg?.delivery_fee ?? cfg?.deliveryFee ?? st.deliveryFee ?? 2
+        }))
+      } catch (e) { console.warn('fetch delivery configs for stores failed', e) }
+      // 同步用户购物车到首页，用于展示菜品已加入数量
+      try {
+        const cartData = await getCart()
+        const shops = cartData && (cartData.shops || cartData.data || cartData) || []
+        // 重置计数
+        stores.value.forEach((st: any) => st.dishes.forEach((d: any) => (d.count = 0)))
+        for (const sh of (shops || [])) {
+          const sid = sh.storeId || sh.store_id || sh.merchantId || sh.merchant_id || sh.id || sh.base_id
+          const storeMatch = stores.value.find((st: any) => String(st.id) === String(sid) || String(st.base_id) === String(sid) || String(st.id) === String(sh.storeId))
+          if (!storeMatch) continue
+          const items = sh.items || []
+          for (const it of items) {
+            const did = it.dishId || it.dish_id || it.id
+            const dish = storeMatch.dishes.find((x: any) => String(x.id) === String(did))
+            if (dish) dish.count = Number(it.qty || it.Qty || it.qty || 0)
+          }
+        }
+      } catch (e) { console.warn('sync cart to homepage failed', e) }
     } else {
       // 如果返回结构不正确，保持空 stores（不会抛）
       stores.value = []
@@ -335,12 +366,15 @@ const filteredStores = computed(() => {
 
 const addDish = async (store: any, dish: any) => {
   try {
-    // first navigate to store page
-    await router.push('/user/store/' + encodeURIComponent(store.name))
-    // then call addToCart API
+    // First call addToCart so backend/cart is up-to-date, then navigate to store page.
     await addToCart({ storeId: store.id, dishId: dish.id, name: dish.name, price: dish.price, qty: 1 })
+    // optimistic update local UI count
     dish.count = (dish.count || 0) + 1
     ElMessage.success('已加入购物车')
+    // navigate using store id/base_id when available
+    const sid = store.id || store.base_id || store.baseId || store.shop_id || store.shopId
+    if (sid) await router.push('/user/store/' + encodeURIComponent(String(sid)))
+    else await router.push('/user/store/' + encodeURIComponent(store.name))
   } catch (e: any) {
     ElMessage.error('加入购物车失败：' + (e.message || ''))
   }
@@ -349,10 +383,13 @@ const addDish = async (store: any, dish: any) => {
 const decDish = async (store: any, dish: any) => {
   if (!dish.count || dish.count <= 0) return
   try {
-    await router.push('/user/store/' + encodeURIComponent(store.name))
+    // call remove API first, update local count, then navigate
     await removeFromCart({ storeId: store.id, dishId: dish.id, qty: 1 })
-    dish.count--
+    dish.count = Math.max(0, (dish.count || 0) - 1)
     ElMessage.success('已从购物车移除')
+    const sid = store.id || store.base_id || store.baseId || store.shop_id || store.shopId
+    if (sid) await router.push('/user/store/' + encodeURIComponent(String(sid)))
+    else await router.push('/user/store/' + encodeURIComponent(store.name))
   } catch (e: any) {
     ElMessage.error('移除失败：' + (e.message || ''))
   }
@@ -383,8 +420,10 @@ function onSearch() {
 }
 
 function goToStore(s: any) {
-	// 进入店铺详情页（占位）
-	router.push('/user/store/' + encodeURIComponent(s.name))
+  // Prefer numeric id/base_id when available to avoid name-based lookups
+  const sid = s.id || s.base_id || s.baseId || s.shop_id || s.shopId
+  if (sid) router.push('/user/store/' + encodeURIComponent(String(sid)))
+  else router.push('/user/store/' + encodeURIComponent(s.name || s.shop_name || ''))
 }
 
 const scrollToMeals = (smooth = true) => {

@@ -24,7 +24,9 @@ func GetStores(c *gin.Context) {
 	}
 
 	var merchants []models.Merchant
-	if err := global.Db.Find(&merchants).Error; err != nil {
+	// limit number of merchants returned to avoid heavy full-table scans
+	// (frontend displays a page of stores; returning too many merchants will slow queries)
+	if err := global.Db.Limit(50).Find(&merchants).Error; err != nil {
 		log.Printf("GetStores: failed to query merchants: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "query merchants failed", "err": err.Error()})
 		return
@@ -33,17 +35,36 @@ func GetStores(c *gin.Context) {
 	log.Printf("GetStores: merchants found=%d", len(merchants))
 
 	stores := make([]map[string]interface{}, 0, len(merchants))
+
+	// collect base_ids to batch query dishes
+	baseIDs := make([]uint, 0, len(merchants))
 	for _, m := range merchants {
-		log.Printf("GetStores: processing merchant: id=%d base_id=%d shop_name=%s", m.ID, m.BaseID, m.ShopName)
-		// Dish.MerchantID 存储的是 base_user id（即 merchants.base_id）
-		var dishes []models.Dish
-		if err := global.Db.Where("merchant_id = ? AND status = 1", m.BaseID).Limit(6).Find(&dishes).Error; err != nil {
-			// 记录具体错误以便调试，但仍继续返回其他商家
-			log.Printf("GetStores: failed to query dishes for merchant base_id=%d: %v", m.BaseID, err)
-			dishes = []models.Dish{}
+		baseIDs = append(baseIDs, m.BaseID)
+	}
+
+	// batch load dishes for all merchants (status = 1)
+	var allDishes []models.Dish
+	if len(baseIDs) > 0 {
+		if err := global.Db.Where("merchant_id IN ? AND status = 1", baseIDs).Find(&allDishes).Error; err != nil {
+			log.Printf("GetStores: failed to batch query dishes: %v", err)
+			allDishes = []models.Dish{}
 		}
-		dishItems := make([]map[string]interface{}, 0, len(dishes))
-		for _, d := range dishes {
+	}
+
+	// group dishes by merchant_id (which stores base_id)
+	dishesByBase := make(map[uint][]models.Dish)
+	for _, d := range allDishes {
+		dishesByBase[d.MerchantID] = append(dishesByBase[d.MerchantID], d)
+	}
+
+	// assemble stores with up to 6 dishes each
+	for _, m := range merchants {
+		ds := dishesByBase[m.BaseID]
+		if len(ds) > 6 {
+			ds = ds[:6]
+		}
+		dishItems := make([]map[string]interface{}, 0, len(ds))
+		for _, d := range ds {
 			dishItems = append(dishItems, map[string]interface{}{
 				"id":         d.ID,
 				"name":       d.DishName,

@@ -6,10 +6,10 @@
     <!-- end -->
     <div class="homeMain">
       <!-- 营业额统计 -->
-      <TurnoverStatistics :turnoverdata="turnoverData" />
+      <TurnoverStatistics :data="turnoverData" />
       <!-- end -->
       <!-- 用户统计 -->
-      <UserStatistics :userdata="userData" />
+      <UserStatistics :data="userData" />
       <!-- end -->
     </div>
     <div class="homeMain homecon">
@@ -65,20 +65,20 @@ function init(begin: any, end: any) {
 
 async function getTurnoverStatisticsData(begin: any, end: any) {
   const data = await getTurnoverStatistics({ begin: begin, end: end })
-  const d = data.data.data
-  turnoverData.value = {
-    dateList: d.dateList.split(','),
-    turnoverList: d.turnoverList.split(','),
-  }
+  const d = data?.data?.data
+    turnoverData.value = {
+      dateList: d.dateList,        // 字符串
+      turnoverList: d.turnoverList // 字符串
+    }
+
 }
 
 async function getUserStatisticsData(begin: any, end: any) {
   const data = await getUserStatistics({ begin: begin, end: end })
   const d = data.data.data
   userData.value = {
-    dateList: d.dateList.split(','),
-    totalUserList: d.totalUserList.split(','),
-    newUserList: d.newUserList.split(',')
+    dateList: d.dateList||[],
+    userNumbList: d.userNumbList||[],
   }
 }
 

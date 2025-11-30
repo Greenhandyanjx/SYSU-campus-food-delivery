@@ -3,10 +3,10 @@
     <div class="order-detail-page">
       <div class="header">
         <el-button type="text" @click="$router.back()" class="back-btn" size="large">
-          <i class="el-icon-arrow-left"></i> 返回
+          <img src="/src/assets/icons/leftarrow.svg" style="width: 20px;height: 20px;"> 返回
         </el-button>
         <h2>订单详情 #{{ order?.id || id }}</h2>
-        <div class="status-badge" :class="order?.status">{{ order?.statusText }}</div>
+        <div class="status-badge" :class="statusClass(order?.status)">{{ order?.statusText }}</div>
       </div>
 
       <div v-if="order" class="detail-card">
@@ -20,7 +20,7 @@
               <div class="store-name">{{ order.storeName }}</div>
               <div class="order-time">下单时间：{{ order.time }}</div>
             </div>
-            <i class="el-icon-arrow-right goto-icon"></i>
+            <img src="/src/assets/icons/rightarrow.svg" style="width: 20px;height: 20px;" class="goto-icon" />
           </div>
         </div>
 
@@ -39,6 +39,13 @@
               <div class="goods-total">¥{{ (it.price * it.count).toFixed(2) }}</div>
             </div>
           </div>
+          <div class="delivery-fee"
+                 style="margin-top: 12px; display: flex; justify-content: flex-end; align-items: center; color: #666;">
+              <span>配送费：</span>
+              <span style="color: #FF4D4F; margin-left: 4px; font-weight: 600; font-size: 15px;">
+                ¥{{ deliveryFee.toFixed(2) }}
+              </span>
+          </div>
           <div class="total">
             <span class="total-label">合计</span>
             <span class="total-price">¥{{ totalPrice.toFixed(2) }}</span>
@@ -51,11 +58,11 @@
           </div>
           <div class="delivery-info">
             <div class="delivery-status">
-              <i class="el-icon-location status-icon"></i>
+              <img src="/src/assets/icons/delivery.svg" style="width: 20px ;height: 20px;">
               <div class="status-text">{{ getDeliveryStatus(order.status) }}</div>
             </div>
             <div class="address-info">
-              <i class="el-icon-map-location"></i>
+              <img src="/src/assets/icons/address.svg" style="width: 15px ;height: 15px;">
               <span>{{ order.address }}</span>
             </div>
             <div v-if="order.rider" class="rider-info">
@@ -71,7 +78,7 @@
         <!-- 操作按钮组：不同状态显示不同按钮 -->
         <div class="action-bar">
           <!-- 待付款 -->
-          <template v-if="order.status === 'pending'">
+          <template v-if="order.status === 1">
             <div class="countdown" v-if="countdown">
               剩余支付时间：<strong>{{ countdown }}</strong>
             </div>
@@ -79,22 +86,22 @@
             <el-button type="primary" @click="onPay">去付款</el-button>
           </template>
 
-          <!-- 配送中 -->
-          <template v-if="order.status === 'shipping'">
+          <!-- 配送中/待接单/待派送 -->
+          <template v-if="order.status >= 2 && order.status <= 4">
             <el-button @click="contactRider" plain>联系骑手</el-button>
             <el-button @click="onReorder" plain>再次购买</el-button>
             <el-button type="primary" @click="onConfirm">确认收货</el-button>
           </template>
 
           <!-- 已完成 -->
-          <template v-if="order.status === 'completed'">
+          <template v-if="order.status === 5">
             <el-button @click="contactRider" plain>联系骑手</el-button>
             <el-button @click="onReorder" plain>再次购买</el-button>
             <el-button type="warning" v-if="!order.reviewed" @click="onReview">评价晒单</el-button>
           </template>
 
           <!-- 退款/售后 -->
-          <template v-if="order.status === 'refund'">
+          <template v-if="order.status === 'refund' || order.status === 7">
             <el-button type="info" plain @click="onViewRefund">查看售后详情</el-button>
           </template>
         </div>
@@ -118,28 +125,78 @@ const id = route.params.id
 const order = ref(null)
 const countdown = ref('')
 
-const totalPrice = computed(() =>
-  (order.value?.items || []).reduce((s, it) => s + it.price * it.count, 0)
-)
+const totalPrice = computed(() => {
+  const total = order.value?.amount || order.value?.total_amount || order.value?.totalAmount || 0
+  const itemsTotal = (order.value?.items || []).reduce((s, it) => s + (Number(it.price || 0) * Number(it.count || 0)), 0)
+  const fee = Number(order.value?.deliveryAmount || order.value?.delivery_fee || order.value?.delivery || 0)
+  return total || (itemsTotal + fee)
+})
+const deliveryFee = computed(() => {
+  const v = order.value?.deliveryAmount ?? order.value?.delivery_fee ??  0
+  const n = Number(v)
+  return Number.isFinite(n) ? n : 0
+})
+function mapStatusText(status) {
+  const s = Number(status)
+  switch (s) {
+  case 1:
+    return '待付款'
+  case 2:
+    return '待接单'
+  case 3:
+    return '待派送'
+  case 4:
+    return '派送中'
+  case 5:
+    return '已完成'
+  case 6:
+    return '已取消'
+  default:
+    return ''
+  }
+}
+
+function statusClass(status) {
+  const s = Number(status)
+  if (s === 1) return 'pending'
+  if (s >= 2 && s <= 4) return 'shipping'
+  if (s === 5) return 'completed'
+  if (s === 6) return 'refund'
+  return ''
+}
 
 function getDeliveryStatus(status) {
-  switch(status) {
-    case 'pending': return '等待支付'
-    case 'shipping': return '正在配送中'
-    case 'completed': return '订单已完成'
-    case 'refund': return '退款处理中'
-    default: return '未知状态'
+  const s = Number(status)
+  switch (s) {
+  case 1:
+    return '等待支付'
+  case 2:
+    return '等待商家接单'
+  case 3:
+    return '正在分配骑手'
+  case 4:
+    return '正在配送中'
+  case 5:
+    return '订单已完成'
+  case 6:
+    return '已取消'
+  default:
+    return '未知状态'
   }
 }
 
 // 按钮事件处理器 - 从列表页复用逻辑
 async function onPay() {
+  // 跳转到结算页面，使用 checkout 流程进行支付（前端会模拟支付并调用后端标记为已支付）
   try {
-    await orderApi.payOrder(order.value.id)
-    ElMessage.success('支付成功')
-    await fetch() // 刷新订单状态
-  } catch(e) {
-    ElMessage.error('支付失败，请重试')
+    // 为了复用已有订单并避免重新创建新订单：将当前订单 id 写入 sessionStorage.pending_orders
+    const oid = order.value && (order.value.id || order.value.ID || order.value.orderId)
+    if (oid) {
+      try { sessionStorage.setItem('pending_orders', JSON.stringify([String(oid)])) } catch (e) {}
+    }
+    router.push('/user/payment/confirm')
+  } catch (e) {
+    ElMessage.error('无法跳转到支付页面')
   }
 }
 
@@ -245,9 +302,51 @@ let timer = null
 async function fetch() {
   try {
     const res = await orderApi.getOrderDetail(id)
-    order.value = res?.data || res || null
-    
-    if (order.value?.status === 'pending') {
+    const payload = res && res.data && (res.data.data || res.data)
+      if (payload) {
+        // normalize fields: items come as orderDetailList
+        const rawItems = payload.orderDetailList || payload.items || payload.order_dishes || []
+        const items = (Array.isArray(rawItems) ? rawItems.map(it => ({
+          id: it.id || it.dish_id || it.dishId || null,
+          name: it.name || it.dish_name || it.title || it.goodsName || '',
+          price: Number((it.price ?? it.unit_price ?? it.amount ?? it.price) || 0),
+          count: Number((it.qty ?? it.count ?? it.quantity) || 1),
+          image: it.image || it.img || it.picture || ''
+        })) : [])
+        const statusNum = Number(payload.status || payload.order_status || 0)
+        // format friendly time for display
+        function formatFriendlyTime(iso) {
+          if (!iso) return ''
+          const d = new Date(iso)
+          if (isNaN(d.getTime())) return iso
+          const M = d.getMonth() + 1
+          const D = d.getDate()
+          const hh = String(d.getHours()).padStart(2, '0')
+          const mm = String(d.getMinutes()).padStart(2, '0')
+          return `${M}月${D}日 ${hh}:${mm}`
+        }
+        const rawTime = payload.orderTime || payload.time || payload.createdAt || ''
+        // map delivery fee and store id safely
+        const deliveryFeeValue = payload.delivery_fee ?? payload.deliveryFee ?? payload.deliveryAmount ?? payload.delivery ?? payload.fee ?? 0
+        order.value = {
+          ...payload,
+          id: payload.id || payload.order_no || payload.orderNo || id,
+          storeId: payload.store_id || payload.storeId || payload.merchant_id || payload.merchantId || null,
+          storeName: payload.store_name || payload.storeName || payload.shop_name || '',
+          storeLogo: payload.store_logo || payload.logo || '/src/assets/noImg.png',
+          items,
+          status: statusNum,
+          statusText: payload.statusText || payload.status_text || mapStatusText(statusNum),
+          time: formatFriendlyTime(rawTime),
+          delivery_fee: deliveryFeeValue,
+          deliveryAmount: deliveryFeeValue,
+          deliveryFee: deliveryFeeValue
+        }
+      } else {
+        order.value = null
+      }
+
+    if (order.value?.status === 1) {
       updateCountdown()
       if (!timer) {
         timer = setInterval(updateCountdown, 1000)

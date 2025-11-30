@@ -48,41 +48,174 @@ func GetUserCart(c *gin.Context) {
 		utils.Error(c, err)
 		return
 	}
-	// 如果指定了商家，直接返回
+	// 如果指定了商家，直接返回（并用 dish_id 关联菜品表以补充 category）
 	if storeID != "" {
 		merchantID, _ := strconv.ParseUint(storeID, 10, 32)
 		var merchant models.Merchant
-		global.Db.Where("base_id = ?", uint(merchantID)).First(&merchant)
+		global.Db.Where("id = ?", uint(merchantID)).First(&merchant)
+
+		// 批量查询菜品和分类以避免循环中逐条查询
+		dishIDs := make([]uint, 0, len(items))
+		for _, it := range items {
+			dishIDs = append(dishIDs, it.DishID)
+		}
+		var dishes []models.Dish
+		if len(dishIDs) > 0 {
+			if err := global.Db.Where("id IN ?", dishIDs).Find(&dishes).Error; err != nil {
+				dishes = []models.Dish{}
+			}
+		}
+		dishMap := make(map[uint]models.Dish)
+		categoryIDs := make([]uint, 0)
+		for _, d := range dishes {
+			dishMap[uint(d.ID)] = d
+			if d.Category != 0 {
+				categoryIDs = append(categoryIDs, uint(d.Category))
+			}
+		}
+		// 批量查询分类
+		catMap := make(map[uint]models.Category)
+		if len(categoryIDs) > 0 {
+			var cats []models.Category
+			if err := global.Db.Where("id IN ?", categoryIDs).Find(&cats).Error; err == nil {
+				for _, c := range cats {
+					catMap[uint(c.ID)] = c
+				}
+			}
+		}
+
+		// 构建items响应
+		respItems := make([]gin.H, 0, len(items))
+		for _, it := range items {
+			var categoryName string = ""
+			var categoryId int = 0
+			var imagePath string = ""
+			if d, ok := dishMap[it.DishID]; ok {
+				categoryId = d.Category
+				imagePath = d.ImagePath
+				if d.Category != 0 {
+					if cat, ok2 := catMap[uint(d.Category)]; ok2 {
+						categoryName = cat.Name
+					}
+				}
+			}
+			respItems = append(respItems, gin.H{
+				"dishId":     it.DishID,
+				"name":       it.Name,
+				"price":      it.Price,
+				"qty":        it.Qty,
+				"selected":   it.Selected,
+				"categoryId": categoryId,
+				"category":   categoryName,
+				"image":      imagePath,
+			})
+		}
 
 		utils.Success(c, gin.H{
 			"merchant_id":   storeID,
 			"merchant_name": merchant.ShopName, // 使用 shop_name
-			"items":         items,
+			"items":         respItems,
 		})
 		return
 	}
-	// 按商家分组
+	// 按商家分组：批量查询商家、菜品、分类以避免 N+1
 	shopsMap := make(map[uint]gin.H)
+	// 收集 merchantIds 与 dishIds
+	merchantIDs := make([]uint, 0)
+	dishIDs := make([]uint, 0)
+	merchantSet := make(map[uint]struct{})
+	dishSet := make(map[uint]struct{})
+	for _, item := range items {
+		if _, ok := merchantSet[item.MerchantID]; !ok {
+			merchantSet[item.MerchantID] = struct{}{}
+			merchantIDs = append(merchantIDs, item.MerchantID)
+		}
+		if _, ok := dishSet[item.DishID]; !ok {
+			dishSet[item.DishID] = struct{}{}
+			dishIDs = append(dishIDs, item.DishID)
+		}
+	}
+
+	// 批量查询商家
+	var merchants []models.Merchant
+	if len(merchantIDs) > 0 {
+		if err := global.Db.Where("id IN ?", merchantIDs).Find(&merchants).Error; err != nil {
+			merchants = []models.Merchant{}
+		}
+	}
+	merchantMap := make(map[uint]models.Merchant)
+	for _, m := range merchants {
+		merchantMap[m.ID] = m
+	}
+
+	// 批量查询菜品
+	var dishes []models.Dish
+	if len(dishIDs) > 0 {
+		if err := global.Db.Where("id IN ?", dishIDs).Find(&dishes).Error; err != nil {
+			dishes = []models.Dish{}
+		}
+	}
+	dishMap := make(map[uint]models.Dish)
+	categoryIDs := make([]uint, 0)
+	for _, d := range dishes {
+		dishMap[uint(d.ID)] = d
+		if d.Category != 0 {
+			categoryIDs = append(categoryIDs, uint(d.Category))
+		}
+	}
+
+	// 批量查询分类
+	catMap := make(map[uint]models.Category)
+	if len(categoryIDs) > 0 {
+		var cats []models.Category
+		if err := global.Db.Where("id IN ?", categoryIDs).Find(&cats).Error; err == nil {
+			for _, c := range cats {
+				catMap[uint(c.ID)] = c
+			}
+		}
+	}
+
+	// 组装 shopsMap
 	for _, item := range items {
 		merchantID := item.MerchantID
 		if _, exists := shopsMap[merchantID]; !exists {
-			// 查询商家信息
-			var merchant models.Merchant
-			global.Db.Where("base_id = ?", merchantID).First(&merchant)
-
+			m := merchantMap[merchantID]
 			shopsMap[merchantID] = gin.H{
 				"merchant_id":   merchantID,
-				"merchant_name": merchant.ShopName,
-				"shop_location": merchant.ShopLocation,
-				"owner":         merchant.Owner,
-				"phone":         merchant.Phone,
-				"logo":          merchant.Logo,
-				"status":        merchant.Status,
-				"items":         []models.CartItem{},
+				"merchant_name": m.ShopName,
+				"shop_location": m.ShopLocation,
+				"owner":         m.Owner,
+				"phone":         m.Phone,
+				"logo":          m.Logo,
+				"status":        m.Status,
+				"items":         []gin.H{},
 			}
 		}
+
+		var categoryName string = ""
+		var categoryId int = 0
+		var imagePath string = ""
+		if d, ok := dishMap[item.DishID]; ok {
+			categoryId = d.Category
+			imagePath = d.ImagePath
+			if d.Category != 0 {
+				if cat, ok2 := catMap[uint(d.Category)]; ok2 {
+					categoryName = cat.Name
+				}
+			}
+		}
+		respItem := gin.H{
+			"dishId":     item.DishID,
+			"name":       item.Name,
+			"price":      item.Price,
+			"qty":        item.Qty,
+			"selected":   item.Selected,
+			"categoryId": categoryId,
+			"category":   categoryName,
+			"image":      imagePath,
+		}
 		shop := shopsMap[merchantID]
-		shop["items"] = append(shop["items"].([]models.CartItem), item)
+		shop["items"] = append(shop["items"].([]gin.H), respItem)
 		shopsMap[merchantID] = shop
 	}
 	// 转换为数组
@@ -108,25 +241,89 @@ func AddToCart(c *gin.Context) {
 	fmt.Println("UserID:", userID, "Request:", req)
 
 	// 从 map 中读取前端实际传的字段
-	merchantIDFloat, ok := req["storeId"].(float64)
-	if !ok {
-		utils.Fail(c, "storeId 参数错误")
-		return
+	// 解析前端传入的商家标识（兼容多种字段名与类型）
+	var merchantID uint = 0
+	// helper to resolve numeric value from interface
+	resolveUint := func(v interface{}) (uint, bool) {
+		switch t := v.(type) {
+		case float64:
+			return uint(t), true
+		case int:
+			return uint(t), true
+		case int64:
+			return uint(t), true
+		case uint:
+			return t, true
+		case string:
+			if parsed, err := strconv.ParseUint(t, 10, 32); err == nil {
+				return uint(parsed), true
+			}
+		}
+		return 0, false
 	}
-	dishIDFloat, ok := req["dishId"].(float64)
-	if !ok {
+
+	var dishID uint
+	var qty int
+
+	// dishId
+	if v, ok := req["dishId"]; ok {
+		if dv, ok2 := resolveUint(v); ok2 {
+			dishID = dv
+		}
+	}
+	if dishID == 0 {
 		utils.Fail(c, "dishId 参数错误")
 		return
 	}
-	qtyFloat, ok := req["qty"].(float64)
-	if !ok {
+
+	// qty
+	if v, ok := req["qty"]; ok {
+		switch t := v.(type) {
+		case float64:
+			qty = int(t)
+		case int:
+			qty = t
+		case int64:
+			qty = int(t)
+		case string:
+			if p, err := strconv.Atoi(t); err == nil {
+				qty = p
+			}
+		}
+	}
+	if qty == 0 {
 		utils.Fail(c, "qty 参数错误")
 		return
 	}
 
-	merchantID := uint(merchantIDFloat)
-	dishID := uint(dishIDFloat)
-	qty := int(qtyFloat)
+	// 尝试从多个可能的字段名解析商家标识，最终以商家主键 `id` 为准并存入购物车
+	var storeCandidates = []interface{}{req["storeId"], req["merchantId"], req["merchant_id"], req["merchantID"], req["store_id"]}
+	var found bool
+	for _, cand := range storeCandidates {
+		if cand == nil {
+			continue
+		}
+		if v, ok := resolveUint(cand); ok {
+			var m models.Merchant
+			// 优先按主键 id 查找
+			if err := global.Db.Where("id = ?", v).First(&m).Error; err == nil {
+				merchantID = m.ID
+				found = true
+				break
+			}
+			// 兼容：再按 base_id 查找并取到其主键 id
+			if err := global.Db.Where("base_id = ?", v).First(&m).Error; err == nil {
+				merchantID = m.ID
+				found = true
+				break
+			}
+			// 未找到匹配的商家，继续尝试下一个候选
+		}
+	}
+	if !found || merchantID == 0 {
+		utils.Fail(c, "storeId 参数错误或无法解析对应商家（请传入正确的商家 id 或 base_id）")
+		return
+	}
 
 	// 1. 找用户的购物车
 	var cart models.Cart
@@ -422,12 +619,22 @@ func SelectShop(c *gin.Context) {
 		return
 	}
 
-	// 根据 storeId 更新所有商品
-	if err := global.Db.Model(&models.CartItem{}).
-		Where("cart_id = ? AND merchant_id = ?", cart.ID, storeIDStr).
-		Update("selected", selectedInt).Error; err != nil {
-		utils.Error(c, err)
-		return
+	// 根据 storeId 更新所有商品（优先按数字 id 匹配）
+	if sid, errp := strconv.ParseUint(storeIDStr, 10, 32); errp == nil {
+		if err := global.Db.Model(&models.CartItem{}).
+			Where("cart_id = ? AND merchant_id = ?", cart.ID, uint(sid)).
+			Update("selected", selectedInt).Error; err != nil {
+			utils.Error(c, err)
+			return
+		}
+	} else {
+		// 退回兼容字符串形式（不常见）
+		if err := global.Db.Model(&models.CartItem{}).
+			Where("cart_id = ? AND merchant_id = ?", cart.ID, storeIDStr).
+			Update("selected", selectedInt).Error; err != nil {
+			utils.Error(c, err)
+			return
+		}
 	}
 
 	// 返回成功
@@ -488,4 +695,29 @@ func SelectAll(c *gin.Context) {
 	utils.Success(c, gin.H{
 		"selected": selected,
 	})
+}
+
+// DeleteSelected - 删除当前用户购物车中所有被标记为 selected 的项
+func DeleteSelected(c *gin.Context) {
+	userID := c.MustGet("baseUserID").(uint)
+
+	// 找到用户的 cart
+	var cart models.Cart
+	if err := global.Db.Where("user_id = ?", userID).First(&cart).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			utils.Success(c, gin.H{"success": true, "removed": 0})
+			return
+		}
+		utils.Error(c, err)
+		return
+	}
+
+	// 删除标记 selected 的 cart_items
+	res := global.Db.Where("cart_id = ? AND selected = ?", cart.ID, 1).Delete(&models.CartItem{})
+	if res.Error != nil {
+		utils.Error(c, res.Error)
+		return
+	}
+
+	utils.Success(c, gin.H{"success": true, "removed": res.RowsAffected})
 }
