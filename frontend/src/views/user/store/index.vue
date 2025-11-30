@@ -615,7 +615,8 @@ async function checkout() {
         shops: [
           {
             merchantId: store.value.id || store.value.storeId || store.value.merchant_id,
-            totalPrice: Number(cartTotalWithDelivery.value || 0),
+            // totalPrice should be items total (exclude delivery), deliveryAmount sent separately
+            totalPrice: Number(cartTotal.value || 0),
             deliveryAmount: Number(store.value.deliveryFee || store.value.delivery_amount || 0),
             items,
           },
@@ -626,15 +627,37 @@ async function checkout() {
       const res = await cartApi.createPending(payload)
       const data = res && res.data ? (res.data.data || res.data) : res
       // Expect returned shape like { orders: [{ id, ... }] } or array of ids
-      let pendingIds = []
+      // Extract primitive ids robustly from various possible backend shapes
+      const extractId = (o: any) => {
+        if (o == null) return null
+        if (typeof o === 'number') return String(o)
+        if (typeof o === 'string') return o
+        // common fields
+        const candidates = [o.orderId, o.id, o.OrderID, o.order_id, o.OrderId, o.ID]
+        for (const c of candidates) {
+          if (c !== undefined && c !== null) return String(c)
+        }
+        // nested shapes
+        if (o.data && (o.data.id || o.data.orderId)) return String(o.data.id || o.data.orderId)
+        if (o.order && (o.order.id || o.order.orderId)) return String(o.order.id || o.order.orderId)
+        return null
+      }
+
+      const pendingIds: string[] = []
       if (data) {
         if (Array.isArray(data)) {
-          // array of orders or ids
-          pendingIds = data.map((o: any) => (o && o.id) || o)
+          for (const o of data) {
+            const id = extractId(o)
+            if (id) pendingIds.push(id)
+          }
         } else if (Array.isArray(data.orders)) {
-          pendingIds = data.orders.map((o: any) => o.id || o)
-        } else if (data.id) {
-          pendingIds = [data.id]
+          for (const o of data.orders) {
+            const id = extractId(o)
+            if (id) pendingIds.push(id)
+          }
+        } else {
+          const id = extractId(data) || extractId(data.data)
+          if (id) pendingIds.push(id)
         }
       }
 

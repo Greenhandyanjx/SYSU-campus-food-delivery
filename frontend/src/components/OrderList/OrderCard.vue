@@ -122,6 +122,7 @@ const totalCount = computed(() =>
   (props.order.items || []).reduce((s, it) => s + Number(it.count || 0), 0)
 )
 const deliveryFee = computed(() => {
+  console.log('Calculating delivery fee for order:', props.order);
   const v = props.order.deliveryFee ?? props.order.delivery_fee ?? props.order.deliveryAmount ?? 0
   const n = Number(v)
   return Number.isFinite(n) ? n : 0

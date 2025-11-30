@@ -3,7 +3,7 @@
     <div class="order-detail-page">
       <div class="header">
         <el-button type="text" @click="$router.back()" class="back-btn" size="large">
-          <i class="el-icon-arrow-left"></i> 返回
+          <img src="/src/assets/icons/leftarrow.svg" style="width: 20px;height: 20px;"> 返回
         </el-button>
         <h2>订单详情 #{{ order?.id || id }}</h2>
         <div class="status-badge" :class="statusClass(order?.status)">{{ order?.statusText }}</div>
@@ -20,7 +20,7 @@
               <div class="store-name">{{ order.storeName }}</div>
               <div class="order-time">下单时间：{{ order.time }}</div>
             </div>
-            <i class="el-icon-arrow-right goto-icon"></i>
+            <img src="/src/assets/icons/rightarrow.svg" style="width: 20px;height: 20px;" class="goto-icon" />
           </div>
         </div>
 
@@ -38,6 +38,13 @@
               <div class="goods-count">x{{ it.count }}</div>
               <div class="goods-total">¥{{ (it.price * it.count).toFixed(2) }}</div>
             </div>
+          </div>
+          <div class="delivery-fee"
+                 style="margin-top: 12px; display: flex; justify-content: flex-end; align-items: center; color: #666;">
+              <span>配送费：</span>
+              <span style="color: #FF4D4F; margin-left: 4px; font-weight: 600; font-size: 15px;">
+                ¥{{ deliveryFee.toFixed(2) }}
+              </span>
           </div>
           <div class="total">
             <span class="total-label">合计</span>
@@ -119,11 +126,16 @@ const order = ref(null)
 const countdown = ref('')
 
 const totalPrice = computed(() => {
+  const total = order.value?.amount || order.value?.total_amount || order.value?.totalAmount || 0
   const itemsTotal = (order.value?.items || []).reduce((s, it) => s + (Number(it.price || 0) * Number(it.count || 0)), 0)
-  const fee = Number(order.value?.deliveryFee || order.value?.delivery_fee || order.value?.delivery || 0)
-  return itemsTotal + fee
+  const fee = Number(order.value?.deliveryAmount || order.value?.delivery_fee || order.value?.delivery || 0)
+  return total || (itemsTotal + fee)
 })
-
+const deliveryFee = computed(() => {
+  const v = order.value?.deliveryAmount ?? order.value?.delivery_fee ??  0
+  const n = Number(v)
+  return Number.isFinite(n) ? n : 0
+})
 function mapStatusText(status) {
   const s = Number(status)
   switch (s) {
@@ -177,7 +189,12 @@ function getDeliveryStatus(status) {
 async function onPay() {
   // 跳转到结算页面，使用 checkout 流程进行支付（前端会模拟支付并调用后端标记为已支付）
   try {
-    router.push({ path: '/user/payment/confirm', query: { orderId: order.value.id } })
+    // 为了复用已有订单并避免重新创建新订单：将当前订单 id 写入 sessionStorage.pending_orders
+    const oid = order.value && (order.value.id || order.value.ID || order.value.orderId)
+    if (oid) {
+      try { sessionStorage.setItem('pending_orders', JSON.stringify([String(oid)])) } catch (e) {}
+    }
+    router.push('/user/payment/confirm')
   } catch (e) {
     ElMessage.error('无法跳转到支付页面')
   }
@@ -288,8 +305,15 @@ async function fetch() {
     const payload = res && res.data && (res.data.data || res.data)
       if (payload) {
         // normalize fields: items come as orderDetailList
-        const items = payload.orderDetailList || payload.items || []
-        const statusNum = Number(payload.status || 0)
+        const rawItems = payload.orderDetailList || payload.items || payload.order_dishes || []
+        const items = (Array.isArray(rawItems) ? rawItems.map(it => ({
+          id: it.id || it.dish_id || it.dishId || null,
+          name: it.name || it.dish_name || it.title || it.goodsName || '',
+          price: Number((it.price ?? it.unit_price ?? it.amount ?? it.price) || 0),
+          count: Number((it.qty ?? it.count ?? it.quantity) || 1),
+          image: it.image || it.img || it.picture || ''
+        })) : [])
+        const statusNum = Number(payload.status || payload.order_status || 0)
         // format friendly time for display
         function formatFriendlyTime(iso) {
           if (!iso) return ''
@@ -302,12 +326,21 @@ async function fetch() {
           return `${M}月${D}日 ${hh}:${mm}`
         }
         const rawTime = payload.orderTime || payload.time || payload.createdAt || ''
+        // map delivery fee and store id safely
+        const deliveryFeeValue = payload.delivery_fee ?? payload.deliveryFee ?? payload.deliveryAmount ?? payload.delivery ?? payload.fee ?? 0
         order.value = {
           ...payload,
+          id: payload.id || payload.order_no || payload.orderNo || id,
+          storeId: payload.store_id || payload.storeId || payload.merchant_id || payload.merchantId || null,
+          storeName: payload.store_name || payload.storeName || payload.shop_name || '',
+          storeLogo: payload.store_logo || payload.logo || '/src/assets/noImg.png',
           items,
           status: statusNum,
-          statusText: payload.statusText || mapStatusText(statusNum),
+          statusText: payload.statusText || payload.status_text || mapStatusText(statusNum),
           time: formatFriendlyTime(rawTime),
+          delivery_fee: deliveryFeeValue,
+          deliveryAmount: deliveryFeeValue,
+          deliveryFee: deliveryFeeValue
         }
       } else {
         order.value = null
