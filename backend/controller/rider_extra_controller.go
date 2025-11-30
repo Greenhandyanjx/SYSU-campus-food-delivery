@@ -26,15 +26,16 @@ func StartDelivery(c *gin.Context) {
 		return
 	}
 
-	// 允许从待取货(2) 或 配送中(3) 开始
-	if order.Status != 2 && order.Status != 3 {
+	// 只允许在骑手已接单（配送中）状态下开始
+	if order.Status != 4 {
 		c.JSON(http.StatusOK, gin.H{"code": 0, "msg": "订单状态不正确"})
 		return
 	}
 
 	now := time.Now()
 	if err := global.Db.Model(&order).Updates(map[string]interface{}{
-		"status":     3,
+		// 状态仍为 4：配送中
+		"status":     4,
 		"pickup_at":  gorm.Expr("IF(pickup_at IS NULL, ?, pickup_at)", now),
 		"updated_at": now,
 	}).Error; err != nil {
@@ -121,9 +122,11 @@ func UpdateDeliveryStatus(c *gin.Context) {
 	updates := map[string]interface{}{}
 	switch req.Status {
 	case "delivering":
-		updates["status"] = 3
-	case "completed":
+		// 配送中
 		updates["status"] = 4
+	case "completed":
+		// 已完成
+		updates["status"] = 5
 		now := time.Now()
 		updates["finish_at"] = &now
 		updates["dropof_point"] = now
@@ -298,7 +301,7 @@ func GetDeliveryRecords(c *gin.Context) {
 		        TIMESTAMPDIFF(MINUTE, orders.pickup_at, orders.finish_at) AS duration,
 		        orders.finish_at AS completed_at`).
 		Joins("LEFT JOIN delivery_routes ON delivery_routes.order_id = orders.id").
-		Where("orders.rider_id = ? AND orders.status = 4", riderID)
+		Where("orders.rider_id = ? AND orders.status = 5", riderID) // 5: 已完成
 
 	if status != "" {
 		// 未来可根据 status 映射
@@ -353,10 +356,9 @@ func GetWorkStats(c *gin.Context) {
 
 	var totalOrders int64
 	global.Db.Model(&models.Order{}).
-		Where("rider_id = ? AND status = 4 AND finish_at >= ?", riderID, start).
+		Where("rider_id = ? AND status = 5 AND finish_at >= ?", riderID, start).
 		Count(&totalOrders)
 
-	// 暂时把完成率视为 100%，有更多数据源可以再优化
 	completionRate := 100.0
 	if totalOrders == 0 {
 		completionRate = 0
@@ -387,17 +389,16 @@ func GetMonthlyStats(c *gin.Context) {
 		Select("SUM(amount)").Scan(&monthIncome)
 
 	global.Db.Model(&models.Order{}).
-		Where("rider_id = ? AND status = 4 AND finish_at >= ?", riderID, start).
+		Where("rider_id = ? AND status = 5 AND finish_at >= ?", riderID, start).
 		Count(&monthOrders)
 
-	// 统计在线天数：有完成订单的那几天
 	type Day struct {
 		Day time.Time
 	}
 	var days []Day
 	global.Db.Model(&models.Order{}).
 		Select("DATE(finish_at) AS day").
-		Where("rider_id = ? AND status = 4 AND finish_at >= ?", riderID, start).
+		Where("rider_id = ? AND status = 5 AND finish_at >= ?", riderID, start).
 		Group("DATE(finish_at)").Scan(&days)
 
 	c.JSON(http.StatusOK, gin.H{

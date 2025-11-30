@@ -72,33 +72,62 @@ type OrderItemResp struct {
 }
 
 func GetNewOrders(c *gin.Context) {
-	var orders []models.Order
-	global.Db.Where("status = 1").Order("created_at DESC").Limit(50).Find(&orders)
+	type NewOrderRow struct {
+		ID            uint      `json:"id"`
+		ShopName      string    `json:"shop_name"`
+		ShopLocation  string    `json:"shop_location"`
+		ConsigneeName string    `json:"consignee_name"`
+		Province      string    `json:"province"`
+		City          string    `json:"city"`
+		District      string    `json:"district"`
+		Street        string    `json:"street"`
+		Detail        string    `json:"detail"`
+		TotalPrice    float64   `json:"total_price"`
+		CreatedAt     time.Time `json:"created_at"`
+	}
 
-	list := []OrderItemResp{}
+	var rows []NewOrderRow
 
-	for _, o := range orders {
-		var merchant models.Merchant
-		global.Db.Where("id = ?", o.MerchantID).First(&merchant)
+	// 一条 SQL 把订单 + 商家 + 收货人 + 地址全联表查出来
+	if err := global.Db.
+		Table("orders AS o").
+		Select(`o.id,
+		        o.total_price,
+		        o.created_at,
+		        m.shop_name,
+		        m.shop_location,
+		        c.name         AS consignee_name,
+		        a.province,
+		        a.city,
+		        a.district,
+		        a.street,
+		        a.detail`).
+		Joins("JOIN merchants  AS m ON m.id = o.merchant_id").
+		Joins("JOIN consignees AS c ON c.id = o.consigneeid").
+		Joins("JOIN addresses  AS a ON a.id = c.addressid").
+		Where("o.status = ? AND o.rider_id IS NULL", 3). // 3: 待接单
+		Order("o.created_at DESC").
+		Limit(50).
+		Scan(&rows).Error; err != nil {
+		c.JSON(200, gin.H{"code": 0, "msg": "查询失败"})
+		return
+	}
 
-		var consignee models.Consignee
-		global.Db.Where("id = ?", o.Consigneeid).First(&consignee)
+	list := make([]OrderItemResp, 0, len(rows))
 
-		var addr models.Address
-		global.Db.Where("id = ?", consignee.Addressid).First(&addr)
-
-		fullAddr := addr.Province + addr.City + addr.District + addr.Street + addr.Detail
+	for _, r := range rows {
+		fullAddr := r.Province + r.City + r.District + r.Street + r.Detail
 
 		list = append(list, OrderItemResp{
-			ID:              o.ID,
-			Restaurant:      merchant.ShopName,
-			PickupAddress:   merchant.ShopLocation,
-			Customer:        consignee.Name,
+			ID:              r.ID,
+			Restaurant:      r.ShopName,
+			PickupAddress:   r.ShopLocation,
+			Customer:        r.ConsigneeName,
 			DeliveryAddress: fullAddr,
-			Distance:        1.2,
-			EstimatedFee:    o.TotalPrice,
-			EstimatedTime:   20,
-			CreatedAt:       o.CreatedAt,
+			Distance:        1.2,          // 你们前端现在写死，保持不变
+			EstimatedFee:    r.TotalPrice, // 先用订单总价当预估费用
+			EstimatedTime:   20,           // 先写死 20 分钟
+			CreatedAt:       r.CreatedAt,
 		})
 	}
 
@@ -120,18 +149,22 @@ func AcceptOrderSafe(c *gin.Context) {
 		return
 	}
 
-	if order.Status != 1 {
+	// 只有 status = 3 且尚未分配骑手的订单可以被抢
+	if order.Status != 3 || order.RiderID != 0 {
 		tx.Rollback()
 		c.JSON(200, gin.H{"code": 0, "msg": "订单已被抢走"})
 		return
 	}
 
 	pickupCode := utils.GeneratePickupCode()
+	now := time.Now()
 
+	// 接单后直接进入配送中（4），但此时 pickup_at 仍为空
 	err := tx.Model(&order).Updates(map[string]interface{}{
-		"status":      2,
+		"status":      4, // 配送中
 		"rider_id":    riderID,
 		"pickup_code": pickupCode,
+		"accepted_at": &now,
 	}).Error
 
 	if err != nil {
@@ -154,27 +187,25 @@ func PickupOrder(c *gin.Context) {
 	riderID := c.GetUint("baseUserID")
 
 	var order models.Order
-	if err := global.Db.Where("id = ?", orderId).First(&order).Error; err != nil {
-		c.JSON(200, gin.H{"code": 0, "msg": "订单不存在"})
+	if err := global.Db.Where("id = ? AND rider_id = ?", orderId, riderID).First(&order).Error; err != nil {
+		c.JSON(200, gin.H{"code": 0, "msg": "订单不存在或无权限"})
 		return
 	}
 
-	// 骑手只能处理自己的订单
-	if order.RiderID != riderID {
-		c.JSON(200, gin.H{"code": 0, "msg": "无权限操作此订单"})
-		return
-	}
-
-	// 状态必须是待取货（2）
-	if order.Status != 2 {
+	// 必须是骑手已接单的配送中订单（4）
+	if order.Status != 4 {
 		c.JSON(200, gin.H{"code": 0, "msg": "订单状态不正确"})
 		return
 	}
 
-	// 更新为配送中（3）
+	// 已经取过货就不重复操作
+	if order.PickupAt != nil {
+		c.JSON(200, gin.H{"code": 0, "msg": "订单已取货"})
+		return
+	}
+
 	now := time.Now()
 	err := global.Db.Model(&order).Updates(map[string]interface{}{
-		"status":    3,
 		"pickup_at": &now,
 	}).Error
 
@@ -206,7 +237,7 @@ func GetDeliveringOrders(c *gin.Context) {
 
 	var orders []models.Order
 	if err := global.Db.
-		Where("rider_id = ? AND status = 3", riderID).
+		Where("rider_id = ? AND status = ? AND pickup_at IS NOT NULL AND finish_at IS NULL", riderID, 4).
 		Order("updated_at DESC").
 		Find(&orders).Error; err != nil {
 		c.JSON(200, gin.H{"code": 0, "msg": "查询失败"})
@@ -237,7 +268,7 @@ func GetDeliveringOrders(c *gin.Context) {
 			ID:              o.ID,
 			Customer:        consignee.Name,
 			CustomerPhone:   consignee.Phone,
-			CustomerAvatar:  "", // 先不给头像字段，避免 bu.Avatar 报错
+			CustomerAvatar:  "",
 			DeliveryAddress: fullAddr,
 			RemainingTime:   remaining,
 		})
@@ -256,18 +287,19 @@ func CompleteOrder(c *gin.Context) {
 		return
 	}
 
-	if order.Status != 3 {
+	// 只能在配送中（4）时完成
+	if order.Status != 4 {
 		c.JSON(200, gin.H{"code": 0, "msg": "订单状态不正确"})
 		return
 	}
 
 	now := time.Now()
 
-	// ==== 1. 正确更新订单（不用 Save） ====
+	// ==== 1. 更新订单状态为已完成（5） ====
 	if err := global.Db.Model(&models.Order{}).
 		Where("id = ?", order.ID).
 		Updates(map[string]interface{}{
-			"status":       4,
+			"status":       5, // 已完成
 			"dropof_point": now,
 			"finish_at":    now,
 		}).Error; err != nil {
@@ -287,7 +319,6 @@ func CompleteOrder(c *gin.Context) {
 
 	var wallet models.RiderWallet
 
-	// 必须提供 default 值才能创建新记录
 	global.Db.Where("rider_id = ?", riderID).
 		FirstOrCreate(&wallet, models.RiderWallet{
 			RiderID:      riderID,
@@ -305,10 +336,9 @@ func CompleteOrder(c *gin.Context) {
 		"code": 1,
 		"data": gin.H{
 			"success":   true,
-			"actualFee": order.TotalPrice, // 实际配送费
+			"actualFee": order.TotalPrice,
 		},
 	})
-
 }
 
 // GET /rider/orders/history
@@ -321,7 +351,7 @@ func GetOrderHistory(c *gin.Context) {
 	sizeInt, _ := strconv.Atoi(size)
 	offset := (pageInt - 1) * sizeInt
 
-	statusStr := c.Query("status") // 可选，根据 index.ts 说明
+	statusStr := c.Query("status") // 可选，3:待接单, 4:配送中, 5:已完成
 	date := c.Query("date")        // 可选
 
 	type HistoryItem struct {
@@ -340,8 +370,9 @@ func GetOrderHistory(c *gin.Context) {
 		Where("rider_id = ?", riderID)
 
 	if statusStr != "" {
-		// 前端用字符串的话你可以自己映射一下
-		// 例如 "completed" -> 4
+		if st, err := strconv.Atoi(statusStr); err == nil {
+			query = query.Where("status = ?", st)
+		}
 	}
 
 	if date != "" {
@@ -369,7 +400,7 @@ func GetOrderHistory(c *gin.Context) {
 			Customer:    consignee.Name,
 			Fee:         o.TotalPrice,
 			Status:      o.Status,
-			CompletedAt: o.FinishAt, // 记得在 models.Order 里有 FinishAt
+			CompletedAt: o.FinishAt,
 		}
 		list = append(list, item)
 	}
@@ -398,7 +429,7 @@ func GetPickupOrders(c *gin.Context) {
 
 	var orders []models.Order
 	if err := global.Db.
-		Where("rider_id = ? AND status = 2", riderID).
+		Where("rider_id = ? AND status = ? AND pickup_at IS NULL", riderID, 4).
 		Order("created_at DESC").
 		Find(&orders).Error; err != nil {
 		c.JSON(200, gin.H{"code": 0, "msg": "查询失败"})
@@ -411,7 +442,6 @@ func GetPickupOrders(c *gin.Context) {
 		var merchant models.Merchant
 		global.Db.Where("id = ?", o.MerchantID).First(&merchant)
 
-		// 剩余时间：用期望送达时间减当前时间，单位分钟，负数就置 0
 		remaining := 0
 		if !o.ExpectedTime.IsZero() {
 			diff := int(time.Until(o.ExpectedTime).Minutes())
@@ -425,7 +455,7 @@ func GetPickupOrders(c *gin.Context) {
 			Restaurant:    merchant.ShopName,
 			PickupAddress: merchant.ShopLocation,
 			PickupCode:    o.PickupCode,
-			ShopPhone:     merchant.Phone, // 根据你 Merchant 实际字段改一下
+			ShopPhone:     merchant.Phone,
 			RemainingTime: remaining,
 		})
 	}
@@ -526,12 +556,12 @@ func GetTodayIncome(c *gin.Context) {
 
 	var total float64
 	global.Db.Model(&models.Order{}).
-		Where("rider_id = ? AND status = 4 AND DATE(updated_at) = CURDATE()", riderID).
+		Where("rider_id = ? AND status = 5 AND DATE(updated_at) = CURDATE()", riderID).
 		Select("SUM(total_price)").Scan(&total)
 
 	var count int64
 	global.Db.Model(&models.Order{}).
-		Where("rider_id = ? AND status = 4 AND DATE(updated_at) = CURDATE()", riderID).
+		Where("rider_id = ? AND status = 5 AND DATE(updated_at) = CURDATE()", riderID).
 		Count(&count)
 
 	c.JSON(200, gin.H{
@@ -549,12 +579,12 @@ func GetIncomeSummary(c *gin.Context) {
 
 	var total float64
 	global.Db.Model(&models.Order{}).
-		Where("rider_id = ? AND status = 4", riderID).
+		Where("rider_id = ? AND status = 5", riderID).
 		Select("SUM(total_price)").Scan(&total)
 
 	var count int64
 	global.Db.Model(&models.Order{}).
-		Where("rider_id = ? AND status = 4", riderID).
+		Where("rider_id = ? AND status = 5", riderID).
 		Count(&count)
 
 	c.JSON(200, gin.H{
@@ -580,7 +610,7 @@ func GetMonthIncome(c *gin.Context) {
 	global.Db.Raw(`
         SELECT DATE(updated_at) AS date, SUM(total_price) AS money
         FROM orders
-        WHERE rider_id = ? AND status = 4
+        WHERE rider_id = ? AND status = 5
         GROUP BY DATE(updated_at)
         ORDER BY date ASC
     `, riderID).Scan(&data)
@@ -598,25 +628,25 @@ func GetRiderDashboard(c *gin.Context) {
 	// 今日收入
 	var todayIncome float64
 	global.Db.Model(&models.Order{}).
-		Where("rider_id = ? AND status = 4 AND DATE(updated_at)=CURDATE()", riderID).
+		Where("rider_id = ? AND status = 5 AND DATE(updated_at)=CURDATE()", riderID).
 		Select("SUM(total_price)").Scan(&todayIncome)
 
-	// 今日单数
+	// 今日完成单数
 	var todayOrders int64
 	global.Db.Model(&models.Order{}).
-		Where("rider_id = ? AND status = 4 AND DATE(updated_at)=CURDATE()", riderID).
+		Where("rider_id = ? AND status = 5 AND DATE(updated_at)=CURDATE()", riderID).
 		Count(&todayOrders)
 
-	// 配送中
+	// 配送中：status = 4 且未完成
 	var delivering int64
 	global.Db.Model(&models.Order{}).
-		Where("rider_id = ? AND status = 3", riderID).
+		Where("rider_id = ? AND status = ? AND finish_at IS NULL", riderID, 4).
 		Count(&delivering)
 
-	// 待取货
+	// 待取货：status = 4 且 pickup_at IS NULL
 	var waitPickup int64
 	global.Db.Model(&models.Order{}).
-		Where("rider_id = ? AND status = 2", riderID).
+		Where("rider_id = ? AND status = ? AND pickup_at IS NULL", riderID, 4).
 		Count(&waitPickup)
 
 	c.JSON(200, gin.H{
@@ -670,7 +700,8 @@ func AcceptOrder(c *gin.Context) {
 		return
 	}
 
-	if order.Status != 1 {
+	// 只有 status = 3 且尚未分配骑手的订单可以被抢
+	if order.Status != 3 || order.RiderID != 0 {
 		c.JSON(200, gin.H{"code": 0, "msg": "订单已被抢走"})
 		return
 	}
@@ -679,7 +710,7 @@ func AcceptOrder(c *gin.Context) {
 	pickupCode := utils.GeneratePickupCode()
 
 	global.Db.Model(&order).Updates(map[string]interface{}{
-		"status":      2,
+		"status":      4, // 配送中
 		"rider_id":    riderID,
 		"pickup_code": pickupCode,
 		"accepted_at": &now,
@@ -693,9 +724,9 @@ func AcceptOrder(c *gin.Context) {
 		},
 	})
 }
+
 func GetIncomeStats(c *gin.Context) {
 	riderID := c.GetUint("baseUserID")
-	// period := c.DefaultQuery("period", "today") // 如不需要，可以忽略
 
 	now := time.Now()
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
@@ -705,24 +736,21 @@ func GetIncomeStats(c *gin.Context) {
 	var dailyIncome, weeklyIncome, monthlyIncome float64
 	var completedOrders int64
 
-	// 今天收入
 	global.Db.Model(&models.RiderIncomeRecord{}).
 		Where("rider_id = ? AND created_at >= ?", riderID, todayStart).
 		Select("SUM(amount)").Scan(&dailyIncome)
 
-	// 七天收入
 	global.Db.Model(&models.RiderIncomeRecord{}).
 		Where("rider_id = ? AND created_at >= ?", riderID, weekStart).
 		Select("SUM(amount)").Scan(&weeklyIncome)
 
-	// 一个月收入
 	global.Db.Model(&models.RiderIncomeRecord{}).
 		Where("rider_id = ? AND created_at >= ?", riderID, monthStart).
 		Select("SUM(amount)").Scan(&monthlyIncome)
 
-	// 总完成单数（你可以按需求改成最近一月）
+	// 完成订单：status = 5
 	global.Db.Model(&models.Order{}).
-		Where("rider_id = ? AND status = 4").
+		Where("rider_id = ? AND status = 5").
 		Count(&completedOrders)
 
 	c.JSON(200, gin.H{
@@ -812,13 +840,12 @@ func GetWeeklyStats(c *gin.Context) {
 		Where("rider_id = ? AND created_at >= ?", riderID, start).
 		Select("SUM(amount)").Scan(&weekIncome)
 
-	// 完成订单
+	// 完成订单：status = 5
 	var weekOrders int64
 	global.Db.Model(&models.Order{}).
-		Where("rider_id = ? AND status = 4 AND finish_at >= ?", riderID, start).
+		Where("rider_id = ? AND status = 5 AND finish_at >= ?", riderID, start).
 		Count(&weekOrders)
 
-	// 在线时长（你 RiderProfile 里应有 OnlineHours 字段）
 	var profile models.RiderProfile
 	global.Db.Where("user_id = ?", riderID).First(&profile)
 
@@ -832,6 +859,7 @@ func GetWeeklyStats(c *gin.Context) {
 		},
 	})
 }
+
 func GetWalletInfo(c *gin.Context) {
 	id := c.GetUint("baseUserID")
 
