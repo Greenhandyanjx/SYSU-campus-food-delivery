@@ -7,13 +7,7 @@
       "Bash(node -e \"const api = require(''./index.js''); console.log(''Available functions:'', Object.keys(api.default || api).filter(k => typeof api[k] === ''function'').length);\")",
       "Bash(node -c:*)",
       "Bash(npm run dev)",
-      "Bash(curl:*)",
-      "Bash(taskkill:*)",
-      "Bash(netstat:*)",
-      "Bash(findstr:*)",
-      "Bash(powershell:*)",
-      "Bash(go build:*)",
-      "Bash(./backend.exe:*)"
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []

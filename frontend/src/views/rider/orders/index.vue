@@ -255,15 +255,9 @@ const filteredOrders = computed(() => {
     })
   }
 
-  // 按状态筛选 - 修复状态值匹配
+  // 按状态筛选
   if (statusFilter.value) {
-    filtered = filtered.filter(order => {
-      // 将数字状态转换为文本状态进行匹配
-      const orderStatus = order.status === 'completed' ? 'completed' :
-                      order.status === 'cancelled' ? 'cancelled' :
-                      order.status
-      return orderStatus === statusFilter.value
-    })
+    filtered = filtered.filter(order => order.status === statusFilter.value)
   }
 
   return filtered
@@ -308,17 +302,23 @@ const initData = async () => {
     // 获取订单历史
     await loadOrders()
 
-    // 获取统计数据
-    try {
-      const statsResult = await riderApi.getWorkStats()
-      if (statsResult.code === 1 && statsResult.data) {
-        orderStats.value.completed = statsResult.data.completedOrders || 0
-        orderStats.value.cancelled = statsResult.data.cancelledOrders || 0
-        orderStats.value.totalIncome = statsResult.data.totalIncome || 0
-        orderStats.value.efficiency = statsResult.data.efficiency || 0
+    // 获取统计数据（使用增强API）
+    const statsResult = await riderApi.getWorkStatsEnhanced()
+    if (statsResult.success) {
+      const statsResponse = statsResult.data
+      if (statsResponse.code === 1 && statsResponse.data) {
+        orderStats.value.completed = statsResponse.data.completedOrders || 0
+        orderStats.value.cancelled = statsResponse.data.cancelledOrders || 0
+        orderStats.value.totalIncome = statsResponse.data.totalIncome || 0
+        orderStats.value.efficiency = statsResponse.data.efficiency || 0
+
+        // 如果使用的是演示数据，显示提示
+        if (statsResult.fallback) {
+          console.log('使用演示统计数据')
+        }
       }
-    } catch (statsError) {
-      console.warn('统计数据加载失败，使用默认值:', statsError)
+    } else {
+      console.warn('统计数据加载失败，使用默认值')
       // 设置默认值，不影响用户使用
       orderStats.value.completed = 0
       orderStats.value.cancelled = 0
@@ -357,62 +357,53 @@ const initData = async () => {
 // 加载订单
 const loadOrders = async (page = 1) => {
   try {
-    // 使用API获取订单历史
-    const result = await riderApi.getOrderHistory({
+    // 使用增强的API，自动处理超时和演示数据
+    const result = await riderApi.getOrderHistoryEnhanced({
       page,
       pageSize: 20,
       dateFilter: dateFilter.value,
       statusFilter: statusFilter.value
     })
 
-    if (result.code === 1) {
-      const response = result.data
+    if (result.success) {
+      let response = result.data
 
-      if (page === 1) {
-        orders.value = response.items || []
-      } else {
-        orders.value = [...orders.value, ...(response.items || [])]
-      }
+      // 如果使用的是演示数据，需要调整数据结构
+      if (result.fallback) {
+        // 演示数据直接是 { items: [], total: 0, currentPage: 1, pageSize: 20 }
+        const demoItems = response.items || []
 
-      hasMore.value = response.items && response.items.length === 20
-
-    } else {
-      console.error('获取订单数据失败：', result.msg || '未知错误')
-      ElMessage.error('获取订单数据失败')
-    }
-  } catch (error) {
-    console.error('加载订单失败:', error)
-
-    // 如果API失败，尝试使用演示数据
-    if (error.response?.status >= 500 || !error.response) {
-      console.log('使用演示数据')
-      const demoResult = await riderApi.getOrderHistoryWithDemo()
-      if (demoResult.code === 1 && demoResult.data.items) {
-        const demoItems = demoResult.data.items.map(item => ({
+        // 转换演示数据格式，匹配现有组件期望的数据结构
+        const orders = demoItems.map(item => ({
           id: item.id,
-          orderNo: `#${item.orderId}`,
           orderId: item.orderId,
           restaurant: item.restaurant,
           customer: item.customer,
-          deliveryAddress: item.customer ? `${item.customer}的配送地址` : '配送地址',
-          pickupAddress: '取餐地址',
-          distance: (Math.random() * 3 + 0.5).toFixed(1),
-          deliveryTime: Math.floor(Math.random() * 30 + 10),
-          fee: item.amount * 0.8,
+          deliveryAddress: `${item.customer}的配送地址`,
+          distance: Math.round((Math.random() * 3 + 0.5) * 10) / 10, // 0.5-3.5km
+          estimatedFee: Math.round(item.amount * 0.8 * 100) / 100, // 配送费为订单金额的80%
           amount: item.amount,
-          status: item.status === 4 ? 'completed' : 'cancelled',
+          status: item.status, // 状态：1待接单 2已接单 3配送中 4已完成
           createdAt: item.time,
-          remark: item.remark
+          completedAt: item.time,
+          remark: item.remark,
+          type: item.type || 'delivery'
         }))
 
+        // 模拟分页
+        const startIndex = (page - 1) * 20
+        const endIndex = startIndex + 20
+        const pageOrders = orders.slice(startIndex, endIndex)
+
         if (page === 1) {
-          orders.value = demoItems
+          orders.value = pageOrders
         } else {
-          orders.value = [...orders.value, ...demoItems]
+          orders.value = [...orders.value, ...pageOrders]
         }
 
-        hasMore.value = false
+        hasMore.value = endIndex < orders.length
 
+        // 显示演示数据提示
         if (page === 1) {
           ElMessage({
             message: '网络连接异常，当前显示演示数据',
@@ -420,12 +411,53 @@ const loadOrders = async (page = 1) => {
             duration: 4000
           })
         }
+      } else {
+        // 正常API响应
+        const newOrders = response.data?.orders || []
+
+        if (page === 1) {
+          orders.value = newOrders
+        } else {
+          orders.value = [...orders.value, ...newOrders]
+        }
+
+        hasMore.value = response.data?.orders && response.data.orders.length === 20
       }
     } else {
-      ElMessage.error('加载订单失败：' + (error.response?.data?.msg || error.message))
+      throw result.error
     }
-  } finally {
-    loading.value = false
+  } catch (error) {
+    console.error('加载订单失败:', error)
+
+    // 更详细的错误处理
+    if (error.code === 'ECONNABORTED') {
+      ElMessage({
+        message: '网络请求超时，请检查网络连接',
+        type: 'error',
+        duration: 5000
+      })
+    } else if (error.isOffline) {
+      ElMessage({
+        message: '设备处于离线状态，请检查网络设置',
+        type: 'warning',
+        duration: 5000
+      })
+    } else if (error.shouldRetry) {
+      ElMessage({
+        message: '网络不稳定，正在自动重试...',
+        type: 'info',
+        duration: 3000
+      })
+    } else {
+      ElMessage({
+        message: error.userMessage || '加载订单失败，请稍后重试',
+        type: 'error',
+        duration: 5000
+      })
+    }
+
+    // 不抛出错误，让组件继续工作
+    return false
   }
 }
 

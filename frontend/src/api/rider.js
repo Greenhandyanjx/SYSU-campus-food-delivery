@@ -133,15 +133,15 @@ const riderApi = {
 
   // 增强版本的历史订单API（带演示数据回退）
   getOrderHistoryEnhanced(params) {
-    return request({
+    return enhancedAPI.wrapApiMethod((queryParams) => request({
       url: '/rider/orders/history',
       method: 'get',
-      params
-    }, {
+      params: queryParams
+    }), {
       context: '获取历史订单',
       useCache: true,
       fallbackData: this.getOrderHistoryWithDemo().data
-    });
+    })(params);
   },
 
   // 配送状态扩展
@@ -317,10 +317,10 @@ const riderApi = {
 
   // 增强版本的工作统计API
   getWorkStatsEnhanced(params) {
-    return enhancedAPI.wrapApiMethod(() => request({
+    return enhancedAPI.wrapApiMethod((queryParams) => request({
       url: '/rider/stats/work',
       method: 'get',
-      params
+      params: queryParams
     }), {
       context: '获取工作统计',
       useCache: true,
@@ -337,7 +337,7 @@ const riderApi = {
           dailyIncome: 230.45
         }
       }
-    })();
+    })(params);
   },
 
   // GET /rider/stats/monthly
