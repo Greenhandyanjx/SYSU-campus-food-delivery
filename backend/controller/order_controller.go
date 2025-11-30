@@ -255,10 +255,14 @@ func GetUserOrderList(c *gin.Context) {
 		return
 	}
 
-	// 构建商家信息映射以便在列表中展示店铺名称/Logo
-	merchantIDs := make([]uint, 0)
+	// 构建商家信息映射以便在列表中展示店铺名称/Logo（并去重 merchantIDs 减少查询）
+	merchantIDSet := make(map[uint]struct{})
 	for _, o := range orders {
-		merchantIDs = append(merchantIDs, o.MerchantID)
+		merchantIDSet[o.MerchantID] = struct{}{}
+	}
+	merchantIDs := make([]uint, 0, len(merchantIDSet))
+	for id := range merchantIDSet {
+		merchantIDs = append(merchantIDs, id)
 	}
 	var merchants []models.Merchant
 	if len(merchantIDs) > 0 {
@@ -269,6 +273,31 @@ func GetUserOrderList(c *gin.Context) {
 		merchantMap[m.ID] = m
 	}
 
+	// 为避免 N+1 查询：一次性加载所有 order_meals 与 order_dishes（及其关联 Meal/Dish），
+	// 然后按 order_id 分组以便快速组装返回数据
+	orderIDList := make([]uint, 0, len(orders))
+	for _, o := range orders {
+		orderIDList = append(orderIDList, o.ID)
+	}
+
+	orderMealsMap := make(map[uint][]models.OrderMeal)
+	orderDishesMap := make(map[uint][]models.OrderDish)
+
+	if len(orderIDList) > 0 {
+		var allMeals []models.OrderMeal
+		if err := global.Db.Preload("Meal").Where("order_id IN ?", orderIDList).Find(&allMeals).Error; err == nil {
+			for _, m := range allMeals {
+				orderMealsMap[uint(m.OrderID)] = append(orderMealsMap[uint(m.OrderID)], m)
+			}
+		}
+		var allDishes []models.OrderDish
+		if err := global.Db.Preload("Dish").Where("order_id IN ?", orderIDList).Find(&allDishes).Error; err == nil {
+			for _, d := range allDishes {
+				orderDishesMap[uint(d.OrderID)] = append(orderDishesMap[uint(d.OrderID)], d)
+			}
+		}
+	}
+
 	// 构建简要列表（附带商家名称/Logo，前端可用详情接口获取 items）
 	items := make([]gin.H, 0, len(orders))
 	for _, o := range orders {
@@ -276,13 +305,9 @@ func GetUserOrderList(c *gin.Context) {
 		num := o.CreatedAt.Format("20060102") + fmt.Sprintf("%06d", o.ID)
 		m := merchantMap[o.MerchantID]
 
-		// 查询该订单的菜品/套餐明细，合并为 items 返回，方便订单卡片直接展示
-		var orderMeals []models.OrderMeal
-		_ = global.Db.Preload("Meal").Where("order_id = ?", o.ID).Find(&orderMeals).Error
-		var orderDishes []models.OrderDish
-		_ = global.Db.Preload("Dish").Where("order_id = ?", o.ID).Find(&orderDishes).Error
 		itms := make([]gin.H, 0)
-		for _, om := range orderMeals {
+		// 从批量查询结果中组装菜品/套餐信息
+		for _, om := range orderMealsMap[o.ID] {
 			var priceNum float64 = 0
 			if om.Meal.Price != "" {
 				if p, err := strconv.ParseFloat(om.Meal.Price, 64); err == nil {
@@ -291,7 +316,7 @@ func GetUserOrderList(c *gin.Context) {
 			}
 			itms = append(itms, gin.H{"id": om.MealID, "skuId": fmt.Sprintf("m%d", om.MealID), "name": om.Meal.Mealname, "count": om.Num, "qty": om.Num, "price": priceNum, "image": om.Meal.ImagePath})
 		}
-		for _, od := range orderDishes {
+		for _, od := range orderDishesMap[o.ID] {
 			var priceNum float64 = 0
 			if od.Dish.Price != "" {
 				if p, err := strconv.ParseFloat(od.Dish.Price, 64); err == nil {
