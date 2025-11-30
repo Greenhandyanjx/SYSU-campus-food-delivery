@@ -19,7 +19,7 @@ type Config struct {
 var AppConfig *Config
 
 // InitConfig reads configuration from file and unmarshals into AppConfig
-func InitConfig() {
+func InitConfig(){
 	viper.SetConfigName("config")
 	viper.SetConfigType("yml")
 	viper.AddConfigPath("config/")

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>中珠外卖 · 外卖新体验 立减配送费</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body,
+    html {
+      width: 100%;
+      height: 100%;
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: 'Microsoft YaHei', -apple-system, sans-serif;
+    }
+
+    .banner {
+      width: 800px;
+      height: 400px;
+      position: relative;
+      overflow: hidden;
+      border-radius: 28px;
+      box-shadow: 0 35px 90px rgba(0, 0, 0, 0.55);
+      background: #f0f8ff;
+    }
+
+    /* 全屏背景图：城市夜景外卖骑手（蓝调科技感） */
+    .bg-image {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: url('https://img.tukuppt.com/bg_grid/00/82/49/ZqJK8fV6mp.jpg!/fh/350') center/cover no-repeat;
+      filter: brightness(0.78) contrast(1.15) saturate(1.1);
+      z-index: 1;
+    }
+
+    /* 蓝白渐变蒙版（统一科技清新色调） */
+    .overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, rgba(240, 248, 255, 0.94) 0%, rgba(220, 240, 255, 0.85) 100%);
+      z-index: 2;
+    }
+
+    svg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 3;
+      pointer-events: none;
+    }
+
+    .text-glow {
+      filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.4));
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="banner">
+    <!-- 背景图：夜间城市骑手 -->
+    <div class="bg-image"></div>
+    <!-- 蓝白蒙版 -->
+    <div class="overlay"></div>
+
+    <!-- SVG 内容（高端重构） -->
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400" width="800" height="400">
+      <defs>
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="3.5" result="blur" />
+          <feFlood flood-color="#fff" flood-opacity="0.8" />
+          <feComposite in2="blur" operator="in" />
+          <feMerge>
+            <feMergeNode />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <linearGradient id="title-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#0b4f6c" />
+          <stop offset="100%" stop-color="#01658a" />
+        </linearGradient>
+      </defs>
+
+      <!-- 主标题：更大、深蓝渐变、发光 -->
+      <text x="50" y="85" font-size="38" fill="url(#title-grad)" font-weight="800" class="text-glow"
+        filter="url(#glow)">
+        外卖新体验 · 立减配送费
+      </text>
+
+      <!-- 副标题：科技蓝小字 -->
+      <text x="50" y="118" font-size="16" fill="#1a6b84" font-weight="600" class="text-glow" opacity="0.92">
+        全天可用 · 优质骑手
+      </text>
+
+      <!-- 右侧：配送场景（独立图源） -->
+      <g transform="translate(480,58)">
+        <image x="0" y="0" width="250" height="180"
+          href="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQyg7tbAAEQjuwJDma_XMSTvG2sRgjUHEIDzQ&s"
+          preserveAspectRatio="xMidYMid slice" filter="url(#glow)" />
+        <rect x="0" y="0" width="250" height="180" rx="16" fill="#fff" opacity="0.28" />
+
+        <!-- “立即下单”按钮（立体感爆棚） -->
+        <g transform="translate(35,110)">
+          <rect width="180" height="48" rx="24" fill="#ff6b00" filter="url(#glow)" />
+          <text x="90" y="32" font-size="20" fill="#fff" font-weight="700" text-anchor="middle" filter="url(#glow)">
+            立即下单
+          </text>
+        </g>
+      </g>
+    </svg>
+  </div>
+
+</body>
+
+</html>

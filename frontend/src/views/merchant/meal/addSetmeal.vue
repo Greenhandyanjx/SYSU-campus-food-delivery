@@ -1,7 +1,7 @@
 <template>
   <div class="addBrand-container">
     <div class="container">
-      <el-form ref="ruleForm"
+  <el-form ref="ruleFormRef"
                :model="ruleForm"
                :rules="rules"
                :inline="true"
@@ -14,15 +14,14 @@
                       placeholder="请填写套餐名称"
                       maxlength="14" />
           </el-form-item>
-          <el-form-item label="套餐分类:"
-                        prop="idType">
-            <el-select v-model="ruleForm.idType"
-                       placeholder="请选择套餐分类"
-                       @change="$forceUpdate()">
-              <el-option v-for="(item, index) in setMealList"
-                         :key="index"
-                         :label="item.name"
-                         :value="item.id" />
+          <el-form-item label="套餐分类:" prop="categoryId">
+            <el-select style="min-width: 200px;" v-model="ruleForm.categoryId" placeholder="请选择套餐分类">
+              <el-option
+                v-for="(item, index) in setMealList"
+                :key="index"
+                :label="item.name"
+                :value="item.id"
+              />
             </el-select>
           </el-form-item>
         </div>
@@ -34,65 +33,33 @@
           </el-form-item>
         </div>
         <div>
-          <el-form-item label="套餐菜品:"
-                        required>
-            <el-form-item>
-              <div class="addDish">
-                <span v-if="dishTable.length == 0"
-                      class="addBut"
-                      @click="openAddDish('new')">
-                  + 添加菜品</span>
-                <div v-if="dishTable.length != 0"
-                     class="content">
-                  <div class="addBut"
-                       style="margin-bottom: 20px"
-                       @click="openAddDish('change')">
-                    + 添加菜品
-                  </div>
-                  <div class="table">
-                    <el-table :data="dishTable"
-                              style="width: 100%">
-                      <el-table-column prop="name"
-                                       label="名称"
-                                       width="180"
-                                       align="center" />
-                      <el-table-column prop="price"
-                                       label="原价"
-                                       width="180"
-                                       align="center">
-                        <template #default="{ row }">
-                          {{ Number(Number(row.price).toFixed(2)) }}
-                        </template>
-                      </el-table-column>
-                      <el-table-column prop="address"
-                                       label="份数"
-                                       align="center">
-                        <template #default="{ row }">
-                          <el-input-number v-model="row.copies"
-                                           size="small"
-                                           :min="1"
-                                           :max="99"
-                                           label="描述文字" />
-                        </template>
-                      </el-table-column>
-                      <el-table-column prop="address"
-                                       label="操作"
-                                       width="180px;"
-                                       align="center">
-                        <template #default="{ $index }">
-                          <el-button type="text"
-                                     size="small"
-                                     class="delBut non"
-                                     @click="delDishHandle($index)">
-                            删除
-                          </el-button>
-                        </template>
-                      </el-table-column>
-                    </el-table>
-                  </div>
-                </div>
-              </div>
-            </el-form-item>
+          <el-form-item label="套餐菜品:" required>
+            <div class="addDish">
+              <el-button type="primary" @click="openAddDish">+ 添加菜品</el-button>
+            
+              <el-table
+                v-if="dishTable.length > 0"
+                :data="dishTable"
+                style="width: 100%; margin-top: 15px;"
+              >
+                <el-table-column prop="name" label="名称" width="180" align="center" />
+                <el-table-column prop="price" label="原价" width="180" align="center">
+                  <template #default="{ row }">
+                    {{ Number(row.price).toFixed(2) }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="份数" align="center">
+                  <template #default="{ row }">
+                    <el-input-number v-model.number="row.copies" size="small" :min="1" :max="99" controls-position="right"/>
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作" width="120" align="center">
+                  <template #default="{ $index }">
+                    <el-button type="danger" size="small" @click="delDishHandle($index)">删除</el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
           </el-form-item>
         </div>
         <div>
@@ -133,18 +100,17 @@
         </div>
       </el-form>
     </div>
-    <el-dialog v-if="dialogVisible"
-               title="添加菜品"
-               class="addDishList"
-               :visible.sync="dialogVisible"
-               width="60%"
-               :before-close="handleClose">
-      <AddDish v-if="dialogVisible"
-               ref="adddish"
-               :check-list="checkList"
-               :seach-key="seachKey"
-               :dish-list="dishList"
-               @checkList="getCheckList" />
+  <el-dialog
+         title="添加菜品"
+         class="addDishList"
+         v-model="dialogVisible"
+         width="60%"
+         :before-close="handleClose">
+    <AddDish
+         ref="adddish"
+         :check-list="checkList"
+         :seach-key="seachKey"
+         @check-list="getCheckList" />
       <template #footer class="dialog-footer">
         <el-button @click="handleClose">取 消</el-button>
         <el-button type="primary"
@@ -161,13 +127,14 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import HeadLable from '@/components/HeadLable/index.vue'
 import ImageUpload from '@/components/ImgUpLoad/index.vue'
 import AddDish from './components/AddDish.vue'
- import { querySetmealById, addSetmeal, editSetmeal } from '@/api/merchant/setMeal'
+import { querySetmealById, addSetmeal, editSetmeal } from '@/api/merchant/setMeal'
 import { getCategoryList } from '@/api/dish'
+import { CATEGORIES } from '@/constants/categories'
 
 const route = useRoute()
 const router = useRouter()
 
-const setMealList = ref<any[]>([])
+const setMealList = ref<any[]>(CATEGORIES.filter(c => c.id !== 0))
 const seachKey = ref('')
 const dishList = ref<any[]>([])
 const imageUrl = ref('')
@@ -182,11 +149,10 @@ const ruleForm = reactive<any>({
   categoryId: '',
   price: '',
   code: '',
-  image: '',
+  image: '/images/fresh_salad_set.jpg',
   description: '',
   dishList: [],
   status: true,
-  idType: ''
 })
 
 const rules = {
@@ -206,8 +172,8 @@ const rules = {
     },
     trigger: 'blur'
   },
-  idType: { required: true, message: '请选择套餐分类', trigger: 'change' },
-  image: { required: true, message: '菜品图片不能为空' },
+  categoryId: { required: true, message: '请选择套餐分类', trigger: 'change' },
+  image: { required: false, message: '套餐图片不能为空' },
   price: {
     required: true,
     validator: (rules: any, value: string, callback: Function) => {
@@ -223,31 +189,51 @@ const rules = {
   code: { required: true, message: '请输入商品码', trigger: 'blur' }
 }
 
+// ✅ 修复版 init()
 function init() {
   if (route.query.id) {
     querySetmealById(route.query.id).then((res: any) => {
-      if (res && res.data && res.data.code === 1) {
+      if (res && res.data && Number(res.data.code) === 1) {
+        // 同步基础表单
         Object.assign(ruleForm, res.data.data)
         ruleForm.status = res.data.data.status == '1'
-        ;(ruleForm as any).price = res.data.data.price
+        ruleForm.price = res.data.data.price
         imageUrl.value = res.data.data.image
-        checkList.value = res.data.data.setmealDishes
-        dishTable.value = [...(res.data.data.setmealDishes || [])].reverse()
-        ruleForm.idType = res.data.data.categoryId
+
+        // 初始化菜品列表
+        const dishes = res.data.data.setmealDishes || []
+
+        // ✅ 确保 copies 是数字且响应式
+        checkList.value = dishes.map((dish: any) => ({
+          ...dish,
+          copies: Number(dish.copies) || 1
+        }))
+
+        // dishTable 同步（保持顺序一致）
+        dishTable.value = [...checkList.value]
+
+        // 分类回显
+        ruleForm.categoryId = res.data.data.categoryId
       } else {
-        ElMessage.error(res.data.msg)
+        ElMessage.error(res.data.msg || '加载套餐信息失败')
       }
+    }).catch((err: any) => {
+      ElMessage.error('加载出错：' + err.message)
     })
   }
 }
 
+
 function getDishTypeList() {
+  // Prefer backend categories, fallback to local constants
   getCategoryList({ type: 2 }).then((res: any) => {
-    if (res && res.data && res.data.code === 1) {
-      setMealList.value = (res.data.data || []).map((obj: any) => ({ ...obj, idType: obj.id }))
+    if (res && res.data && Number(res.data.code) === 1 && Array.isArray(res.data.data) && res.data.data.length > 0) {
+      setMealList.value = res.data.data
     } else {
-      ElMessage.error(res.data.msg)
+      setMealList.value = CATEGORIES.filter(c => c.id !== 0)
     }
+  }).catch(() => {
+    setMealList.value = CATEGORIES.filter(c => c.id !== 0)
   })
 }
 
@@ -269,11 +255,17 @@ function handleClose() {
   checkList.value = JSON.parse(JSON.stringify(dishTable.value))
 }
 
+// ✅ 修复版 addTableList()
 function addTableList() {
-  dishTable.value = JSON.parse(JSON.stringify(checkList.value))
-  dishTable.value.forEach((n: any) => (n.copies = 1))
+  // 使用 map 保持响应性，避免 JSON 深拷贝
+  dishTable.value = checkList.value.map((item: any) => ({
+    ...item,
+    // 确保 copies 为 number 类型
+    copies: Number(item.copies) || 1
+  }))
   dialogVisible.value = false
 }
+
 
 function submitForm(formName: string, st: any) {
   ;(ruleFormRef.value as any)?.validate((valid: any) => {
@@ -290,12 +282,12 @@ function submitForm(formName: string, st: any) {
         price: obj.price
       }))
       prams.status = actionType.value === 'add' ? 0 : ruleForm.status ? 1 : 0
-      prams.categoryId = ruleForm.idType
+      prams.categoryId = ruleForm.categoryId
       if (actionType.value === 'add') {
         delete prams.id
         addSetmeal(prams)
           .then((res: any) => {
-            if (res && res.data && res.data.code === 1) {
+            if (res && res.data && Number(res.data.code) === 1) {
               ElMessage.success('套餐添加成功！')
               if (!st) {
                 router.push({ path: '/setmeal' })
@@ -308,14 +300,13 @@ function submitForm(formName: string, st: any) {
                   categoryId: '',
                   price: '',
                   code: '',
-                  image: '',
+                  image: '/images/fresh_salad_set.jpg',
                   description: '',
                   dishList: [],
                   status: true,
                   id: '',
-                  idType: ''
                 })
-                imageUrl.value = ''
+                imageUrl.value = '/images/fresh_salad_set.jpg'
               }
             } else {
               ElMessage.error(res.data.msg)
@@ -351,170 +342,221 @@ onMounted(() => {
   }
 })
 </script>
-<style>
-.avatar-uploader .el-icon-plus:after {
-  position: absolute;
-  display: inline-block;
-  content: ' ' !important;
-  left: calc(50% - 20px);
-  top: calc(50% - 40px);
-  width: 40px;
-  height: 40px;
-  background: url('./../../assets/icons/icon_upload@2x.png') center center
-    no-repeat;
-  background-size: 20px;
-}
-</style>
-<style lang="scss">
-// .el-form-item__error {
-//   top: 90%;
-// }
-.addBrand-container {
-  .avatar-uploader .el-upload {
-    border: 1px dashed #d9d9d9;
-    border-radius: 6px;
-    cursor: pointer;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .avatar-uploader .el-upload:hover {
-    border-color: #ffc200;
-  }
-
-  .avatar-uploader-icon {
-    font-size: 28px;
-    color: #8c939d;
-    width: 200px;
-    height: 160px;
-    line-height: 160px;
-    text-align: center;
-  }
-
-  .avatar {
-    width: 200px;
-    height: 160px;
-    display: block;
-  }
-
-  // .el-form--inline .el-form-item__content {
-  //   width: 293px;
-  // }
-
-  .el-input {
-    width: 293px;
-  }
-
-  .address {
-    .el-form-item__content {
-      width: 777px !important;
-    }
-  }
-  .el-input__prefix {
-    top: 2px;
-  }
-
-  .addDish {
-    .el-input {
-      width: 130px;
-    }
-
-    .el-input-number__increase {
-      border-left: solid 1px #fbe396;
-      background: #fffbf0;
-    }
-
-    .el-input-number__decrease {
-      border-right: solid 1px #fbe396;
-      background: #fffbf0;
-    }
-
-    input {
-      border: 1px solid #fbe396;
-    }
-
-    .table {
-      border: solid 1px #ebeef5;
-      border-radius: 3px;
-
-      th {
-        padding: 5px 0;
-      }
-
-      td {
-        padding: 7px 0;
-      }
-    }
-  }
-
-  .addDishList {
-    .seachDish {
-      position: absolute;
-      top: 12px;
-      right: 20px;
-    }
-
-    .el-dialog__footer {
-      padding-top: 27px;
-    }
-
-    .el-dialog__body {
-      padding: 0;
-      border-bottom: solid 1px #efefef;
-    }
-    .seachDish {
-      .el-input__inner {
-        height: 40px;
-        line-height: 40px;
-      }
-    }
-  }
-}
-</style>
 <style lang="scss" scoped>
-.addBrand {
-  &-container {
-    margin: 30px;
+.addBrand-container {
+  margin: 24px;
 
-    .container {
-      position: relative;
-      z-index: 1;
-      background: #fff;
-      padding: 30px;
-      border-radius: 4px;
-      min-height: 500px;
+  .container {
+    background: #fff;
+    padding: 32px;
+    border-radius: 8px;
+    min-height: 500px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
 
-      .subBox {
-        padding-top: 30px;
-        text-align: center;
-        border-top: solid 1px $gray-5;
+    .page-title {
+      margin-bottom: 24px;
+      font-size: 20px;
+      font-weight: 500;
+      color: #1f2d3d;
+    }
+
+    /* ========== 表单基础样式 ========== */
+    .el-form-item {
+      margin-bottom: 24px;
+
+      .el-form-item__label {
+        font-size: 14px;
+        color: #333;
       }
+
       .el-input {
         width: 350px;
-      }
-      .addDish {
-        width: 777px;
-
-        .addBut {
-          background: #ffc200;
-          display: inline-block;
-          padding: 0px 20px;
-          border-radius: 3px;
+        .el-input__inner {
+          height: 40px;
           line-height: 40px;
-          cursor: pointer;
-          border-radius: 4px;
-          color: #333333;
-          font-weight: 500;
+          padding: 0 15px;
+          font-size: 14px;
+          &::placeholder {
+            color: #909399;
+            font-size: 13px;
+          }
+        }
+      }
+
+      textarea.el-textarea__inner {
+        font-size: 14px;
+        padding: 10px;
+      }
+    }
+
+    .address .el-form-item__content {
+      width: 780px !important;
+    }
+
+    /* ========== 图片上传区域 ========== */
+    .avatar-uploader {
+      .el-upload {
+        border: 1px dashed #d9d9d9;
+        border-radius: 6px;
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+        transition: border-color 0.3s;
+      }
+
+      .el-upload:hover {
+        border-color: #ffc200;
+      }
+
+      .avatar-uploader-icon {
+        font-size: 28px;
+        color: #8c939d;
+        width: 200px;
+        height: 160px;
+        line-height: 160px;
+        text-align: center;
+      }
+
+      .avatar {
+        width: 200px;
+        height: 160px;
+        display: block;
+        border-radius: 4px;
+        object-fit: cover;
+      }
+
+      .el-icon-plus:after {
+        content: '';
+        position: absolute;
+        left: calc(50% - 20px);
+        top: calc(50% - 40px);
+        width: 40px;
+        height: 40px;
+        background: url('./../../assets/icons/icon_upload@2x.png') center center no-repeat;
+        background-size: 20px;
+      }
+    }
+
+    /* ========== 添加菜品区域 ========== */
+    .addDish {
+      width: 100%;
+      max-width: 900px;
+      // margin: 0 auto;
+
+      .addBut {
+        background: #409eff;
+        color: #fff;
+        border-radius: 4px;
+        padding: 0 20px;
+        height: 38px;
+        line-height: 38px;
+        display: inline-flex;
+        align-items: center;
+        cursor: pointer;
+        font-weight: 500;
+        transition: 0.2s;
+
+        &:hover {
+          background: #66b1ff;
+          transform: translateY(-1px);
         }
 
-        .content {
-          background: #fafafb;
-          padding: 20px;
-          border: solid 1px #d8dde3;
-          border-radius: 3px;
+        i {
+          margin-right: 6px;
+        }
+      }
+
+      .content {
+        background: #fafafb;
+        padding: 20px;
+        border: 1px solid #ebeef5;
+        border-radius: 6px;
+        margin-top: 16px;
+
+        .el-table {
+          width: 100%;
+          border-radius: 4px;
+          overflow: hidden;
+
+          th {
+            background-color: #f5f7fa;
+            font-weight: 500;
+            padding: 12px 0;
+            text-align: center;
+          }
+
+          td {
+            padding: 12px 0;
+            text-align: center;
+          }
+
+          .el-button {
+            color: #f56c6c;
+            &:hover {
+              color: #ff7875;
+            }
+          }
+        }
+      }
+
+      .el-input-number__increase,
+      .el-input-number__decrease {
+        background: #fff8e1;
+        border-color: #ffe082;
+      }
+    }
+
+    /* ========== 底部按钮区 ========== */
+    .subBox {
+      padding-top: 32px;
+      text-align: right;
+      border-top: 1px solid #ebeef5;
+
+      .el-button {
+        padding: 10px 24px;
+        font-size: 14px;
+        & + .el-button {
+          margin-left: 12px;
+        }
+      }
+
+      .el-button.continue {
+        background-color: #67c23a;
+        border-color: #67c23a;
+        &:hover {
+          background-color: #85ce61;
         }
       }
     }
   }
 }
+
+/* ========== 弹窗样式 ========== */
+.addDishList {
+  .el-dialog__header {
+    font-size: 16px;
+    font-weight: 500;
+  }
+
+  .el-dialog__body {
+    padding: 0;
+    border-bottom: 1px solid #efefef;
+  }
+
+  .el-dialog__footer {
+    padding-top: 20px;
+  }
+
+  .seachDish {
+    position: absolute;
+    top: 12px;
+    right: 20px;
+
+    .el-input__inner {
+      height: 40px;
+      line-height: 40px;
+    }
+  }
+}
 </style>
+

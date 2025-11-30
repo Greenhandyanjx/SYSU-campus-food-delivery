@@ -1,8 +1,9 @@
 package models
 
 type User struct {
-	BaseID   uint   `gorm:"unique"`
-	Username string `gorm:"not null;unique" json:"username"`
-	Password string `gorm:"not null" json:"password"`
-	Phone    string `gorm:"not null;unique" json:"phone"`
+	ID       uint   `gorm:"primaryKey" json:"id"`
+	BaseID   uint   `gorm:"uniqueIndex;not null" json:"base_id"`
+	Nickname string `json:"nickname"`
+	Phone    string `gorm:"type:VARCHAR(20);unique" json:"phone"`
+	Address  string `gorm:"type:VARCHAR(512)" json:"address"`
 }

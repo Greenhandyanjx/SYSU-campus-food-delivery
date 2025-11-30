@@ -18,6 +18,18 @@
       :order-statics="orderStatics"
       @getOrderListBy3Status="getOrderListBy3Status"
     />
+    <div class="merchant-chat-area">
+      <MerchantChatList />
+    </div>
+
+    <!-- 使用 teleport 在 body 上弹出商家聊天窗口（移除原先页面内联的小窗口） -->
+    <teleport to="body">
+      <div v-if="showChat" class="merchant-chat-overlay" @click.self="showChat=false">
+        <div class="merchant-chat-modal">
+          <MerchantChatWindow :merchantId="chatMerchantId" :userBaseId="chatUserBaseId" @close="showChat=false" />
+        </div>
+      </div>
+    </teleport>
   </div>
 </template>
 
@@ -40,6 +52,8 @@ import Orderview from './components/orderview.vue'
 import CuisineStatistics from './components/cuisineStatistics.vue'
 import SetMealStatistics from './components/setMealStatistics.vue'
 import OrderList from './components/orderList.vue'
+import MerchantChatList from '@/components/Chat/MerchantChatList.vue'
+import MerchantChatWindow from '@/components/Chat/MerchantChatWindow.vue'
 
 const overviewData = ref<any>({})
 const orderviewData = ref<any>({})
@@ -106,7 +120,7 @@ const getSetMealStatisticsData = async () => {
 const getOrderListBy3Status = async () => {
   try {
     const res = await getOrderListBy({})
-    if (res.data.code === 1) {
+    if (Number(res.data.code) === 1) {
       orderStatics.value = res.data.data
     } else {
       ElMessage.error(res.data.msg)
@@ -119,7 +133,19 @@ const getOrderListBy3Status = async () => {
 
 onMounted(() => {
   init()
+  window.addEventListener('chat:open', (e: Event) => {
+    const ev = e as CustomEvent
+    const d = (ev && ev.detail) || {}
+    if (!d.userBaseId) return
+    chatMerchantId.value = d.merchantId || null
+    chatUserBaseId.value = d.userBaseId || null
+    showChat.value = true
+  })
 })
+
+const showChat = ref(false)
+const chatMerchantId = ref<number | null>(null)
+const chatUserBaseId = ref<number | null>(null)
 </script>
 
 <style lang="scss" scoped>
@@ -133,4 +159,16 @@ onMounted(() => {
   gap: 20px;
   margin-top: 20px;
 }
+
+/* merchant chat modal styles (global to this view) */
+.merchant-chat-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index: 2147483647;
+}
+.merchant-chat-modal { z-index:2147483648 }
 </style>

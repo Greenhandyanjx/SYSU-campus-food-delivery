@@ -1,0 +1,1218 @@
+openapi: 3.0.0
+info:
+  title: 商户运营统计 API
+  version: 1.0.0
+
+paths:
+  /merchant/statistics/turnover:
+    get:
+      summary: "获取营业额统计（用于 turnoverStatistics.vue）"
+      parameters:
+        - in: query
+          name: begin
+          schema:
+            type: string
+          description: 开始日期（YYYY-MM-DD）
+        - in: query
+          name: end
+          schema:
+            type: string
+          description: 结束日期（YYYY-MM-DD）
+      responses:
+        '200':
+          description: 营业额时间序列（dateList 与 turnoverList 为逗号分隔字符串）
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  data:
+                    type: object
+                    properties:
+                      dateList:
+                        type: string
+                      turnoverList:
+                        type: string
+              example:
+                code: 1
+                data:
+                  dateList: "2025-11-01,2025-11-02,2025-11-03"
+                  turnoverList: "123.4,256.8,190.0"
+
+  /merchant/statistics/users:
+    get:
+      summary: "获取用户统计（用于 userStatistics.vue）"
+      parameters:
+        - in: query
+          name: begin
+          schema:
+            type: string
+        - in: query
+          name: end
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 用户统计
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  data:
+                    type: object
+                    properties:
+                      dateList:
+                        type: string
+                      totalUserList:
+                        type: string
+                      newUserList:
+                        type: string
+              example:
+                code: 1
+                data:
+                  dateList: "2025-11-01,2025-11-02,2025-11-03"
+                  totalUserList: "1020,1032,1050"
+                  newUserList: "10,12,18"
+
+  /merchant/statistics/orders:
+    get:
+      summary: "获取订单统计（用于 orderStatistics.vue）"
+      parameters:
+        - in: query
+          name: begin
+          schema:
+            type: string
+        - in: query
+          name: end
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 订单统计
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  data:
+                    type: object
+                    properties:
+                      dateList:
+                        type: string
+                      orderCountList:
+                        type: string
+                      validOrderCountList:
+                        type: string
+                      totalOrderCount:
+                        type: integer
+                      validOrderCount:
+                        type: integer
+                      orderCompletionRate:
+                        type: number
+                        format: float
+              example:
+                code: 1
+                data:
+                  dateList: "2025-11-01,2025-11-02,2025-11-03"
+                  orderCountList: "20,25,30"
+                  validOrderCountList: "18,23,28"
+                  totalOrderCount: 75
+                  validOrderCount: 69
+                  orderCompletionRate: 0.92
+
+  /merchant/statistics/top:
+    get:
+      summary: "获取销量排名 Top10（用于 top10.vue）"
+      parameters:
+        - in: query
+          name: begin
+          schema:
+            type: string
+        - in: query
+          name: end
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Top10 名称与销量
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  data:
+                    type: object
+                    properties:
+                      nameList:
+                        type: string
+                      numberList:
+                        type: string
+              example:
+                code: 1
+                data:
+                  nameList: "菜品A,菜品B,菜品C"
+                  numberList: "120,110,95"
+
+  /merchant/statistics/export:
+    get:
+      summary: "导出运营数据（用于 titleIndex.vue -> exportInfor）"
+      parameters:
+        - in: query
+          name: begin
+          schema:
+            type: string
+        - in: query
+          name: end
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 返回导出文件流（xlsx）
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+  /merchant/dishes/page:
+    get:
+      summary: 分页查询菜品（菜单管理）
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+        - in: query
+          name: name
+          schema:
+            type: string
+        - in: query
+          name: categoryId
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 菜品分页列表（data.records 或 data.items）
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  data:
+                    type: object
+                    properties:
+                      records:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Dish'
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Dish'
+                      total:
+                        type: integer
+                example:
+                  code: 1
+                  data:
+                    records:
+                      - id: "d1"
+                        name: "宫保鸡丁"
+                        price: 28.0
+                        status: "on"
+                        categoryId: "c1"
+                        imageUrl: "https://cdn.example.com/dish/d1.jpg"
+                        stock: 100
+                    total: 123
+
+  /merchant/dish/add:
+    post:
+      summary: 新增菜品
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DishCreate'
+      responses:
+        '200':
+          description: 新增菜品返回
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  data:
+                    type: object
+                    properties:
+                      success:
+                        type: boolean
+                      id:
+                        type: string
+                example:
+                  code: 1
+                  data:
+                    success: true
+                    id: "d-new-123"
+
+  /merchant/dish/edit:
+    post:
+      summary: 编辑菜品
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DishEdit'
+      responses:
+        '200':
+          description: 编辑结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+
+  /merchant/dish/delete:
+    post:
+      summary: 删除菜品（单个或批量）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  oneOf:
+                    - type: string
+                    - type: array
+                      items:
+                        type: string
+      responses:
+        '200':
+          description: 删除结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  data:
+                    type: object
+                    properties:
+                      success:
+                        type: boolean
+                      removed:
+                        type: array
+                        items:
+                          type: string
+                example:
+                  code: 1
+                  data:
+                    success: true
+                    removed: ["d1"]
+
+  /merchant/dish/status:
+    post:
+      summary: 修改菜品状态（上架/下架）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                status:
+                  type: string
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+
+  /merchant/dish/categories:
+    get:
+      summary: 获取菜品分类列表
+      responses:
+        '200':
+          description: 分类数组
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                example:
+                  code: 1
+                  data:
+                    - id: "c1"
+                      name: "主食"
+
+  /merchant/dish/query:
+    get:
+      summary: 查询单个菜品详情
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 菜品详情
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  data:
+                    $ref: '#/components/schemas/Dish'
+                example:
+                  code: 1
+                  data:
+                    id: "d1"
+                    name: "宫保鸡丁"
+                    price: 28.0
+                    imageUrl: "https://cdn.example.com/dish/d1.jpg"
+                    description: "经典川菜"
+                    categoryId: "c1"
+                    stock: 100
+
+  /merchant/common/download:
+    get:
+      summary: 通用导出 / 下载（文件流）
+      parameters:
+        - in: query
+          name: type
+          schema:
+            type: string
+        - in: query
+          name: format
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 文件流
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /merchant/meal/page:
+    get:
+      summary: 分页获取套餐信息（菜单中的 SetMeal）
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+        - in: query
+          name: name
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 套餐分页列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/SetMeal'
+                      total:
+                        type: integer
+                example:
+                  code: 1
+                  data:
+                    items:
+                      - id: "m1"
+                        name: "学生套餐A"
+                        price: 25.0
+                        status: "on"
+                        images: ["https://cdn.example.com/meal/m1.jpg"]
+                    total: 12
+
+  /merchant/meal/add:
+    post:
+      summary: 新增套餐
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetMealCreate'
+      responses:
+        '200':
+          description: 新增结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  data:
+                    type: object
+                    properties:
+                      success:
+                        type: boolean
+                      id:
+                        type: string
+                example:
+                  code: 1
+                  data:
+                    success: true
+                    id: "m-new-123"
+
+  /merchant/meal/edit:
+    post:
+      summary: 编辑套餐
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetMealEdit'
+      responses:
+        '200':
+          description: 编辑结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+
+  /merchant/meal/delete:
+    post:
+      summary: 删除套餐（单个或批量）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  oneOf:
+                    - type: string
+                    - type: array
+                      items:
+                        type: string
+      responses:
+        '200':
+          description: 删除结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  data:
+                    type: object
+                    properties:
+                      success:
+                        type: boolean
+                      removed:
+                        type: array
+                        items:
+                          type: string
+                example:
+                  code: 1
+                  data:
+                    success: true
+                    removed: ["m1"]
+
+  /merchant/meal/status:
+    post:
+      summary: 启用/禁用套餐
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                status:
+                  type: string
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+
+  /merchant/meal/query:
+    get:
+      summary: 查询单个套餐详情
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 套餐详情
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  data:
+                    $ref: '#/components/schemas/SetMeal'
+                example:
+                  code: 1
+                  data:
+                    id: "m1"
+                    name: "学生套餐A"
+                    price: 25.0
+                    images: ["https://cdn.example.com/meal/m1.jpg"]
+                    description: "营养均衡"
+
+  /merchant/orders/status:
+    get:
+      summary: 按订单状态查询（简要列表，用于侧边统计/快捷查看）
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: integer
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 按状态返回订单摘要列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/OrderSummary'
+                      total:
+                        type: integer
+                example:
+                  code: 1
+                  data:
+                    items:
+                      - id: "o123"
+                        number: "20251115001"
+                        amount: 78.5
+                        status: 2
+                        createdAt: "2025-11-15T10:12:00Z"
+                    total: 42
+
+  /merchant/orders/page:
+    get:
+      summary: 分页获取订单详情列表（用于订单管理页面）
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+        - in: query
+          name: number
+          schema:
+            type: string
+        - in: query
+          name: phone
+          schema:
+            type: string
+        - in: query
+          name: beginTime
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: endTime
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: status
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 分页订单详情（包含 items 列表与 total）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderPage'
+
+  /merchant/order/detail:
+    get:
+      summary: 根据订单 id 查询订单详情
+      parameters:
+        - in: query
+          name: orderId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 订单完整详情
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  data:
+                    $ref: '#/components/schemas/OrderDetail'
+                example:
+                  code: 1
+                  data:
+                    id: "o123"
+                    number: "20251115001"
+                    amount: 78.5
+                    status: 2
+                    createdAt: "2025-11-15T10:12:00Z"
+                    items:
+                      - skuId: "s1"
+                        name: "黄焖鸡米饭"
+                        qty: 2
+                        price: 22.5
+                    consignee:
+                      name: "张三"
+                      phone: "13800000000"
+                      address:
+                        province: "广东省"
+                        city: "广州市"
+                        district: "天河区"
+                        street: "中山大道"
+                        detail: "宿舍楼A座101"
+                    delivery:
+                      courierId: "r100"
+                      courierName: "李四"
+                      courierPhone: "13811112222"
+
+  /merchant/order/accept:
+    post:
+      summary: 商家接单
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                orderId:
+                  type: string
+                acceptBy:
+                  type: string
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+
+  /merchant/order/reject:
+    post:
+      summary: 商家拒单
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                orderId:
+                  type: string
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+
+  /merchant/order/cancel:
+    post:
+      summary: 商家取消订单（后台操作）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                orderId:
+                  type: string
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+
+  /merchant/order/delivery:
+    post:
+      summary: 商家标记已派送
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                orderId:
+                  type: string
+                courierId:
+                  type: string
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+
+  /merchant/order/complete:
+    post:
+      summary: 标记订单完成
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                orderId:
+                  type: string
+      responses:
+        '200':
+          description: 操作结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+
+components:
+  schemas:
+    ActionResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          type: object
+          properties:
+            success:
+              type: boolean
+            updatedOrderId:
+              type: string
+      example:
+        code: 1
+        data:
+          success: true
+
+    Dish:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        price:
+          type: number
+          format: float
+        status:
+          type: string
+        categoryId:
+          type: string
+        categoryName:
+          type: string
+        imageUrl:
+          type: string
+          format: uri
+        images:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+        stock:
+          type: integer
+      example:
+        id: "d1"
+        name: "宫保鸡丁"
+        price: 28.0
+        status: "on"
+        categoryId: "c1"
+        categoryName: "主食"
+        imageUrl: "https://cdn.example.com/dish/d1.jpg"
+        stock: 100
+
+    DishCreate:
+      type: object
+      properties:
+        name:
+          type: string
+        price:
+          type: number
+        categoryId:
+          type: string
+        images:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+        stock:
+          type: integer
+      required:
+        - name
+        - price
+
+    DishEdit:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        price:
+          type: number
+        categoryId:
+          type: string
+        images:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+        stock:
+          type: integer
+      required:
+        - id
+
+    SetMeal:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        price:
+          type: number
+        status:
+          type: string
+        images:
+          type: array
+          items:
+            type: string
+        image:
+          type: string
+        description:
+          type: string
+        setmealDishes:
+          type: array
+          items:
+            type: object
+            properties:
+              dishId:
+                type: string
+              qty:
+                type: integer
+      example:
+        id: "m1"
+        name: "学生套餐A"
+        price: 25.0
+        status: "on"
+        images: ["https://cdn.example.com/meal/m1.jpg"]
+        description: "营养均衡"
+        setmealDishes:
+          - dishId: "d1"
+            qty: 1
+
+    SetMealCreate:
+      type: object
+      properties:
+        name:
+          type: string
+        price:
+          type: number
+        images:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+        setmealDishes:
+          type: array
+          items:
+            type: object
+            properties:
+              dishId:
+                type: string
+              qty:
+                type: integer
+      required:
+        - name
+        - price
+
+    SetMealEdit:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        price:
+          type: number
+        images:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+        setmealDishes:
+          type: array
+          items:
+            type: object
+            properties:
+              dishId:
+                type: string
+              qty:
+                type: integer
+      required:
+        - id
+
+    OrderItem:
+      type: object
+      properties:
+        skuId:
+          type: string
+        name:
+          type: string
+        qty:
+          type: integer
+        price:
+          type: number
+        subtotal:
+          type: number
+        note:
+          type: string
+      example:
+        skuId: "s1"
+        name: "黄焖鸡米饭"
+        qty: 2
+        price: 22.5
+        subtotal: 45.0
+
+    Address:
+      type: object
+      properties:
+        province:
+          type: string
+        city:
+          type: string
+        district:
+          type: string
+        street:
+          type: string
+        detail:
+          type: string
+        receiver:
+          type: string
+        phone:
+          type: string
+      example:
+        province: "广东省"
+        city: "广州市"
+        district: "天河区"
+        street: "中山大道"
+        detail: "宿舍楼A座101"
+        receiver: "张三"
+        phone: "13800000000"
+
+    OrderSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        number:
+          type: string
+        amount:
+          type: number
+        status:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      example:
+        id: "o123"
+        number: "20251115001"
+        amount: 78.5
+        status: 2
+        createdAt: "2025-11-15T10:12:00Z"
+
+    OrderDetail:
+      type: object
+      properties:
+        id:
+          type: string
+        number:
+          type: string
+        amount:
+          type: number
+        status:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        consignee:
+          type: object
+          properties:
+            name:
+              type: string
+            phone:
+              type: string
+            address:
+              $ref: '#/components/schemas/Address'
+        delivery:
+          type: object
+          properties:
+            courierId:
+              type: string
+            courierName:
+              type: string
+            courierPhone:
+              type: string
+      example:
+        id: "o123"
+        number: "20251115001"
+        amount: 78.5
+        status: 2
+        createdAt: "2025-11-15T10:12:00Z"
+        items:
+          - skuId: "s1"
+            name: "黄焖鸡米饭"
+            qty: 2
+            price: 22.5
+        consignee:
+          name: "张三"
+          phone: "13800000000"
+          address:
+            province: "广东省"
+            city: "广州市"
+            district: "天河区"
+            street: "中山大道"
+            detail: "宿舍楼A座101"
+        delivery:
+          courierId: "r100"
+          courierName: "李四"
+          courierPhone: "13811112222"
+
+    OrderPage:
+      type: object
+      properties:
+        code:
+          type: integer
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/OrderDetail'
+            total:
+              type: integer
+      example:
+        code: 1
+        data:
+          items:
+            - id: "o123"
+              number: "20251115001"
+              amount: 78.5
+              status: 2
+              createdAt: "2025-11-15T10:12:00Z"
+          total: 42

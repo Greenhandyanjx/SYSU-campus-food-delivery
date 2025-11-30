@@ -107,7 +107,7 @@
               <div>营业时间：{{ store.openTime || '10:00 - 21:00' }}</div>
               <div>电话：{{ store.phone || '未填写' }}</div>
             </div>
-            <el-button size="small" type="primary" @click="openShop">进入店铺</el-button>
+            <ChatLauncher :merchant-id="store.id || store.merchantId" :merchant-name="store.name" />
           </div>
 
           <!-- <div class="cart-preview">
@@ -141,8 +141,9 @@
         <span v-if="store.minOrder && cartTotal > 0" class="gap">还差 ¥{{ (store.minOrder - cartTotal).toFixed(2) }}</span>
       </div>
       <div class="text-top" v-else>
-        <strong>共 ¥{{ cartTotal.toFixed(2) }}</strong>
-      </div>
+            <strong>共 ¥{{ (cartTotal + (store.deliveryFee || 0)).toFixed(2) }}</strong>
+            <span>{{store.deliveryFee?`  配送费 ¥${store.deliveryFee}`:'免配送费'}}</span>
+          </div>
     </div>
   </div>
 
@@ -185,13 +186,30 @@
   </div>
 </transition>
 
+  <!-- 支付二维码弹窗 -->
+  <div v-if="showPayModal" class="pay-modal-overlay" @click.self="closePayModal">
+    <div class="pay-modal">
+      <h3>请使用微信/支付宝扫码付款</h3>
+      <div style="text-align:center; margin-top:8px;">
+        <img :src="payQrImg" alt="pay-qr" style="width:200px;height:200px;border:1px solid #eee;border-radius:6px;" />
+        <div style="margin-top:8px;font-size:14px;color:#333;font-weight:600">应付金额：¥{{ payAmount.toFixed(2) }}</div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px;justify-content:center;">
+        <el-button type="primary" @click="closePayModal">关闭</el-button>
+      </div>
+    </div>
+  </div>
+
 </template>
 
 <script setup lang="ts">
 import { reactive, ref, computed, onMounted,onBeforeUnmount } from 'vue'
-import { useRoute } from 'vue-router'
+import qrImg from '@/assets/qrcode.png'
+import ChatLauncher from '@/components/Chat/ChatLauncher.vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getStoreByName, getDishesByStore, addToCart, removeFromCart, getCart } from '@/api/user/store'
+import { getStoreByName, getStoreById, getDishesByStore, addToCart, removeFromCart, getCart, getDeliveryConfig } from '@/api/user/store'
+import * as cartApi from '@/api/user/cart'
 
 /* ------------------ 核心数据定义 ------------------ */
 
@@ -203,15 +221,17 @@ const cart = ref<any[]>([])
 const selectedCategory = ref('all')
 const query = ref('')
 const route = useRoute()
+const router = useRouter()
 /* ------------------ Demo 数据备用 ------------------ */
 const demoStore = {
-  id: 101,
+  id: 1,
   name: '金色小厨 · 校园餐厅',
   logo: '/src/assets/demo/noImg.png',
   desc: '校园人气食堂 · 用心做好每一顿饭',
   rating: 4.9,
   deliveryTime: '25~35 分钟',
   minOrder: 15,
+  deliveryFee: 2,
   openTime: '10:30 - 21:00',
   phone: '138-8888-6666',
   bg: '/src/assets/demo/store_bg.jpg'
@@ -252,26 +272,146 @@ const demoDishes = [
   { id: 21, name: '学生特惠套餐A', price: 29, desc: '主食+饮品+小吃组合', tags: ['套餐'], image: '/src/assets/demo/set_a.jpg', category: '套餐', sales: 311, count: 0 },
   { id: 22, name: '情侣双人套餐', price: 55, desc: '两份主食+甜点+饮品', tags: ['双人'], image: '/src/assets/demo/set_b.jpg', category: '套餐', sales: 133, count: 0 }
 ]
+// 与首页一致的 15 个分类映射（id -> 中文标签）
+const categoryLabels: Record<number, string> = {
+  1: '招牌套餐',
+  2: '现煮粉面',
+  3: '汉堡炸鸡',
+  4: '奶茶咖啡',
+  5: '日式便当',
+  6: '烧烤烤肉',
+  7: '水果拼盘',
+  8: '精致甜品',
+  9: '家常快炒',
+  10: '粥粉面饭',
+  11: '极速配送',
+  12: '午餐推荐',
+  13: '低价满减',
+  14: '沙拉轻食',
+  15: '精致下午茶',
+}
 /* ------------------ 页面加载与接口请求 ------------------ */
 async function load() {
-  const name = decodeURIComponent(String(route.params.name || ''))
+  const rawParam = String(route.params.name || '')
+  const name = decodeURIComponent(rawParam)
   if (!name) {
     useDemoData()
     return
   }
   try {
-    const res = await getStoreByName(name)
+    // 如果参数看起来像 numeric id，优先按 id 查询；否则按 name 查询
+    let res: any
+    if (/^\d+$/.test(rawParam)) {
+      res = await getStoreById(rawParam)
+    } else {
+      res = await getStoreByName(name)
+    }
     const data = res && res.data ? res.data.data || res.data : res
     if (!data) throw new Error('无返回数据')
-    store.value = data
 
-    const id = data.id || data.storeId
+    // 兼容不同后端字段命名，映射常用字段
+    store.value = {
+      id: data.id || data.ID || data.storeId,
+      base_id: data.base_id || data.baseId || data.baseID || (data.merchant && (data.merchant.base_id || data.merchant.baseId)),
+      name: data.name || data.ShopName || data.shop_name,
+      logo: data.logo || data.Logo || data.logoUrl,
+      desc: data.desc || data.ShopLocation || data.shop_location || data.description,
+      shop_location: data.shop_location || data.ShopLocation || data.shop_location,
+      rating: data.rating || 4.8,
+      minOrder: data.minOrder || data.min_order || data.min_order_value,
+      deliveryFee: data.deliveryFee || data.delivery_fee,
+      deliveryRange: data.deliveryRange || data.delivery_range,
+      deliveryTime: data.deliveryTime || data.delivery_time,
+      openTime: data.openTime || data.open_time,
+      phone: data.phone || data.Phone || (data.merchant && (data.merchant.phone || data.merchant.Phone)),
+      bg: data.bg || data.background,
+    }
+
+    // 尝试从后端获取商家配送配置（minOrder / deliveryFee / deliveryRange），覆盖可能存在的后端字段
+    try {
+      const b = store.value.id || store.value.base_id || store.value.baseId
+      if (b) {
+        const cfgRes = await getDeliveryConfig(b)
+        const cfg = cfgRes && cfgRes.data ? cfgRes.data.data || cfgRes.data : cfgRes
+        store.value.minOrder = cfg?.min_price ?? cfg?.minPrice ?? store.value.minOrder ?? 15
+        store.value.deliveryFee = cfg?.delivery_fee ?? cfg?.deliveryFee ?? 2
+        store.value.deliveryRange = cfg?.delivery_range ?? cfg?.deliveryRange ?? 2000
+      }
+    } catch (e) {
+      console.warn('fetch delivery config failed', e)
+      store.value.minOrder = store.value.minOrder || 15
+      store.value.deliveryFee = store.value.deliveryFee || 2
+      store.value.deliveryRange = store.value.deliveryRange || 2000
+    }
+
+    const id = store.value.id
     if (!id) throw new Error('无有效店铺ID')
 
     const r2 = await getDishesByStore(id)
     const dd = r2 && r2.data ? r2.data.data || r2.data : r2
-    if (!dd || !Array.isArray(dd) || dd.length === 0) throw new Error('空菜品')
-    dishes.value = dd
+    if (!dd) throw new Error('空菜品')
+
+    // dd 可能是数组（旧版本）或 { dishes: [], meals: [], merchant: {} }
+    let dishesArr: any[] = []
+    if (Array.isArray(dd)) {
+      // normalize legacy array items
+      dishesArr = dd.map((d: any) => {
+        const cid = Number(d.Category || d.category || d.categoryId) || undefined
+        const label = cid && categoryLabels[cid] ? categoryLabels[cid] : (d.Category || d.category || '其他')
+        return {
+          id: d.ID || d.id,
+          name: d.DishName || d.name,
+          price: Number(d.Price || d.price) || 0,
+          desc: d.Description || d.desc || '',
+          image: d.ImagePath || d.image || '/src/assets/noImg.png',
+          categoryId: cid,
+          category: label,
+          tags: d.Tags || d.tags || [],
+          count: d.count || 0,
+          sales: d.Sales || d.sales || 0,
+        }
+      })
+    } else {
+      if (Array.isArray(dd.dishes)) {
+        dishesArr = dd.dishes.map((d: any) => {
+          const cid = Number(d.Category || d.category || d.categoryId) || undefined
+          const label = cid && categoryLabels[cid] ? categoryLabels[cid] : (d.Category || d.category || '其他')
+          return {
+            id: d.ID || d.id,
+            name: d.DishName || d.name,
+            price: Number(d.Price || d.price) || 0,
+            desc: d.Description || d.desc || '',
+            image: d.ImagePath || d.image || '/src/assets/noImg.png',
+            categoryId: cid,
+            category: label,
+            tags: d.Tags || d.tags || [],
+            count: 0,
+            sales: d.Sales || d.sales || 0,
+          }
+        })
+      }
+      if (Array.isArray(dd.meals)) {
+        const mealsMapped = dd.meals.map((m: any) => {
+          const cid = Number(m.Category || m.category) || undefined
+          const label = cid && categoryLabels[cid] ? categoryLabels[cid] : (m.Category || m.category || '套餐')
+          return {
+            id: 'm-' + (m.ID || m.id),
+            name: m.Mealname || m.name,
+            price: Number(m.Price || m.price) || 0,
+            desc: m.Description || m.desc || '',
+            image: m.ImagePath || m.image || '/src/assets/noImg.png',
+            categoryId: cid,
+            category: label,
+            tags: m.Tags || ['套餐'],
+            count: 0,
+            sales: m.Sales || m.sales || 0,
+          }
+        })
+        dishesArr = dishesArr.concat(mealsMapped)
+      }
+    }
+
+    dishes.value = dishesArr
     generateCategories()
   } catch (e) {
     console.warn('加载失败，使用Demo数据:', e)
@@ -288,27 +428,55 @@ function useDemoData() {
 }
 
 function generateCategories() {
-  const cset = new Set(dishes.value.map(d => d.category))
-  categories.value = [{ id: 'all', name: '全部', count: dishes.value.length }]
-  cset.forEach(c => {
-    categories.value.push({
-      id: c,
-      name: c,
-      count: dishes.value.filter(d => d.category === c).length
-    })
-  })
+  // 统计每个分类 id 出现的次数（兼容 dish.category 为中文名或数字 id）
+  const counts: Record<string | number, number> = {}
+  for (const d of dishes.value) {
+    // 优先使用 categoryId（数字），否则使用 category 字符串
+    if (d.categoryId) {
+      counts[d.categoryId] = (counts[d.categoryId] || 0) + 1
+    } else if (d.category) {
+      counts[d.category] = (counts[d.category] || 0) + 1
+    }
+  }
+
+  const cats: any[] = [{ id: 'all', name: '全部', count: dishes.value.length }]
+  // 按固定 1..15 顺序，只有存在菜品的分类才显示
+  for (let i = 1; i <= 15; i++) {
+    const label = categoryLabels[i]
+    const cnt = counts[i] || 0
+    if (cnt > 0) {
+      cats.push({ id: i, name: label, count: cnt })
+    }
+  }
+  categories.value = cats
+  console.log('aaa:> ', categories)
+  // 默认选中全部
+  if (!categories.value.find(x => x.id === selectedCategory.value)) selectedCategory.value = 'all'
 }
 
-// 刷新购物车
+// 刷新购物车（仅加载当前店铺相关项并同步到菜品）
 async function refreshCart() {
   try {
-    const r = await getCart({ storeId: store.value.id })
+    const storeIdToSend = store.value.id || store.value.base_id
+    const r = await getCart({ storeId: storeIdToSend })
     const data = r && r.data ? r.data.data || r.data : r
-    cart.value = data && Array.isArray(data) ? data : []
-    // 同步购物车数量到菜品
+    let items: any[] = []
+    if (Array.isArray(data)) items = data
+    else if (Array.isArray(data.items)) items = data.items
+    else if (Array.isArray(data.shops)) {
+      const shop = data.shops.find((s: any) => (s.storeId == storeIdToSend || s.id == storeIdToSend || s.merchant_id == storeIdToSend || s.merchantId == storeIdToSend))
+      items = shop ? shop.items || [] : []
+    }
+    // 保留并规范 selected 字段，方便页面按已选项结算
+    // 如果某项存在于购物车且数量大于 0，则在进入店铺页时自动将其视为已选中，避免进入店铺后出现购物车中有商品但未被选中从而结算页缺失的问题
+    cart.value = (items || []).map((it: any) => ({ ...it, selected: !!it.selected || (!!(it.qty || it.Qty || it.quantity) && Number(it.qty || it.Qty || it.quantity) > 0) }))
+    // 同步购物车数量到菜品：兼容多种返回键名（dish_id / dishId / id）
     for (const d of dishes.value) {
-      const item = cart.value.find(c => c.dishId === d.id)
-      d.count = item ? item.qty : 0
+      const item = cart.value.find((c: any) => {
+        const candidates = [c.dishId, c.dish_id, c.DishID, c.DishId, c.id]
+        return candidates.some(x => x !== undefined && String(x) === String(d.id))
+      })
+      d.count = item ? (item.qty || item.Qty || 0) : 0
     }
   } catch (e) {
     cart.value = []
@@ -352,23 +520,29 @@ async function refreshCart() {
 //   }
 // }
 async function add(d: any) {
-  d.count = (d.count || 0) + 1
-  const exist = cart.value.find(c => c.id === d.id)
-  if (exist) {
-    exist.qty++
-  } else {
-    cart.value.push({ id: d.id, name: d.name, price: d.price, qty: 1 })
+  try {
+    // prefer primary key id when sending to backend
+    const storeIdToSend = store.value.id || store.value.base_id || store.value.baseId
+    await addToCart({ storeId: storeIdToSend, dishId: d.id, name: d.name, price: d.price, qty: 1 })
+    // 本地乐观更新并刷新购物车以保持一致
+    d.count = (d.count || 0) + 1
+    await refreshCart()
+    ElMessage.success('已加入购物车')
+  } catch (e: any) {
+    ElMessage.error('加入购物车失败: ' + (e && e.message ? e.message : ''))
   }
 }
 
 async function dec(d: any) {
   if ((d.count || 0) <= 0) return
-  d.count--
-  const exist = cart.value.find(c => c.id === d.id)
-  if (exist) {
-    exist.qty--
-    if (exist.qty <= 0)
-      cart.value = cart.value.filter(c => c.id !== d.id)
+  try {
+    const storeIdToSend = store.value.id || store.value.base_id || store.value.baseId
+    await removeFromCart({ storeId: storeIdToSend, dishId: d.id, qty: 1 })
+    d.count = Math.max(0, (d.count || 0) - 1)
+    await refreshCart()
+    ElMessage.success('已从购物车移除')
+  } catch (e: any) {
+    ElMessage.error('移除失败: ' + (e && e.message ? e.message : ''))
   }
 }
 /* ------------------ 页面展示计算属性 ------------------ */
@@ -377,7 +551,11 @@ async function dec(d: any) {
 const dishesFiltered = computed(() => {
   const q = query.value.trim().toLowerCase()
   return dishes.value.filter(d => {
-    const okCate = selectedCategory.value === 'all' || d.category === selectedCategory.value
+    const sel = selectedCategory.value
+    let okCate = false
+    if (sel === 'all') okCate = true
+    else if (d.categoryId !== undefined && d.categoryId !== null) okCate = String(d.categoryId) === String(sel)
+    else okCate = String(d.category || '') === String(sel) || String(d.category || '') === String(categoryLabels[sel])
     const okQuery =
       !q ||
       d.name.toLowerCase().includes(q) ||
@@ -393,6 +571,11 @@ const currentCategoryName = computed(() => {
 
 const cartTotal = computed(() => {
   return cart.value.reduce((sum, item) => sum + item.qty * item.price, 0)
+})
+
+// 显示用总价（含配送费）
+const cartTotalWithDelivery = computed(() => {
+  return Number(cartTotal.value || 0) + Number(store.value.deliveryFee || 0)
 })
 
 /* ------------------ 其他UI事件 ------------------ */
@@ -413,13 +596,128 @@ function openShop() {
   window.open(`/store/${store.value.name}`, '_blank')
 }
 
-function checkout() {
-  if (cart.value.length === 0) {
-    ElMessage.warning('购物车为空')
-    return
-  }
-  ElMessage.success('跳转结算页')
-  // 这里可跳转结算路由
+async function checkout() {
+  if (!(cart.value || []).some((it: any) => !!it.selected)) { ElMessage.warning('请选择要结算的商品'); return }
+    try {
+      // Build shops payload from current cart (this view shows single store's cart)
+      const items = (cart.value || []).map((it: any) => ({
+        dishId: it.dishId || it.id || it.dish_id,
+        qty: it.qty || it.count || it.originalQty || 1,
+        price: Number(it.price || it.unitPrice || 0),
+      }))
+
+      if (!items || items.length === 0) {
+        ElMessage.warning('购物车为空，无法结算')
+        return
+      }
+
+      const payload = {
+        shops: [
+          {
+            merchantId: store.value.id || store.value.storeId || store.value.merchant_id,
+            // totalPrice should be items total (exclude delivery), deliveryAmount sent separately
+            totalPrice: Number(cartTotal.value || 0),
+            deliveryAmount: Number(store.value.deliveryFee || store.value.delivery_amount || 0),
+            items,
+          },
+        ],
+      }
+
+      // Call createPending to persist pending orders (same behavior as cart 页面)
+      const res = await cartApi.createPending(payload)
+      const data = res && res.data ? (res.data.data || res.data) : res
+      // Expect returned shape like { orders: [{ id, ... }] } or array of ids
+      // Extract primitive ids robustly from various possible backend shapes
+      const extractId = (o: any) => {
+        if (o == null) return null
+        if (typeof o === 'number') return String(o)
+        if (typeof o === 'string') return o
+        // common fields
+        const candidates = [o.orderId, o.id, o.OrderID, o.order_id, o.OrderId, o.ID]
+        for (const c of candidates) {
+          if (c !== undefined && c !== null) return String(c)
+        }
+        // nested shapes
+        if (o.data && (o.data.id || o.data.orderId)) return String(o.data.id || o.data.orderId)
+        if (o.order && (o.order.id || o.order.orderId)) return String(o.order.id || o.order.orderId)
+        return null
+      }
+
+      const pendingIds: string[] = []
+      if (data) {
+        if (Array.isArray(data)) {
+          for (const o of data) {
+            const id = extractId(o)
+            if (id) pendingIds.push(id)
+          }
+        } else if (Array.isArray(data.orders)) {
+          for (const o of data.orders) {
+            const id = extractId(o)
+            if (id) pendingIds.push(id)
+          }
+        } else {
+          const id = extractId(data) || extractId(data.data)
+          if (id) pendingIds.push(id)
+        }
+      }
+
+      if (pendingIds.length > 0) {
+        try { sessionStorage.setItem('pending_orders', JSON.stringify(pendingIds)) } catch (e) {}
+      }
+
+      // Backend may have removed cart items; refresh local cart
+      await refreshCart()
+
+      // Navigate to checkout/confirm page
+      router.push({ path: '/user/payment/confirm' })
+    } catch (e: any) {
+      ElMessage.error('创建待支付订单失败: ' + (e && e.message ? e.message : '请重试'))
+    }
+  const selectedItems = (cart.value || []).filter((it: any) => !!it.selected)
+  const payload = [{
+    merchantId: store.value.id || store.value.base_id,
+    storeId: store.value.id || store.value.base_id,
+    name: store.value.name || '',
+    items: selectedItems.map((it: any) => ({
+      dishId: it.dishId || it.id || it.dish_id,
+      name: it.name || it.dishName || '',
+      price: Number(it.price || 0),
+      qty: it.qty
+    }))
+  }]
+  sessionStorage.setItem('checkout_payload', JSON.stringify({ shops: payload }))
+  router.push('/user/payment/confirm')
+}
+
+// 支付 modal 管理（与购物车页面相同逻辑）
+const showPayModal = ref(false)
+const payQrImg = ref(qrImg)
+const payAmount = ref<number>(0)
+let payPollTimer: any = null
+
+function openPayModal(orderId: any, codeUrl: string) {
+  payQrImg.value = qrImg
+  showPayModal.value = true
+  payPollTimer = setInterval(async () => {
+    try {
+      const res = await fetch('/api/order/status?orderId=' + encodeURIComponent(orderId), { credentials: 'include' })
+      if (!res.ok) return
+      const body = await res.json()
+      const status = body?.data?.status || null
+      const payStatus = body?.data?.pay_status || null
+      if (status === 2 || payStatus === 'paid') {
+        clearInterval(payPollTimer)
+        showPayModal.value = false
+        ElMessage({ type: 'success', message: '支付成功' })
+        window.location.href = '/user/payment/success'
+      }
+    } catch (e) {}
+  }, 2000)
+}
+
+function closePayModal() {
+  showPayModal.value = false
+  if (payPollTimer) { clearInterval(payPollTimer); payPollTimer = null }
 }
 
 /* ------------------ 背景与挂载 ------------------ */
@@ -801,5 +1099,9 @@ function decFromPopup(c: any) {
     width: calc(100% - 32px);
   }
 }
+
+/* 支付弹窗样式 */
+.pay-modal-overlay{position:fixed;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.45);z-index:1200}
+.pay-modal{background:#fff;padding:18px;border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,0.2);text-align:center}
 
 </style>

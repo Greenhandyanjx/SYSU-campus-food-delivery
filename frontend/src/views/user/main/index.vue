@@ -3,20 +3,9 @@
 	<div class="user-home" style="width: 60%; margin:0 auto ;box-shadow:10px;" >
 		<!-- 搜索和横幅 -->
 		<header class="hero">
-		  <div class="search">
-		    <el-input
-		      v-model="query"
-		      placeholder="搜索店铺 / 美食"
-		      clearable
-		      class="search-input"
-		    >
-		      <template #suffix>
-		        <el-button class="search-btn" type="warning" round @click="onSearch">
-		          <el-icon><Search /></el-icon>
-		        </el-button>
-		      </template>
-		    </el-input>
-		  </div>
+      <div class="search">
+          <SearchSuggest v-model="query" @search="onSearch" @select="(s) => goToStore(s)" />
+      </div>
 		</header>
     <!-- 分类 -->
     <section class="categories">
@@ -32,7 +21,7 @@
 
 			<!-- 轮播 banner -->
 <div class="banner-container">
-    <Carousel :images="images" :interval="4000" />
+    <Carousel :images="images" :interval="4000" @banner-click="onCategoryClick(images)" />
   </div>
 
 			<!-- 活动卡片 -->
@@ -48,8 +37,8 @@
 					</div>
 				</section>
 
-			<!-- 推荐店铺（瀑布流） -->
-			<section class="recommend">
+            <!-- 推荐店铺（瀑布流） -->
+            <section class="recommend" id="meals">
   			<h3>为你推荐</h3>
         <div class="masonry">
         <div
@@ -58,6 +47,7 @@
           :key="idx"
           @click="goToStore(s)"
         >
+      <!-- 回到顶部按钮（固定在主内容右侧） -->
   			    <!-- <div class="store-banner" :style="{ backgroundImage: `url(${s.img})` }"></div> -->
   			    <div class="store-body">
   			      <div class="row top">
@@ -75,9 +65,13 @@
 
   			        <!-- 右侧：推荐菜 -->
   			  <div class="right-dishes">
-            <div class="dish" v-for="(d, i) in s.dishes" :key="i" @click.stop>
+                    <div class="dish" v-for="(d, i) in (s.dishes || []).slice(0,3)" :key="i" @click.stop>
               <div class="dish-img-box">
-                <img class="dish-img" src="/src/assets/noImg.png" alt="dish" />
+                <img
+                    class="dish-img"
+                    :src="d.image?d.image:noImg"
+                    alt="dish"
+                  />
               </div>
               <div class="dish-info">
                 <div class="dish-name">{{ d.name }}</div>
@@ -119,78 +113,99 @@
   			</div>
 			</section>
 
-	</div>
-	</div>
+  </div>
+  <!-- 回到顶部按钮（固定在主内容右侧） -->
+  <button v-show="showBack" class="back-to-top" @click="scrollToTop" aria-label="回到顶部">
+  <img src="@/assets/icons/top-arrow.svg" alt="回到顶部" class="back-icon" />
+  </button> 
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { addToCart, removeFromCart } from '@/api/user/store'
-import { Search } from '@element-plus/icons-vue'
+import { getCart } from '@/api/user/cart'
 import Carousel from '@/components/Carousel.vue'
+import SearchSuggest from '@/components/SearchSuggest.vue'
+import { Search } from '@element-plus/icons-vue'
 import CategoryItem from '@/components/CategoryItem.vue'
-import banner1 from '@/assets/banners/banner1.svg'
-import banner2 from '@/assets/banners/banner2.svg'
-import banner3 from '@/assets/banners/banner3.svg'
-import banner4 from '@/assets/banners/banner4.svg'
-import banner5 from '@/assets/banners/banner5.svg'
-
+import banner1 from '@/assets/banners/images/banner1.png'
+import banner2 from '@/assets/banners/images/banner2.png'
+import banner3 from '@/assets/banners/images/banner3.png'
+import banner4 from '@/assets/banners/images/banner4.png'
+import banner5 from '@/assets/banners/images/banner5.png'
+import axios from 'axios'
+import { getDeliveryConfig } from '@/api/user/store'
+import noImg from '@/assets/noImg.png'
 const images = [
   {
     src: banner1,
     title: '立即下单',
     desc: '外卖下单立减 10 元',
+    lable:'低价满减',
     link: '/order',
     buttonText: '去下单'
   },
   {
     src: banner2,
-    title: '限时优惠',
-    desc: '今日饮品买一送一',
-    link: '/drinks',
-    buttonText: '查看优惠'
+    title: '午餐推荐',
+    desc: '精选套餐，工作日立减 8 元',
+    lable:'午餐推荐',
+    link: '/lunch',
+    buttonText: '立即查看'
   },
   {
     src: banner3,
     title: '新品上线',
     desc: '尝鲜价仅 9.9 元起',
+    lable:'沙拉轻食',
     link: '/new',
     buttonText: '去尝鲜'
   },
   {
     src: banner4,
-    title: '午餐推荐',
-    desc: '精选套餐，工作日立减 8 元',
-    link: '/lunch',
-    buttonText: '立即查看'
+    title: '限时优惠',
+    desc: '今日饮品买一送一',
+    lable:'极速配送',
+    link: '/drinks',
+    buttonText: '查看优惠'
   },
   {
     src: banner5,
-    title: '夜宵来袭',
-    desc: '宵夜加码，买二送一',
-    link: '/night',
-    buttonText: '抢购夜宵'
+    title: '极速配送',
+    desc: '下单立减配送费',
+    lable:'极速配送',
+    link: '/delivery',
+    buttonText: '享受优惠'
   }
 ];
 const router = useRouter()
 const route = useRoute()
 const query = ref('')
 
-const categories = ref([
-  { label: '全部', icon: '/src/assets/icons/all.svg' },
-  { label: '招牌套餐', icon: '/src/assets/icons/setmeal.svg' },
-  { label: '现煮粉面', icon: '/src/assets/icons/noodle.svg' },
-  { label: '汉堡炸鸡', icon: '/src/assets/icons/burger.svg' },
-  { label: '奶茶咖啡', icon: '/src/assets/icons/milktea.svg' },
-  { label: '日式便当', icon: '/src/assets/icons/bento.svg' },
-  { label: '烧烤烤肉', icon: '/src/assets/icons/bbq.svg' },
-  { label: '水果拼盘', icon: '/src/assets/icons/fruit.svg' },
-  { label: '精致甜品', icon: '/src/assets/icons/dessert.svg' },
-  { label: '家常快炒', icon: '/src/assets/icons/stirfry.svg' },
-  { label: '粥粉面饭', icon: '/src/assets/icons/rice.svg' },
-])
+const categories = ref([])
+
+// 本地图标映射（以 id 为 key），用于将后端返回的分类 id 映射到前端图标
+const iconMap: Record<number, string> = {
+  0: '/src/assets/icons/all.svg',
+  1: '/src/assets/icons/setmeal.svg',
+  2: '/src/assets/icons/noodle.svg',
+  3: '/src/assets/icons/burger.svg',
+  4: '/src/assets/icons/milktea.svg',
+  5: '/src/assets/icons/bento.svg',
+  6: '/src/assets/icons/bbq.svg',
+  7: '/src/assets/icons/fruit.svg',
+  8: '/src/assets/icons/dessert.svg',
+  9: '/src/assets/icons/stirfry.svg',
+  10: '/src/assets/icons/rice.svg',
+  11: '/src/assets/icons/delivery.svg',
+  12: '/src/assets/icons/lunch.svg',
+  13: '/src/assets/icons/discount.svg',
+  14: '/src/assets/icons/salad.svg',
+  15: '/src/assets/icons/afternoon.svg',
+}
 
 // 计算当前激活的分类：优先使用 route.query.cat，其次如果 q 与某个分类 label 相同也视作激活
 const activeCategory = computed(() => {
@@ -206,40 +221,130 @@ const activeCategory = computed(() => {
 })
 
 
-const stores = ref([
-  {
-    name: '黄焖鸡米饭',
-    desc: '经典家常菜，味道鲜香',
-    img: '/src/assets/noImg.png',
-    logo: '/src/assets/noImg.png',
-    tags: ['家常菜', '下饭王'],
-    rating: 4.8,
-    sales: 320,
-    minOrder: 15,
-    deliveryFee: 2,
-    dishes: [
-      { name: '黄焖鸡套餐', price: 18, count: 0, category: '招牌套餐' },
-      { name: '香菇滑鸡饭', price: 16, count: 0, category: '家常快炒' },
-      { name: '青椒土豆丝', price: 10, count: 0, category: '家常快炒' }
-    ]
-  },
-  {
-    name: '茶百道',
-    desc: '奶香浓郁，果茶清爽',
-    img: '/src/assets/noImg.png',
-    logo: '/src/assets/noImg.png',
-    tags: ['奶茶', '饮品', '水果茶'],
-    rating: 4.9,
-    sales: 520,
-    minOrder: 12,
-    deliveryFee: 1,
-    dishes: [
-      { name: '乌龙奶茶', price: 12, count: 0, category: '奶茶咖啡' },
-      { name: '杨枝甘露', price: 15, count: 0, category: '奶茶咖啡' },
-      { name: '百香果绿茶', price: 11, count: 0, category: '奶茶咖啡' }
-    ]
+const stores = ref([])
+
+// 辅助：从后端 categories 列表构建 id->label 映射
+function buildCategoryMap(list: any[]) {
+  const m: Record<number, string> = {}
+  list.forEach((c: any) => {
+    if (c && c.id != null) m[c.id] = c.name || c.Name || c.label || ''
+  })
+  return m
+}
+
+// 本地后备分类（回退用）
+const fallbackCategories = [
+  { id: 0, label: '全部', icon: iconMap[0], key: 'all', filter: null },
+  { id: 1, label: '招牌套餐', icon: iconMap[1], key: 'setmeal' },
+  { id: 2, label: '现煮粉面', icon: iconMap[2], key: 'noodle' },
+  { id: 3, label: '汉堡炸鸡', icon: iconMap[3], key: 'burger' },
+  { id: 4, label: '奶茶咖啡', icon: iconMap[4], key: 'milktea' },
+  { id: 5, label: '日式便当', icon: iconMap[5], key: 'bento' },
+  { id: 6, label: '烧烤烤肉', icon: iconMap[6], key: 'bbq' },
+  { id: 7, label: '水果拼盘', icon: iconMap[7], key: 'fruit' },
+  { id: 8, label: '精致甜品', icon: iconMap[8], key: 'dessert' },
+  { id: 9, label: '家常快炒', icon: iconMap[9], key: 'stirfry' },
+  { id: 10, label: '粥粉面饭', icon: iconMap[10], key: 'rice' },
+  { id: 11, label: '极速配送', icon: iconMap[11], key: 'fast_delivery' },
+  { id: 12, label: '午餐推荐', icon: iconMap[12], key: 'lunch' },
+  { id: 13, label: '低价满减', icon: iconMap[13], key: 'low_price' },
+  { id: 14, label: '沙拉轻食', icon: iconMap[14], key: 'salad' },
+  { id: 15, label: '精致下午茶', icon: iconMap[15], key: 'afternoon' },
+]
+
+async function loadData() {
+  let backendCats: any[] = []
+  try {
+    // 1) 尝试获取后端分类（type=1 表示菜品分类）
+    const catRes = await axios.get('/api/merchant/category/list', { params: { type: 1 } })
+    if (catRes.data && (catRes.data.code === 1 || catRes.data.code === '1')) {
+      backendCats = catRes.data.data || []
+    }
+  } catch (e: any) {
+    console.warn('category API failed, will use fallback categories', e && e.message)
   }
-])
+
+  // 如果后端没有返回完整的 15 个分类，使用本地回退列表
+  if (!backendCats || backendCats.length < 15) {
+    categories.value = fallbackCategories
+    backendCats = fallbackCategories.filter((c: any) => c.id && c.id !== 0).map((c: any) => ({ id: c.id, name: c.label }))
+  } else {
+    const cats: any[] = [{ id: 0, label: '全部', icon: iconMap[0], key: 'all', filter: null }]
+    backendCats.forEach((c: any) => {
+      const id = Number(c.id)
+      cats.push({ id, label: c.name || c.Name, icon: iconMap[id] || iconMap[0], key: c.name || `cat_${id}`, filter: null })
+    })
+    categories.value = cats
+  }
+
+  // 2) 获取后端店铺列表（若失败则保持空数组）
+  try {
+    const storesRes = await axios.get('/api/user/stores')
+    if (storesRes.data && (storesRes.data.code === 1 || storesRes.data.code === '1')) {
+      const catMap = buildCategoryMap(backendCats)
+      stores.value = (storesRes.data.data || []).map((s: any) => {
+        const sd = s.dishes || []
+        const dishes = sd.map((d: any) => ({
+          id: d.id,
+          name: d.name,
+          price: d.price,
+          count: 0,
+          image: d.image || noImg,
+          description: d.description || '',
+          categories: Array.isArray(d.categoryId) ? d.categoryId.map((cid: number) => catMap[cid] || cid) : [(catMap[d.categoryId] || d.categoryId)],
+        }))
+        return {
+          id: s.id,
+          name: s.name || s.shop_name,
+          desc: s.desc || s.shop_location,
+          img: s.logo || '/src/assets/noImg.png',
+          logo: s.logo || '/src/assets/noImg.png',
+          tags: s.tags || [],
+          rating: s.rating || 4.8,
+          sales: s.sales || 0,
+          minOrder: s.minOrder || 0,
+          deliveryFee: s.deliveryFee || 0,
+          dishes,
+        }
+      })
+      // 补充每个商家的配送配置（避免首页显示为 0）
+      try {
+        await Promise.all(stores.value.map(async (st: any) => {
+          const bid = st.id || st.base_id || st.baseId
+          if (!bid) return
+          const r = await getDeliveryConfig(bid)
+          const cfg = r && r.data ? r.data.data || r.data : r
+          st.minOrder = cfg?.min_price ?? cfg?.minPrice ?? st.minOrder ?? 15
+          st.deliveryFee = cfg?.delivery_fee ?? cfg?.deliveryFee ?? st.deliveryFee ?? 2
+        }))
+      } catch (e) { console.warn('fetch delivery configs for stores failed', e) }
+      // 同步用户购物车到首页，用于展示菜品已加入数量
+      try {
+        const cartData = await getCart()
+        const shops = cartData && (cartData.shops || cartData.data || cartData) || []
+        // 重置计数
+        stores.value.forEach((st: any) => st.dishes.forEach((d: any) => (d.count = 0)))
+        for (const sh of (shops || [])) {
+          const sid = sh.storeId || sh.store_id || sh.merchantId || sh.merchant_id || sh.id || sh.base_id
+          const storeMatch = stores.value.find((st: any) => String(st.id) === String(sid) || String(st.base_id) === String(sid) || String(st.id) === String(sh.storeId))
+          if (!storeMatch) continue
+          const items = sh.items || []
+          for (const it of items) {
+            const did = it.dishId || it.dish_id || it.id
+            const dish = storeMatch.dishes.find((x: any) => String(x.id) === String(did))
+            if (dish) dish.count = Number(it.qty || it.Qty || it.qty || 0)
+          }
+        }
+      } catch (e) { console.warn('sync cart to homepage failed', e) }
+    } else {
+      // 如果返回结构不正确，保持空 stores（不会抛）
+      stores.value = []
+    }
+  } catch (e: any) {
+    console.warn('stores API failed, frontend will show no stores until DB has data', e && e.message)
+    stores.value = []
+  }
+}
 
 // 根据路由 query 进行过滤
 const filteredStores = computed(() => {
@@ -249,7 +354,11 @@ const filteredStores = computed(() => {
   return stores.value.filter((s: any) => {
     if (cat) {
       if (cat === '全部') return true
-      return s.dishes.some((d: any) => d.category === cat)
+      return s.dishes.some((d: any) => {
+        // 兼容旧字段 d.category 或 新结构 d.categories (数组)
+        if (Array.isArray(d.categories)) return d.categories.includes(cat)
+        return d.category === cat
+      })
     }
     return s.name.toLowerCase().includes(qv) || s.dishes.some((d: any) => d.name.toLowerCase().includes(qv))
   })
@@ -257,12 +366,15 @@ const filteredStores = computed(() => {
 
 const addDish = async (store: any, dish: any) => {
   try {
-    // first navigate to store page
-    await router.push('/user/store/' + encodeURIComponent(store.name))
-    // then call addToCart API
+    // First call addToCart so backend/cart is up-to-date, then navigate to store page.
     await addToCart({ storeId: store.id, dishId: dish.id, name: dish.name, price: dish.price, qty: 1 })
+    // optimistic update local UI count
     dish.count = (dish.count || 0) + 1
     ElMessage.success('已加入购物车')
+    // navigate using store id/base_id when available
+    const sid = store.id || store.base_id || store.baseId || store.shop_id || store.shopId
+    if (sid) await router.push('/user/store/' + encodeURIComponent(String(sid)))
+    else await router.push('/user/store/' + encodeURIComponent(store.name))
   } catch (e: any) {
     ElMessage.error('加入购物车失败：' + (e.message || ''))
   }
@@ -271,10 +383,13 @@ const addDish = async (store: any, dish: any) => {
 const decDish = async (store: any, dish: any) => {
   if (!dish.count || dish.count <= 0) return
   try {
-    await router.push('/user/store/' + encodeURIComponent(store.name))
+    // call remove API first, update local count, then navigate
     await removeFromCart({ storeId: store.id, dishId: dish.id, qty: 1 })
-    dish.count--
+    dish.count = Math.max(0, (dish.count || 0) - 1)
     ElMessage.success('已从购物车移除')
+    const sid = store.id || store.base_id || store.baseId || store.shop_id || store.shopId
+    if (sid) await router.push('/user/store/' + encodeURIComponent(String(sid)))
+    else await router.push('/user/store/' + encodeURIComponent(store.name))
   } catch (e: any) {
     ElMessage.error('移除失败：' + (e.message || ''))
   }
@@ -298,24 +413,56 @@ const activities = ref([
 
 function onSearch() {
 	// TODO: hook up search
-	if (!query.value) return
-	router.push({ path: '/user/home', query: { q: query.value } })
+  if (!query.value) return
+  router.push({ path: '/user/home', query: { q: query.value } })
+    .then(() => scrollToMeals(true))
+    .catch(() => scrollToMeals(true))
 }
 
 function goToStore(s: any) {
-	// 进入店铺详情页（占位）
-	router.push('/user/store/' + encodeURIComponent(s.name))
+  // Prefer numeric id/base_id when available to avoid name-based lookups
+  const sid = s.id || s.base_id || s.baseId || s.shop_id || s.shopId
+  if (sid) router.push('/user/store/' + encodeURIComponent(String(sid)))
+  else router.push('/user/store/' + encodeURIComponent(s.name || s.shop_name || ''))
 }
 
+const scrollToMeals = (smooth = true) => {
+  nextTick(() => {
+    const el = document.getElementById('meals')
+    if (el) el.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' })
+  })
+}
+
+
+
+const showBack = ref(false)
+function scrollHandler() {
+  showBack.value = window.scrollY > 240
+}
+function scrollToTop() {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+onMounted(() => {
+  window.addEventListener('scroll', scrollHandler, { passive: true })
+  loadData()
+})
+onBeforeUnmount(() => window.removeEventListener('scroll', scrollHandler))
+
+// function onBannerClick(item: any) {
+//   if (item && item.link) {
+//     // 保持现有路由行为（可能会跳转）
+//     router.push(item.link).catch(() => {})
+//   }
+//   scrollToMeals(true)
+// }
+
 function onCategoryClick(c: any) {
-  // 点击分类时：如果搜索框有内容则保留 q，否则清除 q（以便回到全部或单独按分类的视图）
   const qv = (query.value || '').toString().trim()
   const newQuery: any = {}
   if (qv) newQuery.q = qv
-  // 如果选择的是 "全部"，不要传 cat（保持无筛选），否则传 cat
   if (c.label && c.label !== '全部') newQuery.cat = c.label
 
-  router.push({ path: '/user/home', query: newQuery })
+  router.push({ path: '/user/home', query: newQuery }).then(() => scrollToMeals(true)).catch(() => scrollToMeals(true))
 }
 </script>
 
@@ -362,6 +509,7 @@ function onCategoryClick(c: any) {
 }
 .search {
   width: 80%;
+  position: relative; /* 让下拉可以绝对定位 */
 }
 
 /* 调整 el-input 外观 */
@@ -615,4 +763,108 @@ function onCategoryClick(c: any) {
 .banner-container{
   margin: 20px 0;
 }
+
+/* 回到顶部按钮样式 */
+.back-to-top {
+  position: fixed;
+  right: calc(20% - 36px);
+  bottom: 120px;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: none;
+  background-color: #fff; /* 改成白色背景 */
+  color: #333;
+  font-size: 22px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s ease;
+  z-index: 1200;
+  position: fixed;
+}
+
+/* hover 效果：轻微上浮 + 黄色描边 */
+.back-to-top:hover {
+  transform: translateY(-4px);
+  border: 2px solid #ffd100;
+}
+
+/* 提示气泡（默认隐藏） */
+.back-to-top::before {
+  content: "回到顶部";
+  position: absolute;
+  right: 110%;
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  background: rgba(51, 51, 51, 0.9);
+  color: #fff;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+/* 提示框出现时 */
+.back-to-top:hover::before {
+  opacity: 1;
+  transform: translateY(-50%) translateX(-4px);
+}
+
+/* 提示气泡的小三角形 */
+.back-to-top::after {
+  content: "";
+  position: absolute;
+  right: calc(110% - 6px);
+  top: 50%;
+  transform: translateY(-50%);
+  border-width: 6px;
+  border-style: solid;
+  border-color: transparent transparent transparent rgba(51, 51, 51, 0.9);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+/* 悬停时显示小三角 */
+.back-to-top:hover::after {
+  opacity: 1;
+}
+.back-icon {
+  width: 40px;
+  height: 40px;
+  pointer-events: none;
+}
+
+/* 搜索建议下拉样式 */
+.search-suggestions {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 8px);
+  width: 100%;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  z-index: 1300;
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid rgba(0,0,0,0.06);
+}
+.search-suggestions ul { list-style: none; margin: 0; padding: 8px 0; }
+.sugg-item { padding: 10px 14px; cursor: pointer; display:flex; flex-direction:column; gap:4px }
+.sugg-item:hover { background: #fff9e6 }
+.sugg-name strong { background: rgba(255, 235, 59, 0.5); padding: 0 2px; }
+.sugg-desc { font-size: 12px; color: #888 }
+
+/* 响应式：在小屏幕上贴右边 */
+@media (max-width: 900px) {
+  .back-to-top {
+    right: 16px;
+  }
+}
+
 </style>

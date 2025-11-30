@@ -2,9 +2,11 @@
 	<header ref="navRef" class="meituan-navbar">
 		<div class="left">
 			<el-button type="text" class="loc-btn" @click="onLocation">
-				<img src="@\assets\icons\location.svg" alt="定位" />
-				<span class="loc-text">当前定位</span>
-				<span class="city">{{ city }}</span>
+        <img src="@\assets\icons\location.svg" alt="定位" />
+        <div class="loc-info">
+          <span class="loc-text">当前位置</span>
+          <span class="city" :title="city">{{ city }}</span>
+        </div>
 			</el-button>
 		</div>
 
@@ -28,18 +30,7 @@
       <!-- 非订单页仍维持原有的公告/搜索逻辑 -->
       <div v-else style="width: 100%;">
         <div v-if="isOverlapping" class="notice notice-search" style="margin: 0 auto;">
-          <el-input
-            v-model="query"
-            placeholder="搜索店铺 / 美食"
-            clearable
-            class="search-input"
-          >
-            <template #suffix>
-              <el-button class="search-btn" type="warning" round @click="onSearch">
-                <el-icon><Search /></el-icon>
-              </el-button>
-            </template>
-          </el-input>
+          <SearchSuggest v-model="query" @search="onSearch" @select="onSelectStore" />
         </div>
         <!-- 公告部分 -->
         <div v-else class="notice notice-promo">
@@ -69,13 +60,20 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import SearchSuggest from '@/components/SearchSuggest.vue'
+import { Search } from '@element-plus/icons-vue'
 
 const query = ref('')
 const orderQuery = ref('')
+
+function onSelectStore(s: any) {
+  if (!s || !s.name) return
+  router.push('/user/store/' + encodeURIComponent(s.name))
+}
 const router = useRouter()
 const route = useRoute()
 const q = ref('')
-const city = ref(localStorage.getItem('city') || '校园')
+const city = ref(localStorage.getItem('city') || '定位中...')
 const username = ref(localStorage.getItem('username') || '')
 const avatar = ref('/src/assets/login/mini-logo.png')
 
@@ -104,8 +102,120 @@ function onOrderSearch() {
   }
   router.push({ path: '/user/orderlist', query: { oq: orderQuery.value } })
 }
+// 点击导航栏左侧：先尝试刷新实时定位（异步），然后跳转到地址管理页
+async function onLocation() {
+  // 尝试刷新一次定位信息（不阻塞太久）
+  try {
+    await fetchAndSetCurrentAddress(3000)
+  } catch (e) {
+    // 忽略，仍然路由到地址页
+  }
+  router.push('/user/address')
+}
 
-function onLocation() { console.log('定位') }
+// 加载高德脚本（如果未加载），返回当 script 加载完成
+function ensureAMapLoaded(): Promise<void> {
+  const amapKey = (import.meta.env.VITE_AMAP_KEY as string) || ''
+  const url = `https://webapi.amap.com/maps?v=2.0&key=${amapKey}`
+  return new Promise((resolve, reject) => {
+    if ((window as any).AMap) return resolve()
+    const s = document.createElement('script')
+    s.src = url
+    s.onload = () => resolve()
+    s.onerror = () => reject(new Error('加载高德脚本失败'))
+    document.head.appendChild(s)
+  })
+}
+
+// 获取浏览器定位并通过高德逆地理解析成可读地址，超时参数 ms（可选）
+function fetchAndSetCurrentAddress(timeoutMs = 5000): Promise<void> {
+  return new Promise(async (resolve) => {
+    if (!navigator.geolocation) {
+      city.value = localStorage.getItem('city') || '无法定位'
+      return resolve()
+    }
+
+    let done = false
+    const timer = setTimeout(() => {
+      if (!done) {
+        done = true
+        resolve()
+      }
+    }, timeoutMs)
+
+    navigator.geolocation.getCurrentPosition(async pos => {
+      if (done) return
+      try {
+        await ensureAMapLoaded()
+        const AMap = (window as any).AMap
+        if (!AMap) throw new Error('AMap 未初始化')
+
+        const lng = pos.coords.longitude
+        const lat = pos.coords.latitude
+        console.log('成功获取定位', { lng, lat })
+
+        // 🔹 先尝试获取当前 POI 名称（类似“中山大学南校区”）
+        AMap.plugin(['AMap.Geocoder', 'AMap.PlaceSearch'], () => {
+          const geocoder = new AMap.Geocoder({ city: '全国' })
+          const placeSearch = new AMap.PlaceSearch({ city: '全国' })
+
+          // 搜索附近 100 米的 POI
+          placeSearch.searchNearBy('', [lng, lat], 100, (status: string, result: any) => {
+            let placeName = ''
+            if (status === 'complete' && result?.poiList?.pois?.length) {
+              // 取第一个最近的 POI 名称
+              const nearest = result.poiList.pois[0]
+              placeName = nearest.name || ''
+              console.log('附近最近地点:', placeName)
+            }
+
+            // 如果没有找到 POI，则回退到逆地理地址
+            geocoder.getAddress([lng, lat], (geoStatus: string, geoResult: any) => {
+              if (geoStatus === 'complete' && geoResult?.regeocode) {
+                const comp = geoResult.regeocode.addressComponent
+                const detailParts: string[] = []
+                if (comp.district) detailParts.push(comp.district)
+                if (comp.township) detailParts.push(comp.township)
+                if (comp.street) detailParts.push(comp.street)
+                if (comp.streetNumber) detailParts.push(comp.streetNumber)
+                if (comp.neighborhood?.name) detailParts.push(comp.neighborhood.name)
+
+                const fallback = detailParts.join('') || geoResult.regeocode.formattedAddress || '未知地址'
+
+                // 最终取：附近地点名 > 逆地理地址
+                const finalAddr = placeName || fallback
+
+                city.value = finalAddr
+                localStorage.setItem('city', finalAddr)
+                console.log('当前地址:', finalAddr)
+              } else {
+                city.value = placeName || localStorage.getItem('city') || '定位失败'
+              }
+
+              clearTimeout(timer)
+              done = true
+              resolve()
+            })
+          })
+        })
+      } catch (err) {
+        console.warn('定位解析异常', err)
+        clearTimeout(timer)
+        done = true
+        city.value = localStorage.getItem('city') || '定位失败'
+        resolve()
+      }
+    }, err => {
+      console.warn('获取定位失败', err)
+      clearTimeout(timer)
+      done = true
+      city.value = localStorage.getItem('city') || '定位失败'
+      resolve()
+    }, { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 0 })
+  })
+}
+
+
 
 function handleCommand(command: string) {
   if (command === 'logout') {
@@ -136,7 +246,13 @@ function onScroll() {
   rafId = requestAnimationFrame(() => { checkOverlap(); rafId = null })
 }
 
-onMounted(() => { checkOverlap(); window.addEventListener('scroll', onScroll, { passive: true }); window.addEventListener('resize', onScroll) })
+onMounted(() => {
+  checkOverlap();
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll);
+  // 页面加载时获取一次实时地址展示
+  fetchAndSetCurrentAddress().catch(() => {})
+})
 onUnmounted(() => { window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll); if (rafId != null) cancelAnimationFrame(rafId) })
 </script>
 
@@ -163,6 +279,7 @@ onUnmounted(() => { window.removeEventListener('scroll', onScroll); window.remov
 /* === 左侧区 === */
 .meituan-navbar .left {
   width: 20%;
+  border-width: 0cap;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -185,9 +302,16 @@ onUnmounted(() => { window.removeEventListener('scroll', onScroll); window.remov
   opacity: 0.8;
 }
 .city {
-  color: rgba(27, 27, 27, 0.75);
+  color: rgba(27, 27, 27, 0.85);
   margin-left: 6px;
+  display: block;
+  max-width: 220px;
+  white-space: normal;
+  word-break: break-word;
 }
+
+.loc-info { display: flex; flex-direction: column; align-items: flex-start; }
+.loc-text { font-size: 12px; color: rgba(27,27,27,0.6); }
 
 /* === 中间区（搜索或公告） === */
 .meituan-navbar .center {
@@ -235,6 +359,7 @@ onUnmounted(() => { window.removeEventListener('scroll', onScroll); window.remov
 /* 文字发光渐变 */
 .notice-promo span {
   background: linear-gradient(90deg, #ff9800, #ff6b00);
+  background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: shineText 3s infinite ease-in-out;
@@ -251,29 +376,31 @@ onUnmounted(() => { window.removeEventListener('scroll', onScroll); window.remov
   max-width: 1000px;
   width: 80%;
   background-color: #fffef4 !important;
-  border-radius: 32px !important;
-  border: 2px solid #ffb400;
-  box-shadow: 0 3px 8px rgba(250, 173, 20, 0.25);
-  padding: 6px 20px;
+  border-radius: 5px !important;
+  /* border: 2px solid #fffef4; */
+  box-shadow: 0 2px 6px rgba(250, 173, 20, 0.25);
+  padding: 8px;
   transition: 0.25s;
   display: flex;
   align-items: center;
 }
 .notice-search:hover,
 .notice-search:focus-within {
-  box-shadow: 0 0 0 3px rgba(255, 213, 79, 0.35);
+  box-shadow: 0 0 0 3px rgba(255, 213, 79, 0.3);
 }
 
 /* === 输入框内部 === */
 .notice-search :deep(.el-input__wrapper) {
-  background: transparent;
-  border: none;
-  box-shadow: none;
+  background-color: #fffef4;
+  border-radius: 30px;
+  border: 2px solid #faad14;
+  box-shadow: 0 2px 6px rgba(250, 173, 20, 0.25);
+  padding-right: 0px;
+  height: 46px;
 }
 .notice-search :deep(.el-input__inner) {
   font-size: 15px;
-  color: #704f00;
-  padding-right: 36px;
+  color: #8c6d1f;
 }
 .notice-search :deep(.el-input__suffix) {
   position: relative;
@@ -285,6 +412,8 @@ onUnmounted(() => { window.removeEventListener('scroll', onScroll); window.remov
   position: absolute;
   /* right: -10px;
   top: -3px; */
+  right: 4px;
+  top: 2px; 
   height: 38px;
   width: 38px;
   border-radius: 50%;
@@ -295,6 +424,25 @@ onUnmounted(() => { window.removeEventListener('scroll', onScroll); window.remov
   cursor: pointer;
   transition: 0.25s;
 }
+.navbar-suggestions {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 100%;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  z-index: 1400;
+  max-height: 300px;
+  overflow: auto;
+  border: 1px solid rgba(0,0,0,0.06);
+}
+.navbar-suggestions ul{ margin:0; padding:8px 0; list-style:none }
+.nav-sugg-item{ padding:8px 12px; cursor:pointer; display:flex; flex-direction:column; gap:6px }
+.nav-sugg-item + .nav-sugg-item{ border-top: 1px solid rgba(0,0,0,0.06) }
+.nav-sugg-item.active{ background: #fff9e6 }
+.nav-sugg-name strong{ background: rgba(255,235,59,0.5); padding:0 2px }
+.nav-sugg-desc{ font-size:12px; color:#888 }
 .notice-search .search-btn:hover {
   background-color: #ffd34e;
   color: #744d00;

@@ -32,10 +32,12 @@ const routes = [
       { path: 'wallet', component: () => import('@/views/user/wallet/index.vue') },
       { path: 'coupons', component: () => import('@/views/user/coupons/index.vue') },
       { path: 'address', component: () => import('@/views/user/address/index.vue') },
+      { path: 'payment/confirm', component: () => import('@/views/user/payment/Checkout.vue') },
       { path: 'support', component: () => import('@/views/user/support/index.vue') },
       { path: 'settings', component: () => import('@/views/user/settings/index.vue') },
       { path: 'vip', component: () => import('@/views/user/vip/index.vue') },
       { path: 'cart', component: () => import('@/views/user/cart/index.vue') },
+      { path: 'payment/success', component: () => import('@/views/user/payment/Success.vue'), meta: { hidden: true } },
       { path: 'my', component: () => import('@/views/user/my/index.vue') },
     ]
   },

@@ -1,11 +1,11 @@
 <template>
-  <div class="dashboard-container" style="width: 80%; margin:0 auto">
+  <div class="dashboard-container">
     <TabChange
       :order-statics="orderStatics"
       :default-activity="defaultActivity"
       @tabChange="change"
     />
-    <div class="container" :class="{ hContainer: tableData.length }" >
+  <div class="container main-container" :class="{ hContainer: tableData.length }" >
       <!-- 搜索项 -->
       <div class="tableBar">
         <label style="margin-right: 10px">订单号：</label>
@@ -14,8 +14,8 @@
           placeholder="请填写订单号"
           style="width: 15%"
           clearable
-          @clear="init(orderStatus)"
-          @keyup.enter="initFun(orderStatus)"
+          @clear="onClear"
+          @keyup.enter="initFun(orderStatus.value)"
         />
         <label style="margin-left: 20px">手机号：</label>
         <el-input
@@ -23,25 +23,27 @@
           placeholder="请填写手机号"
           style="width: 15%"
           clearable
-          @clear="init(orderStatus)"
-          @keyup.enter="initFun(orderStatus)"
+          @clear="onClear"
+          @keyup.enter="initFun(orderStatus.value)"
         />
         <label style="margin-left: 20px">下单时间：</label>
-        <el-date-picker
-          v-model="valueTime"
-          clearable
-          value-format="yyyy-MM-dd HH:mm:ss"
-          range-separator="至"
-          :default-time="['00:00:00', '23:59:59']"
-          type="daterange"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
-          style="width: 25%; margin-left: 10px"
-          @clear="init(orderStatus)"
-        />
-        <el-button class="normal-btn continue" @click="init(orderStatus, true)">
-          查询
-        </el-button>
+<el-date-picker
+  v-model="valueTime"
+  type="daterange"
+  unlink-panels
+  clearable
+  range-separator="至"
+  start-placeholder="开始日期"
+  end-placeholder="结束日期"
+  class="date-range"
+/>
+<el-button 
+  class="normal-btn continue" 
+  @click="init(orderStatus.value, true)"
+  :loading="loading"
+>
+  查询
+</el-button>
       </div>
       <el-table
         v-if="tableData.length"
@@ -118,20 +120,20 @@
         />
         <el-table-column
           v-if="[2, 3, 4].includes(orderStatus)"
-          key="estimatedDeliveryTime"
-          prop="estimatedDeliveryTime"
+          key="expected_time"
+          prop="expected_time"
           label="预计送达时间"
           min-width="110"
         />
         <el-table-column
           v-if="[0, 2, 5].includes(orderStatus)"
           key="amount"
-          prop="amount"
+          prop="totalprice"
           label="实收金额"
           align="center"
         >
-          <template slot-scope="{ row }">
-            <span>￥{{ (row.amount.toFixed(2) * 100) / 100 }}</span>
+          <template #default="{ row }">
+            <span>￥{{ (typeof row.amount === 'number' ? row.amount : Number(row.amount || 0)).toFixed(2) }}</span>
           </template>
         </el-table-column>
         <el-table-column
@@ -144,7 +146,7 @@
         <el-table-column
           v-if="[2, 3, 4].includes(orderStatus)"
           key="tablewareNumber"
-          prop="tablewareNumber"
+          prop="quantity"
           label="餐具数量"
           align="center"
           min-width="80"
@@ -212,10 +214,18 @@
               <el-button
                 type="text"
                 class="blueBug non"
-                @click="goDetail(row.id, row.status, row)"
+                @click="goDetail(row.id || row.orderId || row.orderid, row.status, row)"
               >
                 查看
               </el-button>
+              <el-button
+                type="text"
+                class="blueBug non"
+                @click="openChatForOrder(row)"
+              >
+                聊天
+              </el-button>
+              
             </div>
           </template>
         </el-table-column>
@@ -234,199 +244,80 @@
     </div>
 
     <!-- 查看弹框部分 -->
-    <el-dialog
-      title="订单信息"
-      :visible.sync="dialogVisible"
-      width="53%"
-      :before-close="handleClose"
-      class="order-dialog"
-    >
-      <el-scrollbar style="height: 100%">
-        <div class="order-top">
+    <!-- 原生模态替代 el-dialog -->
+    <div v-if="dialogVisible" class="native-modal-overlay" @click.self="dialogVisible = false">
+      <div class="native-modal" role="dialog" aria-modal="true">
+        <div class="modal-header">
           <div>
-            <div style="display: inline-block">
-              <label style="font-size: 16px">订单号：</label>
-              <div class="order-num">
-                {{ diaForm.number }}
-              </div>
-            </div>
-            <div
-              style="display: inline-block"
-              class="order-status"
-              :class="{ status3: [3, 4].includes(dialogOrderStatus) }"
-            >
-              {{
-                orderList.filter((item) => item.value === dialogOrderStatus)[0]
-                  .label
-              }}
-            </div>
+            <label style="font-size:16px">订单号：</label>
+            <span class="order-num">{{ diaForm.number || diaForm.orderNo || diaForm.ID || diaForm.id }}</span>
           </div>
-          <p><label>下单时间：</label>{{ diaForm.orderTime }}</p>
+          <div class="modal-close" @click="dialogVisible = false">✕</div>
         </div>
 
-        <div class="order-middle">
-          <div class="user-info">
-            <div class="user-info-box">
-              <div class="user-name">
-                <label>用户名：</label>
-                <span>{{ diaForm.consignee }}</span>
-              </div>
-              <div class="user-phone">
-                <label>手机号：</label>
-                <span>{{ diaForm.phone }}</span>
-              </div>
-              <div
-                v-if="[2, 3, 4, 5].includes(dialogOrderStatus)"
-                class="user-getTime"
-              >
-                <label>{{
-                  dialogOrderStatus === 5 ? '送达时间：' : '预计送达时间：'
-                }}</label>
-                <span>{{
-                  dialogOrderStatus === 5
-                    ? diaForm.deliveryTime
-                    : diaForm.estimatedDeliveryTime
-                }}</span>
-              </div>
-              <div class="user-address">
-                <label>地址：</label>
-                <span>{{ diaForm.address }}</span>
-              </div>
-            </div>
-            <div
-              class="user-remark"
-              :class="{ orderCancel: dialogOrderStatus === 6 }"
-            >
-              <div>{{ dialogOrderStatus === 6 ? '取消原因' : '备注' }}</div>
-              <span>{{
-                dialogOrderStatus === 6
-                  ? diaForm.cancelReason || diaForm.rejectionReason
-                  : diaForm.remark
-              }}</span>
-            </div>
+        <div class="modal-body">
+          <div class="order-top">
+            <p><label>下单时间：</label>{{ diaForm.orderTime || diaForm.createTime || diaForm.createdAt }}</p>
           </div>
 
-          <div class="dish-info">
-            <div class="dish-label">菜品</div>
-            <div class="dish-list">
-              <div
-                v-for="(item, index) in diaForm.orderDetailList"
-                :key="index"
-                class="dish-item"
-              >
-                <div class="dish-item-box">
-                  <span class="dish-name">{{ item.name }}</span>
-                  <span class="dish-num">x{{ item.number }}</span>
+          <div class="order-middle">
+            <div class="user-info">
+              <div class="user-info-box">
+                <div class="user-name"><label>用户名：</label><span>{{ diaForm.consignee }}</span></div>
+                <div class="user-phone"><label>手机号：</label><span>{{ diaForm.phone }}</span></div>
+                <div v-if="[2,3,4,5].includes(dialogOrderStatus)" class="user-getTime">
+                  <label>{{ dialogOrderStatus === 5 ? '送达时间：' : '预计送达时间：' }}</label>
+                  <span>{{ dialogOrderStatus === 5 ? (diaForm.deliveryTime || diaForm.delivery_time) : (diaForm.estimatedDeliveryTime || diaForm.expectedtime) }}</span>
                 </div>
-                <span class="dish-price"
-                  >￥{{ item.amount ? item.amount.toFixed(2) : '' }}</span
-                >
+                <div class="user-address"><label>地址：</label><span>{{ diaForm.address }}</span></div>
+              </div>
+              <div class="user-remark" :class="{ orderCancel: dialogOrderStatus === 6 }">
+                <div>{{ dialogOrderStatus === 6 ? '取消原因' : '备注' }}</div>
+                <span>{{ dialogOrderStatus === 6 ? (diaForm.cancelReason || diaForm.rejectionReason) : diaForm.remark }}</span>
               </div>
             </div>
-            <div class="dish-all-amount">
-              <label>菜品小计</label>
-              <span
-                >￥{{
-                  ((Number(diaForm.amount || 0) - 6 - Number(diaForm.packAmount || 0)).toFixed(2))
-                }}</span
-              >
+
+            <div class="dish-info">
+              <div class="dish-label">菜品</div>
+              <div class="dish-list">
+                <div v-for="(item, index) in diaForm.orderDetailList || []" :key="index" class="dish-item">
+                  <div class="dish-item-box">
+                    <span class="dish-name">{{ item.name }}</span>
+                    <span class="dish-num">x{{ item.number || item.qty || item.quantity }}</span>
+                  </div>
+                  <span class="dish-price">￥{{ item.amount ? Number(item.amount).toFixed(2) : (item.price ? Number(item.price).toFixed(2) : '') }}</span>
+                </div>
+              </div>
+              <div class="dish-all-amount"><label>菜品小计</label><span>￥{{ ((Number(diaForm.amount || 0) - 6 - Number(diaForm.packAmount || 0)).toFixed(2)) }}</span></div>
+            </div>
+          </div>
+
+          <div class="order-bottom">
+            <div class="amount-info">
+              <div class="amount-label">费用</div>
+              <div class="amount-list">
+                <div class="dish-amount"><span class="amount-name">菜品小计：</span><span class="amount-price">￥{{ (Number(Number(diaForm.amount || 0) - 6 - Number(diaForm.packAmount || 0)).toFixed(2)) }}</span></div>
+                <div class="send-amount"><span class="amount-name">派送费：</span><span class="amount-price">￥{{ diaForm.deliveryAmount ? Number(diaForm.deliveryAmount).toFixed(2) : '' }}</span></div>
+                <div class="package-amount"><span class="amount-name">打包费：</span><span class="amount-price">￥{{ diaForm.packAmount ? Number(diaForm.packAmount).toFixed(2) : '' }}</span></div>
+                <div class="all-amount"><span class="amount-name">合计：</span><span class="amount-price">￥{{ diaForm.amount ? Number(diaForm.amount).toFixed(2) : '' }}</span></div>
+                <div class="pay-type"><span class="pay-name">支付渠道：</span><span class="pay-value">{{ diaForm.payMethod === 1 ? '微信支付' : '支付宝支付' }}</span></div>
+                <div class="pay-time"><span class="pay-name">支付时间：</span><span class="pay-value">{{ diaForm.checkoutTime }}</span></div>
+              </div>
             </div>
           </div>
         </div>
 
-        <div class="order-bottom">
-          <div class="amount-info">
-            <div class="amount-label">费用</div>
-            <div class="amount-list">
-              <div class="dish-amount">
-                <span class="amount-name">菜品小计：</span>
-                <span class="amount-price"
-                  >￥{{
-                    (Number(Number(diaForm.amount || 0) - 6 - Number(diaForm.packAmount || 0)).toFixed(2))
-                  }}</span
-                >
-              </div>
-              <div class="send-amount">
-                <span class="amount-name">派送费：</span>
-                <span class="amount-price">￥{{ 6 }}</span>
-              </div>
-              <div class="package-amount">
-                <span class="amount-name">打包费：</span>
-                <span class="amount-price"
-                  >￥{{
-                    diaForm.packAmount
-                      ? Number(diaForm.packAmount).toFixed(2)
-                      : ''
-                  }}</span
-                >
-              </div>
-              <div class="all-amount">
-                <span class="amount-name">合计：</span>
-                <span class="amount-price"
-                  >￥{{
-                    diaForm.amount
-                      ? Number(diaForm.amount).toFixed(2)
-                      : ''
-                  }}</span
-                >
-              </div>
-              <div class="pay-type">
-                <span class="pay-name">支付渠道：</span>
-                <span class="pay-value">{{
-                  diaForm.payMethod === 1 ? '微信支付' : '支付宝支付'
-                }}</span>
-              </div>
-              <div class="pay-time">
-                <span class="pay-name">支付时间：</span>
-                <span class="pay-value">{{ diaForm.checkoutTime }}</span>
-              </div>
-            </div>
-          </div>
+        <div class="modal-footer" v-if="dialogOrderStatus !== 6">
+          <label v-if="dialogOrderStatus === 2 && orderStatus === 2" class="auto-next"><input type="checkbox" v-model="isAutoNext" /> 处理完自动跳转下一条</label>
+          <button v-if="dialogOrderStatus === 2" class="btn" @click="orderRejectHandler(row, false)">拒 单</button>
+          <button v-if="dialogOrderStatus === 2" class="btn primary" @click="orderAcceptHandler(row, false)">接 单</button>
+          <button v-if="[1,3,4,5].includes(dialogOrderStatus)" class="btn" @click="dialogVisible = false">返 回</button>
+          <button v-if="dialogOrderStatus === 3" class="btn primary" @click="cancelOrDeliveryOrComplete(3, row.id)">派 送</button>
+          <button v-if="dialogOrderStatus === 4" class="btn primary" @click="cancelOrDeliveryOrComplete(4, row.id)">完 成</button>
+          <button v-if="[1].includes(dialogOrderStatus)" class="btn primary" @click="cancelOrderHandler(row)">取消订单</button>
         </div>
-      </el-scrollbar>
-      <span v-if="dialogOrderStatus !== 6" slot="footer" class="dialog-footer">
-        <el-checkbox
-          v-if="dialogOrderStatus === 2 && orderStatus === 2"
-          v-model="isAutoNext"
-          >处理完自动跳转下一条</el-checkbox
-        >
-        <el-button
-          v-if="dialogOrderStatus === 2"
-          @click="orderRejectHandler(row, false)"
-          >拒 单</el-button
-        >
-        <el-button
-          v-if="dialogOrderStatus === 2"
-          type="primary"
-          @click="orderAcceptHandler(row, false)"
-          >接 单</el-button
-        >
-
-        <el-button
-          v-if="[1, 3, 4, 5].includes(dialogOrderStatus)"
-          @click="dialogVisible = false"
-          >返 回</el-button
-        >
-        <el-button
-          v-if="dialogOrderStatus === 3"
-          type="primary"
-          @click="cancelOrDeliveryOrComplete(3, row.id)"
-          >派 送</el-button
-        >
-        <el-button
-          v-if="dialogOrderStatus === 4"
-          type="primary"
-          @click="cancelOrDeliveryOrComplete(4, row.id)"
-          >完 成</el-button
-        >
-        <el-button
-          v-if="[1].includes(dialogOrderStatus)"
-          type="primary"
-          @click="cancelOrderHandler(row)"
-          >取消订单</el-button
-        >
-      </span>
-    </el-dialog>
+      </div>
+    </div>
     <!-- 拒单，取消弹窗 -->
     <el-dialog
       :title="cancelDialogTitle + '原因'"
@@ -515,6 +406,12 @@ const diaForm = ref<any>({})
 const isSearch = ref(false)
 const orderStatus = ref(0)
 const dialogOrderStatus = ref(0)
+const loading = ref(false)
+const onClear = () => {
+  valueTime.value = undefined // ❌ 不再是 []
+  console.log("valueTime = ", valueTime.value)
+  init(orderStatus.value)
+}
 
 const cancelOrderReasonList = [
   { value: 1, label: '订单量较多，暂时无法接单' },
@@ -540,6 +437,17 @@ const orderList = [
   { label: '已完成', value: 5 },
   { label: '已取消', value: 6 },
 ]
+
+// 辅助：把 Date 或可解析的时间字符串格式化为 API 所需的 'yyyy-MM-dd HH:mm:ss'
+function formatForApi(v: any) {
+  if (!v) return ''
+  const d = v instanceof Date ? v : new Date(v)
+  if (isNaN(d.getTime())) return String(v)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(
+    d.getHours()
+  )}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
 
 onMounted(() => {
   const status = Number(route.query.status) || 0
@@ -599,38 +507,142 @@ function getOrderType(row: any) {
 }
 
 async function init(activeIndex = 0, isSearchFlag?: boolean) {
+//   if (!Array.isArray(valueTime.value)) {
+//   valueTime.value = []
+// }
+  console.log('init 调用', { activeIndex, isSearchFlag })
+  if (loading.value) return
+  loading.value = true
+  try
+  {console.log("valueTime = ", valueTime.value)
   isSearch.value = !!isSearchFlag
   const params: any = {
     page: page.value,
     pageSize: pageSize.value,
     number: input.value || undefined,
     phone: phone.value || undefined,
-    beginTime: valueTime.value && valueTime.value.length > 0 ? valueTime.value[0] : undefined,
-    endTime: valueTime.value && valueTime.value.length > 0 ? valueTime.value[1] : undefined,
+// 在发送请求时手动格式化
+beginTime: valueTime.value[0] ? formatForApi(valueTime.value[0]) : undefined,
+endTime: valueTime.value[1] ? formatForApi(valueTime.value[1]) : undefined,
+
     status: activeIndex || undefined,
   }
   try {
     const res = await getOrderDetailPage({ ...params })
-    if (res.data.code === 1) {
-      tableData.value = res.data.data.records || []
+    if (Number(res.data.code) === 1) {
+      const data = res.data.data || {}
+      const raw = data.items || []
+      // 格式化时间字段，防止前端出现 NaN 或 undefined
+      tableData.value = raw.map((it: any) => {
+        const safeFormat = (v: any) => {
+          if (v === null || v === undefined || v === '') return ''
+          try {
+            const d = new Date(v)
+            if (!d || isNaN(d.getTime())) return String(v)
+            return d.toLocaleString()
+          } catch (e) {
+            return String(v)
+          }
+        }
+
+        // 兼容后端不同命名：id/orderid/OrderID，订单号使用 number 字段
+        const id = it.id ?? it.ID ?? it.orderId ?? it.orderID ?? it.orderid ?? it.OrderID
+        const number = it.number ?? it.orderNumber ?? it.orderNo ?? it.orderid ?? it.orderId ?? id
+
+        // 金额兼容：amount / totalPrice / totalprice / total_price
+        const rawAmount =
+          it.amount ?? it.totalPrice ?? it.totalprice ?? it.total_price ?? it.totalPrice ?? 0
+
+        // 订单明细兼容
+        const orderDetailList = it.orderDetailList ?? it.orderDetails ?? it.details ?? it.items ?? it.order_items ?? []
+
+        return {
+          ...it,
+          id,
+          number,
+          orderDetailList,
+
+          orderTime: safeFormat(
+            it.orderTime ??
+            it.order_time ??
+            it.createTime ??
+            it.create_time ??
+            it.createdAt ??
+            it.CreatedAt ??
+            it.created_at
+          ),
+
+          cancelTime: safeFormat(
+            it.cancelTime ??
+            it.cancel_time ??
+            it.cancelAt ??
+            it.CancelAt
+          ),
+
+          deliveryTime: safeFormat(
+            it.deliveryTime ??
+            it.delivery_time ??
+            it.deliveredAt ??
+            it.DeliveredAt
+          ),
+
+          estimatedDeliveryTime: safeFormat(
+            it.estimatedDeliveryTime ??
+            it.estimated_delivery_time ??
+            it.expectedtime ??
+            it.Expectedtime ??
+            it.expectedTime ??
+            it.ExpectedTime
+          ),
+
+          checkoutTime: safeFormat(
+            it.checkoutTime ??
+            it.checkout_time ??
+            it.paidAt ??
+            it.PaidAt ??
+            it.paymentTime
+          ),
+
+          amount:
+            typeof rawAmount === 'number'
+              ? rawAmount
+              : rawAmount
+              ? Number(rawAmount)
+              : 0,
+
+          packAmount:
+            it.packAmount ??
+            it.pack_amount ??
+            it.packageFee ??
+            it.packFee ??
+            ''
+        }
+
+      })
+      console.log("valueTime = ", valueTime.value)
       orderStatus.value = activeIndex
-      counts.value = Number(res.data.data.total)
+      counts.value = Number(data.total || data.totalCount || tableData.value.length || 0)
       getOrderListBy3Status()
       if (
         dialogOrderStatus.value === 2 &&
         orderStatus.value === 2 &&
         isAutoNext.value &&
         !isTableOperateBtn.value &&
-        res.data.data.records.length > 1
+        tableData.value.length > 1
       ) {
-        const r = res.data.data.records[0]
-        goDetail(r.id, r.status, r)
+        const r = tableData.value[0]
+        goDetail(r.id || r.orderId || r.orderid, r.status, r)
       }
+      console.log("后端返回原始数据:", raw)
+      console.log("格式化后的数据:", tableData.value)
+
     } else {
-      ElMessage.error(res.data.msg)
+      ElMessage.error(res?.data?.msg || '获取订单列表失败')
     }
   } catch (err: any) {
     ElMessage.error('请求出错了：' + err.message)
+  }}finally {
+    loading.value = false
   }
 }
 
@@ -638,12 +650,69 @@ async function goDetail(id: any, status: number, r?: any) {
   diaForm.value = {}
   dialogVisible.value = true
   dialogOrderStatus.value = status
+  
   orderId.value = id
   try {
     const { data } = await queryOrderDetailById({ orderId: id })
-    diaForm.value = data.data
+    const raw = data.data || {}
+
+    const safeFormat = (v: any) => {
+  if (!v) return ''
+
+  // 将非字符串类型统一转为字符串（避免对 Date 或对象调用 startsWith/includes 抛错）
+  let s: string
+  if (typeof v === 'string') s = v
+  else if (v instanceof Date) s = v.toISOString()
+  else s = String(v)
+
+  // 过滤无效时间
+  if (s === '0001-01-01T00:00:00Z' || s.startsWith('0001-01-01')) {
+    return ''
+  }
+
+  // 修正非 ISO 格式（空格改为 T）
+  if (s.includes(' ') && !s.includes('T')) {
+    s = s.replace(' ', 'T')
+  }
+
+  const d = new Date(s)
+  if (isNaN(d.getTime())) return ''
+
+  // 返回 ElementPlus 可识别格式：yyyy-MM-dd HH:mm:ss
+  const pad = (n: number) => String(n).padStart(2, '0')
+
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
+function openChatForOrder(row: any) {
+  const uid = row.user_base_id || row.userBaseId || row.userId || row.user_id || row.buyerId || row.buyer_id || row.base_user_id
+  if (!uid) {
+    ElMessage.error('无法定位订单对应的用户 ID')
+    return
+  }
+  window.dispatchEvent(new CustomEvent('chat:open', { detail: { merchantId: null, userBaseId: uid } }))
+}
+
+    const idVal = raw.id ?? raw.ID ?? raw.orderId ?? raw.orderID ?? raw.orderid ?? raw.OrderID
+    const numberVal = raw.number ?? raw.orderNumber ?? raw.orderNo ?? raw.orderid ?? raw.orderId ?? idVal
+    const amountVal = raw.amount ?? raw.totalPrice ?? raw.totalprice ?? raw.total_price ?? 0
+    const orderDetailListVal = raw.orderDetailList ?? raw.orderDetails ?? raw.details ?? raw.items ?? raw.order_items ?? []
+
+    diaForm.value = {
+      ...raw,
+      id: idVal,
+      number: numberVal,
+      orderDetailList: orderDetailListVal,
+      orderTime: safeFormat(raw.orderTime ?? raw.createTime ?? raw.createdAt ?? raw.created_at ?? raw.create_time ?? raw.expectedtime ?? raw.expectedTime),
+      cancelTime: safeFormat(raw.cancelTime ?? raw.cancel_time ?? raw.cancelAt),
+      deliveryTime: safeFormat(raw.deliveryTime ?? raw.delivery_time ?? raw.deliveredAt),
+      estimatedDeliveryTime: safeFormat(raw.estimatedDeliveryTime ?? raw.expectedtime ?? raw.expectedTime),
+      checkoutTime: safeFormat(raw.checkoutTime ?? raw.paidAt ?? raw.paymentTime),
+      amount: typeof amountVal === 'number' ? amountVal : amountVal ? Number(amountVal) : 0,
+      packAmount: raw.packAmount ?? raw.pack_amount ?? raw.packageFee ?? raw.packFee ?? '',
+    }
     row.value = r || { id: route.query.orderId, status }
-  if (route.query.orderId) router.push('/merchant/orders')
+    if (route.query.orderId) router.push('/merchant/orders')
   } catch (err: any) {
     ElMessage.error('请求出错了：' + err.message)
   }
@@ -749,47 +818,64 @@ function handleCurrentChange(val: any) {
     margin: 30px;
     // height: 100%;
     min-height: 700px;
-    .container {
+    .container, .main-container {
       background: #fff;
       position: relative;
       z-index: 1;
-      padding: 30px 28px;
-      border-radius: 4px;
-      // min-height: 650px;
-      height: calc(100% - 55px);
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 28px 32px;
+      border-radius: 10px;
+      box-shadow: 0 8px 30px rgba(20,24,31,0.06);
 
       .tableBar {
-        // display: flex;
-        margin-bottom: 20px;
-        justify-content: space-between;
-
-        .tableLab {
-          span {
-            cursor: pointer;
-            display: inline-block;
-            font-size: 14px;
-            padding: 0 20px;
-            color: $gray-2;
-            border-right: solid 1px $gray-4;
-          }
-        }
+        margin-bottom: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 12px;
       }
 
+      .tableLab {
+        span {
+          cursor: pointer;
+          display: inline-block;
+          font-size: 14px;
+          padding: 0 20px;
+          color: white;
+          border-right: solid 1px $gray-4;
+        }
+      }
+      .tableBar .el-input {
+  height: 40px;
+}
+
+.tableBar .el-input__wrapper {
+  height: 40px;
+  border-radius: 6px;
+  padding: 0 12px;
+}
+
+      /* Ensure inputs have consistent height so placeholder text isn't clipped */
       .tableBox {
         width: 100%;
         border: 1px solid $gray-5;
         border-bottom: 0;
+        border-radius: 8px;
+        overflow: hidden;
       }
 
       .pageList {
         text-align: center;
         margin-top: 30px;
       }
-      //查询黑色按钮样式
       .normal-btn {
         background: #333333;
         color: white;
         margin-left: 20px;
+        padding: 8px 14px;
+        border-radius: 6px;
       }
     }
     .hContainer {
@@ -1038,9 +1124,6 @@ function handleCurrentChange(val: any) {
     }
   }
 }
-</style>
-
-<style lang="scss">
 .dashboard-container {
   .cancelReason {
     padding-left: 40px;
@@ -1117,4 +1200,77 @@ function handleCurrentChange(val: any) {
     margin-top: 0 !important;
   }
 }
+.date-range {
+  width: 320px;
+}
+
+</style>
+
+/* 原生模态样式 */
+<style scoped>
+.native-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+.native-modal {
+  width: 860px;
+  max-width: calc(100% - 40px);
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+  overflow: hidden;
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 24px;
+  border-bottom: 1px solid #eee;
+}
+.modal-header .order-num {
+  font-weight: 700;
+  margin-left: 12px;
+  color: #222;
+}
+.modal-close {
+  cursor: pointer;
+  font-size: 16px;
+  color: #999;
+}
+.modal-body {
+  max-height: 520px;
+  overflow: auto;
+  padding: 18px 24px;
+}
+.modal-footer {
+  padding: 12px 20px;
+  border-top: 1px solid #f0f0f0;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+}
+.modal-footer .btn {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid #dcdcdc;
+  background: #fff;
+  cursor: pointer;
+}
+.modal-footer .btn.primary {
+  background: #409EFF;
+  color: #fff;
+  border-color: #409EFF;
+}
+.modal-footer .auto-next {
+  margin-right: auto;
+  font-size: 13px;
+  color: #333;
+}
+
 </style>

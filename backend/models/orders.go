@@ -1,15 +1,39 @@
 package models
 
 import (
+	"time"
+
 	"gorm.io/gorm"
 )
 
 type Order struct {
 	gorm.Model
-	OrderID uint `json:"orderid" gorm:"not null"`
-	PickupPoint string `json:"pickuppoint" gorm:"not null"`
-	DropofPoint string `json:"dropofpoint" gorm:"not null"`
-	ExpectedTime string `json:"expectedtime" gorm:"not null"`
-	Status string `json:"status" gorm:"not null"`
-	TotalPrice float64 `json:"totalprice" gorm:"not null"`
+
+	Consigneeid int  `json:"consigneeid" gorm:"not null"`
+	Userid      uint `json:"userid" gorm:"not null; default:1"`
+
+	PickupPoint  time.Time `json:"pickuppoint" gorm:"type:datetime;not null;default:current_timestamp"`
+	DropofPoint  time.Time `json:"dropofpoint" gorm:"type:datetime;not null;default:current_timestamp"`
+	ExpectedTime time.Time `json:"expectedtime" gorm:"type:datetime;not null;default:current_timestamp"`
+	Status       int       `json:"status" gorm:"not null default:'1'"`
+	TotalPrice   float64   `json:"totalprice" gorm:"not null"`
+	// 配送费（订单级别），单位: 元
+	DeliveryFee float64 `json:"delivery_fee" gorm:"type:decimal(8,2);default:2"`
+	MerchantID  uint    `json:"merchantid" gorm:"not null"`
+	Notes       string  `json:"notes"`
+
+	Numberoftableware int `json:"numberoftableware" gorm:"not null default:'0'"`
+
+	//支付信息
+	PayInfoid int     `json:"payid" gorm:"not null"`
+	PayInfo   PayInfo `gorm:"foreignKey:PayInfoid"`
+	// ==== 新增骑手相关字段 ====
+	RiderID    uint   `json:"rider_id" gorm:"default:0"`
+	PickupCode string `json:"pickup_code"`
+
+	// ========== 时间线字段（前端强需求） ==========
+	AcceptedAt *time.Time `json:"acceptedAt"` // 接单时间
+	PickupAt   *time.Time `json:"pickupAt"`   // 取货时间
+	DeliverAt  *time.Time `json:"deliverAt"`  // 开始配送时间
+	FinishAt   *time.Time `json:"finishAt"`   // 完成时间 （已派送）
 }

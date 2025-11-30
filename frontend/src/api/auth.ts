@@ -42,6 +42,71 @@ export const registerApi = (data: { username: string; password: string; role?: s
   });
 };
 
+// 单独的注册接口（细分为三种角色），后端可以分别处理不同字段与文件上传
+export const registerUser = (data: {
+  username: string;
+  password: string;
+  nickname?: string;
+  phone?: string;
+  address?: string;
+  code?: string;
+  role: "user";
+}) => {
+  return request({
+    url: "/register/user",
+    method: "POST",
+    data,
+  });
+};
+
+export const registerRider = (data: {
+  username: string;
+  password: string;
+  realname?: string;
+  idNumber?: string;
+  phone?: string;
+  vehicle?: string;
+  // 身份证照片通常通过单独的文件上传接口返回 URL，后端期望传递图片 URL 或直接接收 multipart 表单
+  // idPhotoUrl?: string;
+  code?: string;
+  role: "rider";
+}) => {
+  return request({
+    url: "/register/rider",
+    method: "POST",
+    data,
+  });
+};
+
+export const registerMerchant = (data: {
+  username: string;
+  password: string;
+  shopName?: string;
+  shopLocation?: string;
+  owner?: string;
+  phone?: string;
+  licenseUrl?: string;
+  logoUrl?: string;
+  code?: string;
+  role: "merchant";
+}) => {
+  return request({
+    url: "/register/merchant",
+    method: "POST",
+    data,
+  });
+};
+
+// 图片上传接口：接收 multipart/form-data，返回 { code:1, data: { url: 'https://.../file.jpg' } }
+export const uploadImage = (formData: FormData) => {
+  return request({
+    url: "/upload/image",
+    method: "POST",
+    data: formData,
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+};
+
 /**
  * changePassword(data)
  * 功能：修改密码（个人信息页）

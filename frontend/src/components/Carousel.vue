@@ -12,7 +12,7 @@
         <div class="overlay" v-if="idx === currentPos">
           <h2>{{ item.title }}</h2>
           <p>{{ item.desc }}</p>
-          <a :href="item.link" class="banner-btn">{{ item.buttonText }}</a>
+          <button type="button" class="banner-btn" @click.stop.prevent="handleBannerClick(item)">{{ item.buttonText }}</button>
         </div>
       </div>
     </div>
@@ -36,6 +36,13 @@ const props = defineProps({
   interval: { type: Number, default: 3500 },
   autoplay: { type: Boolean, default: true },
 })
+
+const emit = defineEmits(['banner-click'])
+
+function handleBannerClick(item) {
+  // emit to parent with item (originally from images)
+  emit('banner-click', item)
+}
 
 const currentIndex = ref(0)
 const offset = ref(0)
@@ -237,18 +244,75 @@ onMounted(() => {
   updateOffset(false)
   if (props.autoplay) timer = setInterval(next, props.interval)
   window.addEventListener('resize', onResize)
+
+  // Bind image load listeners so we recalc offset after images finish loading.
+  // This prevents incorrect initial measurements on first visit.
+  bindImageLoadListeners()
+
+  // Also recalc once when the whole window load fires (images cached or slow loads)
+  window.addEventListener('load', onWindowLoad)
+
+  // Small timeout fallback: ensure offset recalculated after micro delay
+  // in case images load after initial paint.
+  _retryTimeout = setTimeout(() => updateOffset(false), 220)
 })
 
 onBeforeUnmount(() => {
   pause()
   window.removeEventListener('resize', onResize)
+  window.removeEventListener('load', onWindowLoad)
   // 清理可能残留的 transitionend 监听
   const t = track.value
   if (t && lastTransitionHandler) {
     try { t.removeEventListener('transitionend', lastTransitionHandler) } catch (e) {}
     lastTransitionHandler = null
   }
+
+  // 清理 image load listeners and any retry timers
+  removeImageLoadListeners()
+  if (_retryTimeout) {
+    clearTimeout(_retryTimeout)
+    _retryTimeout = null
+  }
 })
+
+// --- 图片加载监听支持：确保在图片加载完成后重新计算 offset ---
+let _imageLoadHandlers = null
+let _retryTimeout = null
+
+function bindImageLoadListeners() {
+  const t = track.value
+  if (!t) return
+  const imgs = Array.from(t.querySelectorAll('img'))
+  if (!imgs || imgs.length === 0) return
+
+  _imageLoadHandlers = []
+  imgs.forEach((img) => {
+    // 如果图片已经加载完成（cache），仍然触发一次 update
+    const handler = () => {
+      try { img.removeEventListener('load', handler) } catch (e) {}
+      updateOffset(false)
+    }
+    img.addEventListener('load', handler)
+    _imageLoadHandlers.push({ img, handler })
+    if (img.complete) {
+      // defer to next tick to avoid layout thrash
+      requestAnimationFrame(() => updateOffset(false))
+    }
+  })
+}
+
+function removeImageLoadListeners() {
+  if (!_imageLoadHandlers) return
+  _imageLoadHandlers.forEach(({ img, handler }) => {
+    try { img.removeEventListener('load', handler) } catch (e) {}
+  })
+  _imageLoadHandlers = null
+}
+
+function onWindowLoad() {
+  updateOffset(false)
+}
 
 watch(() => props.images.length, () => {
   if (currentIndex.value >= props.images.length) currentIndex.value = 0
@@ -280,7 +344,7 @@ watch(() => props.images.length, () => {
   transition: all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   cursor: pointer;
   user-select: none;
-  border-radius: 12px;
+  border-radius: 28px;
   overflow: hidden;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
 }
@@ -376,11 +440,12 @@ watch(() => props.images.length, () => {
   color: #fff;
   padding: 10px 20px;
   border-radius: 8px;
+  border-width: 0px;
   text-decoration: none;
   font-weight: 600;
   font-size: 14px;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(255, 107, 0, 0.3);
+  box-shadow: 0 3px 3px rgba(255, 107, 0, 0.3);
 }
 
 .banner-btn:hover {

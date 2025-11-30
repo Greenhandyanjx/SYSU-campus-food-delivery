@@ -11,8 +11,9 @@ import axios from "axios";
  */
 
 // 创建 axios 实例
+// 使用相对路径 `/api`，在开发模式下 Vite 的 proxy 会将其转发到后端服务，避免硬编码主机/端口
 const service = axios.create({
-  baseURL: "http://localhost:3000/api", // 这里视情况改，比如你的后端前缀
+  baseURL: '/api',
   timeout: 5000,
 });
 
@@ -21,7 +22,11 @@ service.interceptors.request.use(
   (config) => {
     // 这里可以统一加 token
     const token = localStorage.getItem("token");
-    if (token) config.headers.Authorization = `Bearer ${token}`;
+    if (token) {
+      // token may already include the 'Bearer ' prefix (backend returns it that way).
+      // Avoid duplicating 'Bearer ' (which would produce 'Bearer Bearer ...').
+      config.headers.Authorization = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+    }
     return config;
   },
   (error) => Promise.reject(error)

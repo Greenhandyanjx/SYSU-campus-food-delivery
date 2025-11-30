@@ -3,27 +3,33 @@ package controller
 import (
 	"backend/global"
 	"backend/models"
+	"backend/utils"
+	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
-func Dish_add(ctx*gin.Context){
-    var dish models.Dish
-    if err := ctx.ShouldBind(&dish); err!= nil {
-		ctx.JSON(http.StatusBadRequest,gin.H{
-			"code":"400",
-			"msg":"binding error",
+func Dish_add(ctx *gin.Context) {
+	var dish models.Dish
+	baseUserID := ctx.MustGet("baseUserID").(uint)
+	if err := ctx.ShouldBind(&dish); err != nil {
+		fmt.Println("绑定错误:", err)
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"code": "400",
+			"msg":  "binding error",
 		})
 		return
 	}
-	if err := global.Db.AutoMigrate(&dish,&models.Flavor{}); err != nil {
-		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"code": "500",
-			"msg": "table create error",
-		})
+	// 将用户ID赋给菜品的MerchantID字段
+	dish.MerchantID = baseUserID
+	// 验证 category 在允许范围内（1..15）
+	if dish.Category < 1 || dish.Category > 15 {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 0, "msg": "invalid category id"})
 		return
 	}
 	if err := global.Db.Create(&dish).Error; err != nil {
@@ -34,204 +40,286 @@ func Dish_add(ctx*gin.Context){
 		})
 		return
 	}
+	// 成功创建后，更新商家的分类统计
+	go UpdateMerchantTopCategories(dish.MerchantID)
+	// 清除相关缓存（用户首页与该商家详情缓存）
+	go func(mid uint) {
+		ctx := context.Background()
+		_ = utils.Del(ctx, "stores:all")
+		_ = utils.Del(ctx, fmt.Sprintf("store:data:base_id:%d", mid))
+		_ = utils.Del(ctx, fmt.Sprintf("store:base_id:%d", mid))
+	}(dish.MerchantID)
 	ctx.JSON(http.StatusOK, gin.H{
-		"code":"1",
-		"msg":"dish added successfully",
+		"code": "1",
+		"msg":  "dish added successfully",
 	})
 }
 
 func Get_dishes(ctx *gin.Context) {
 	var params models.GetDishPageParams
-    if err := ctx.ShouldBindQuery(&params); err != nil {
-        ctx.JSON(http.StatusBadRequest, gin.H{
-            "code": "400",
-            "msg":  "请求参数错误",
-        })
-        return
-    }
-    // 计算分页参数
-    offset := (params.Page - 1) * params.Size
-    limit := params.Size
-    // 构建查询条件
-    var query = global.Db.Model(&models.Dish{}).Preload("Flavors")
-    if params.Name != "" {
-        query = query.Where("dish_name LIKE ?", "%"+params.Name+"%")
-    }
-    if params.CategoryId != "" {
-        categoryId, err := strconv.Atoi(params.CategoryId)
-        if err != nil {
-            ctx.JSON(http.StatusBadRequest, gin.H{
-                "code": "400",
-                "msg":  "分类ID格式错误",
-            })
-            return
-        }
-        query = query.Where("category = ?", categoryId)
-    }
+	if err := ctx.ShouldBindQuery(&params); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"code": "400",
+			"msg":  "请求参数错误",
+		})
+		return
+	}
+	// 获取上下文中的 baseUserID
+	baseUserID, exists := ctx.Get("baseUserID")
+	fmt.Println("id", baseUserID)
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{
+			"code": "401",
+			"msg":  "未找到商户ID",
+		})
+		return
+	}
+	// 确保 baseUserID 是 uint 类型
+	merchantID, ok := baseUserID.(uint)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, gin.H{
+			"code": "401",
+			"msg":  "商户ID类型错误",
+		})
+		return
+	}
+	// 计算分页参数
+	offset := (params.Page - 1) * params.Size
+	limit := params.Size
+	// 构建查询条件
+	var query = global.Db.Model(&models.Dish{}).Preload("Flavors").Where("merchant_id = ?", merchantID)
+	if params.Name != "" {
+		query = query.Where("dish_name LIKE ?", "%"+params.Name+"%")
+	}
+	if params.CategoryId != "" {
+		categoryId, err := strconv.Atoi(params.CategoryId)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{
+				"code": "400",
+				"msg":  "分类ID格式错误",
+			})
+			return
+		}
+		query = query.Where("category = ?", categoryId)
+	}
 	if params.Status != "" {
 		status, err := strconv.Atoi(params.Status)
 		if err != nil {
 			ctx.JSON(http.StatusBadRequest, gin.H{
 				"code": "400",
-				"msg":  "状态格式错误",	
-		})
+				"msg":  "状态格式错误",
+			})
 			return
 		}
 		query = query.Where("status = ?", status)
 	}
-    // 查询菜品列表
-    var dishes []models.Dish
-    if err := query.Offset(offset).Limit(limit).Find(&dishes).Error; err != nil {
-        log.Printf("数据库查询错误: %v", err)
-        ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-            "code": "500",
-            "msg":  "数据库查询错误",
-        })
-        return
-    }
-    // 查询总记录数
-    var total int64
-    if err := query.Count(&total).Error; err != nil {
-        log.Printf("数据库计数错误: %v", err)
-        ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-            "code": "500",
-            "msg":  "数据库计数错误",
-        })
-        return
-    }
-    // 准备返回数据
-    items := make([]gin.H, len(dishes))
-    for i, dish := range dishes {
-        items[i] = gin.H{
-            "id":          dish.ID,
-            "name":        dish.DishName,
-            "price":       dish.Price,
-            "status":      dish.Status,
-            "categoryId":  dish.Category,
-            "stock":       0, // 假设 stock 字段在 Dish 结构体中不存在，这里返回 0
-        }
-    }
-    // 返回结果
-    ctx.JSON(http.StatusOK, gin.H{
-        "code": "1",
+	// 查询菜品列表
+	var dishes []models.Dish
+	if err := query.Offset(offset).Limit(limit).Find(&dishes).Error; err != nil {
+		log.Printf("数据库查询错误: %v", err)
+		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"code": "500",
+			"msg":  "数据库查询错误",
+		})
+		return
+	}
+	// 查询总记录数
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		log.Printf("数据库计数错误: %v", err)
+		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"code": "500",
+			"msg":  "数据库计数错误",
+		})
+		return
+	}
+	// 准备返回数据
+	items := make([]gin.H, len(dishes))
+	for i, dish := range dishes {
+		items[i] = gin.H{
+			"id":         dish.ID,
+			"name":       dish.DishName,
+			"price":      dish.Price,
+			"status":     dish.Status,
+			"imageUrl":   dish.ImagePath,
+			"categoryId": dish.Category,
+			"stock":      0, // 假设 stock 字段在 Dish 结构体中不存在，这里返回 0
+		}
+	}
+	// 返回结果
+	ctx.JSON(http.StatusOK, gin.H{
+		"code": "1",
 		"msg":  "获取菜品列表成功",
-        "data": gin.H{
-            "items": items,
-            "total": total,
-        },
-    })
+		"data": gin.H{
+			"items": items,
+			"total": total,
+		},
+	})
 }
 
-func Edit_dish(c*gin.Context){
-	 var dish models.Dish
-    if err := c.ShouldBindJSON(&dish); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "请求体格式错误", "data": nil})
-        return
-    }
-    // 根据 ID 查找菜品
-    var existingDish models.Dish
-    if err := global.Db.First(&existingDish, dish.ID).Error; err != nil {
-        c.JSON(http.StatusNotFound, gin.H{"code": 0, "message": "菜品未找到", "data": nil})
-        return
-    }
-    // 更新菜品信息
-    if err := global.Db.Model(&existingDish).Updates(models.Dish{
-        DishName:    dish.DishName,
-        Price:       dish.Price,
-        Description: dish.Description,
-        MerchantID:  dish.MerchantID,
-        Tastes:      dish.Tastes,
-        ImagePath:   dish.ImagePath,
-        Category:    dish.Category,
-        Status:      dish.Status,
-    }).Error; err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "更新菜品信息失败", "data": nil})
-        return
-    }
-    // 返回成功响应
-    c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"success": true, "dishId": strconv.Itoa(dish.ID)}})
+func Edit_dish(c *gin.Context) {
+	var dish models.Dish
+	if err := c.ShouldBindJSON(&dish); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "请求体格式错误", "data": nil})
+		return
+	}
+	// 根据 ID 查找菜品
+	var existingDish models.Dish
+	if err := global.Db.First(&existingDish, dish.ID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"code": 0, "message": "菜品未找到", "data": nil})
+		return
+	}
+	// 更新菜品信息
+	if err := global.Db.Model(&existingDish).Updates(models.Dish{
+		DishName:    dish.DishName,
+		Price:       dish.Price,
+		Description: dish.Description,
+		MerchantID:  dish.MerchantID,
+		// Tastes:      dish.Tastes,
+		ImagePath: dish.ImagePath,
+		Category:  dish.Category,
+		Status:    dish.Status,
+	}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "更新菜品信息失败", "data": nil})
+		return
+	}
+	// 返回成功响应
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"success": true, "dishId": strconv.Itoa(dish.ID)}})
+	// 更新商家分类统计（异步）
+	go UpdateMerchantTopCategories(existingDish.MerchantID)
 }
 
-func Delete_dish(c*gin.Context){
-	 // 绑定请求体到 map 结构体
-    var request map[string]interface{}
-    if err := c.ShouldBindJSON(&request); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "请求体格式错误", "data": nil})
-        return
-    }
-    // 获取请求中的 id 或 id 列表
-    idOrList, ok := request["id"]
-    if !ok {
-        c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "请求体中缺少 id 字段", "data": nil})
-        return
-    }
-    var removedIDs []string
-    switch ids := idOrList.(type) {
-    case string:
-        // 单个菜品删除
-        removedIDs = append(removedIDs, ids)
-        if err := global.Db	.Delete(&models.Dish{}, ids).Error; err != nil {
-            c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "删除菜品失败", "data": nil})
-            return
-        }
-    case []interface{}:
-        // 批量删除菜品
-        for _, id := range ids {
-            if idStr, ok := id.(string); ok {
-                removedIDs = append(removedIDs, idStr)
-                if err := global.Db.Delete(&models.Dish{}, idStr).Error; err != nil {
-                    c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "删除菜品失败", "data": nil})
-                    return
-                }
-            } else {
-                c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "id 列表中包含非字符串类型", "data": nil})
-                return
-            }
-        }
-    default:
-        c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "id 字段类型错误", "data": nil})
-        return
-    }
-    // 返回成功响应
-    c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"success": true, "removed": removedIDs}})
+func Delete_dish(c *gin.Context) {
+	// 绑定请求体到 map 结构体
+	var request map[string]interface{}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "请求体格式错误", "data": nil})
+		return
+	}
+	// 获取请求中的 id 或 id 列表
+	idOrList, ok := request["id"]
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "请求体中缺少 id 字段", "data": nil})
+		return
+	}
+	var removedIDs []string
+	switch ids := idOrList.(type) {
+	case string:
+		// 单个菜品删除
+		removedIDs = append(removedIDs, ids)
+		if err := global.Db.Delete(&models.Dish{}, ids).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "删除菜品失败", "data": nil})
+			return
+		}
+	case []interface{}:
+		// 批量删除菜品
+		for _, id := range ids {
+			if idStr, ok := id.(string); ok {
+				removedIDs = append(removedIDs, idStr)
+				if err := global.Db.Delete(&models.Dish{}, idStr).Error; err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "删除菜品失败", "data": nil})
+					return
+				}
+			} else {
+				c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "id 列表中包含非字符串类型", "data": nil})
+				return
+			}
+		}
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "id 字段类型错误", "data": nil})
+		return
+	}
+	// 返回成功响应
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"success": true, "removed": removedIDs}})
+	// 删除后尝试更新商家分类统计（异步）
+	// 如果能从请求体中推断 merchantID，可传入具体值；这里使用 baseUserID 不总是可行，
+	// 因此保守做法：触发一次全表统计对低流量场景可接受。
+	// TODO: 若有 merchantID 可用，应改为 UpdateMerchantTopCategories(merchantID)
+	go func() {
+		// 无 merchantID，尝试不做任何操作以避免不必要的全表扫描
+	}()
 }
 
 func Edit_DishStatus_By_Status(c *gin.Context) {
-    // 绑定请求体到 Dish 结构体
-    var request struct {
-        ID     string `json:"id" form:"id"`
-        Status string `json:"status" form:"status"`
-    }
-    if err := c.ShouldBindJSON(&request); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "请求体格式错误", "data": nil})
-        return
-    }
-    // 根据前端传递的 status 字段转换为数据库中的整数值
-    var status int
-    switch request.Status {
-    case "on":
-        status = 1
-    case "off":
-        status = 0
-    case "recommended":
-        status = 1 // 假设推荐状态对应的值为 2
-    default:
-        c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "状态值无效", "data": nil})
-        return
-    }
-    // 根据 ID 查找菜品
-    var existingDish models.Dish
-    if err := global.Db.First(&existingDish, request.ID).Error; err != nil {
-        c.JSON(http.StatusNotFound, gin.H{"code": 0, "message": "菜品未找到", "data": nil})
-        return
-    }
-    // 更新菜品状态
-    if err :=global.Db.Model(&existingDish).Updates(models.Dish{
-        Status: status,
-    }).Error; err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "更新菜品状态失败", "data": nil})
-        return
-    }
-    // 返回成功响应
-    c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"success": true}})
+	// 绑定请求体到 Dish 结构体
+	var request struct {
+		ID     int    `json:"id" form:"id"`
+		Status string `json:"status" form:"status"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "请求体格式错误", "data": nil})
+		return
+	}
+	// 根据前端传递的 status 字段转换为数据库中的整数值
+	var status int
+	switch request.Status {
+	case "1":
+		status = 1
+	case "0":
+		status = 0
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "状态值无效", "data": nil})
+		return
+	}
+	// 根据 ID 查找菜品
+	var existingDish models.Dish
+	if err := global.Db.First(&existingDish, request.ID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"code": 0, "message": "菜品未找到", "data": nil})
+		return
+	}
+	// 更新菜品状态
+	fmt.Println("status", status)
+	if err := global.Db.Model(&existingDish).Update("status", status).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "更新菜品状态失败", "data": nil})
+		return
+	}
+	// 返回成功响应
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"success": true}})
+}
+
+// GET /merchant/dish/list
+// queryDishList 处理基于条件查询菜品的请求
+func QueryDishList(c *gin.Context) {
+	// 获取请求参数
+	categoryId := c.Query("categoryId")
+	name := c.Query("name")
+	// 构建查询条件
+	var dishes []models.Dish
+	db := global.Db
+	if categoryId != "" && name != "" {
+		db = db.Where("category = ? AND name LIKE ?", categoryId, "%"+name+"%")
+	} else if categoryId != "" {
+		db = db.Where("category = ?", categoryId)
+	} else if name != "" {
+		db = db.Where("name LIKE ?", "%"+name+"%")
+	}
+	// 执行查询
+	if err := db.Find(&dishes).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "查询菜品失败", "data": nil})
+		return
+	}
+	// 返回成功响应
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": dishes})
+}
+
+// queryDishById 处理查询单个菜品详情的请求
+func Get_Dish_ById(c *gin.Context) {
+	// 获取请求参数中的 id
+	id := c.Query("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "请求参数中缺少 id 字段", "data": nil})
+		return
+	}
+	// 构建查询条件
+	var dish models.Dish
+	if err := global.Db.First(&dish, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"code": 0, "message": "菜品不存在", "data": nil})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "查询菜品失败", "data": nil})
+		}
+		return
+	}
+	// 返回成功响应
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": dish})
 }

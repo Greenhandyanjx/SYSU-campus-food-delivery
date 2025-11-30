@@ -24,14 +24,43 @@ func SetRouter() *gin.Engine {
 	noAuth := fe.Group("/api")
 	{
 		noAuth.POST("/login", controller.Login)
-		noAuth.POST("/register", controller.Register_Base_User_temp)
-		noAuth.POST("/user/register", controller.Register_User)
-		noAuth.POST("/rider/register", controller.Register_Rider)
-		noAuth.POST("/merchant/register", controller.Register_Merchant)
+		noAuth.POST("/register", controller.Register)
+		// 兼容以前的单独注册路由，指向统一的 Register
+		noAuth.POST("/register/user", controller.Register)
+		noAuth.POST("/register/rider", controller.Register)
+		noAuth.POST("/register/merchant", controller.Register)
+
 		noAuth.GET("/merchant/category/list", controller.Get_category)
 		noAuth.GET("/merchant/dish/categories", controller.Get_category)
-		noAuth.GET("/merchant/dishes/page", controller.Get_dishes)
+
+		noAuth.GET("/merchant/common/download", controller.CommonDownload)
+		// 管理性接口（一次性操作）：替换 categories 表（注意：需要 ?force=1）
+		noAuth.POST("/admin/seed_categories", controller.ReplaceCategories)
+		// 用户侧店铺查询与菜品接口
+		noAuth.GET("/store/query", controller.GetStoreByQuery)
+		noAuth.GET("/store/dishes", controller.GetStoreDishes)
+		// 用户首页获取店铺列表（无需鉴权）
+		noAuth.GET("/user/stores", controller.GetStores)
+		// 允许未登录用户上传图片（用于注册页面等）
 		noAuth.POST("/common/upload", controller.UploadImage)
+
+		noAuth.GET("/merchant/orders/status", controller.GetOrderListByStatus)
+		noAuth.GET("/merchant/orders/page", controller.GetOrderPage)
+		noAuth.GET("/merchant/order/detail", controller.GetOrderDetail)
+		// 支付平台回调（notify）
+		noAuth.POST("/order/notify", controller.PaymentNotify)
+		// 前端轮询订单状态（允许无鉴权以兼容扫码页面）
+		noAuth.GET("/order/status", controller.GetOrderStatus)
+		// lookup endpoints for frontend
+		noAuth.GET("/merchant/detail", controller.GetMerchantDetail)
+		// 获取商家配送配置（前端展示起送价/配送费/配送范围）
+		noAuth.GET("/merchant/delivery_config", controller.GetMerchantDeliveryConfig)
+		noAuth.GET("/baseuser/detail", controller.GetBaseUserDetail)
+		// debug: list active websocket connections (base_user ids)
+		noAuth.GET("/debug/ws/connections", controller.DebugConnections)
+		// WebSocket 握手允许通过查询参数 token 或 uid 进行鉴权，放到无鉴权组以便控制器自行处理
+		noAuth.GET("/chat/ws", controller.ChatWS)
+		noAuth.POST("/merchant/order/add", controller.Orderadd)
 
 	}
 	// 创建一个需要中间件的组
@@ -39,12 +68,146 @@ func SetRouter() *gin.Engine {
 	auth.Use(midware.AuthMiddleware())
 	{
 		auth.POST("/change_password", controller.ChangePassword)
+
 		auth.POST("/merchant/dish/add", controller.Dish_add)
-		auth.POST("/merchant/meal/add", controller.Meal_add)
 		auth.POST("/merchant/dish/edit", controller.Edit_dish)
 		auth.POST("/merchant/dish/delete", controller.Delete_dish)
-		auth.GET("/merchant/dish/status", controller.Edit_DishStatus_By_Status)
+		auth.GET("/merchant/dish/list", controller.QueryDishList)
+		auth.GET("/merchant/dish/query", controller.Get_Dish_ById)
+		auth.POST("/merchant/dish/status", controller.Edit_DishStatus_By_Status)
+		auth.GET("/merchant/dishes/page", controller.Get_dishes)
+
+		auth.POST("/merchant/meal/add", controller.Meal_add)
+		auth.POST("/merchant/meal/status", controller.Edit_Meal_Status)
+		auth.POST("/merchant/meal/delete", controller.Meal_Delete)
+		auth.POST("merchant/meal/edit", controller.Meal_Edit)
+		auth.GET("/merchant/meal/query", controller.Get_Meal_ById)
+		auth.GET("/merchant/meal/page", controller.GetMealsPage)
+
+		auth.POST("/merchant/order/accept", controller.OrderAccept)
+		auth.POST("/merchant/order/reject", controller.OrderReject)
+		auth.POST("/merchant/order/delivery", controller.OrderDelivery)
+		auth.POST("/merchant/order/complete", controller.OrderComplete)
 		// 其他需要中间件保护的路由可以添加在这里
+		// 聊天 WebSocket 与历史接口
+		auth.GET("/chat/history", controller.ChatHistory)
+		// 用户侧会话列表
+		auth.GET("/user/chats", controller.GetUserChats)
+		// 用户侧已读标记
+		auth.POST("/user/chats/mark_read", controller.MarkUserChatRead)
+		// 商家会话列表与已读标记
+		auth.GET("/merchant/chats", controller.GetMerchantChats)
+		auth.POST("/merchant/chats/mark_read", controller.MarkChatRead)
+		//需要中间件读取的信息
+		auth.GET("/merchant/businessData", controller.GetBusinessData)
+		auth.GET("/merchant/orderData", controller.GetOrderData)
+		auth.GET("/merchant/overviewDishes", controller.GetOverviewDishes)
+		auth.GET("/merchant/setMealStatistics", controller.GetOverviewMeals)
+		//数据统计页面
+		auth.GET("/merchant/statistics/turnover", controller.GetDataOverView)
+		auth.GET("/merchant/statistics/user", controller.GetUserData)
+		auth.GET("/merchant/statistics/order", controller.GetOrderStatistics)
+		// ====== Rider APIs ======
+		auth.GET("/rider/info", controller.GetRiderInfo)
+		auth.POST("/rider/status", controller.UpdateRiderStatus)
+		auth.GET("/rider/orders/new", controller.GetNewOrders)
+		auth.POST("/rider/orders/:orderId/pickup", controller.PickupOrder)
+		auth.GET("/rider/orders/delivering", controller.GetDeliveringOrders)
+		auth.POST("/rider/orders/:orderId/complete", controller.CompleteOrder)
+		auth.GET("/rider/orders/history", controller.GetOrderHistory)
+		auth.GET("/rider/orders/pickup", controller.GetPickupOrders)
+		auth.GET("/rider/orders/:orderId", controller.GetOrderDetailForRider)
+		auth.GET("/rider/income/today", controller.GetTodayIncome)
+		auth.GET("/rider/income/summary", controller.GetIncomeSummary)
+		auth.GET("/rider/income/month", controller.GetMonthIncome)
+		auth.GET("/rider/dashboard", controller.GetRiderDashboard)
+		auth.POST("/rider/location", controller.UpdateRiderLocation)
+		// ====== Rider APIs (missing parts added) ======
+
+		auth.POST("/rider/orders/:orderId/accept", controller.AcceptOrder) // 正式版接单接口
+
+		// 收入统计
+		auth.GET("/rider/income/stats", controller.GetIncomeStats)
+		auth.GET("/rider/income/history", controller.GetIncomeHistory)
+
+		// 每周数据统计
+		auth.GET("/rider/stats/weekly", controller.GetWeeklyStats)
+
+		// 钱包
+		auth.GET("/rider/wallet", controller.GetWalletInfo)
+		auth.POST("/rider/wallet/withdraw", controller.Withdraw)
+		auth.GET("/rider/wallet/withdraw/history", controller.GetWithdrawHistory)
+
+		// 配送路线
+		auth.GET("/rider/orders/:orderId/route", controller.GetDeliveryRoute)
+		// 并发安全的接单接口（可替代原来的）
+		auth.POST("/rider/orders/:orderId/accept_safe", controller.AcceptOrderSafe)
+
+		auth.GET("merchant/statistics/top", controller.GetTopSales)
+
+		auth.GET("/user/cart", controller.GetUserCart)
+		auth.POST("/user/cart/add", controller.AddToCart) // 添加到购物车
+		auth.POST("/user/cart/deleteSelected", controller.DeleteSelected)
+		auth.POST("/user/cart/selectAll", controller.SelectAll)
+		auth.POST("/user/cart/selectItem", controller.SelectItem)
+		auth.POST("/user/cart/selectShop", controller.SelectShop)
+
+		// 支付相关接口
+		auth.POST("/order/createPayOrder", controller.CreatePayOrder)
+		// 创建 pending（用户进入结算但未完成支付时持久化的订单）
+		auth.POST("/order/createPending", controller.CreatePendingOrder)
+
+		// 用户端订单接口：列表与详情
+		auth.GET("/user/order/list", controller.GetUserOrderList)
+		auth.GET("/user/order/:id", controller.GetUserOrderDetail)
+		// 用户端订单操作：取消、支付、更新收货人/地址
+		auth.POST("/user/order/cancel", controller.CancelOrder)
+		auth.POST("/user/order/pay", controller.PayOrder)
+		auth.POST("/user/order/updateAddress", controller.UpdateOrderAddress)
+
+		// User address management
+		auth.GET("/user/addresses", controller.GetUserAddresses)
+		auth.POST("/user/address", controller.AddUserAddress)
+		auth.PUT("/user/address/:id", controller.EditUserAddress)
+		auth.POST("/user/address/:id/default", controller.SetDefaultAddress)
+		auth.DELETE("/user/address/:id", controller.DeleteUserAddress)
+		// ====== Rider 扩展接口（根据 index.ts 补全） ======
+		// 配送状态扩展
+		auth.PUT("/rider/orders/:orderId/start", controller.StartDelivery)
+		auth.PUT("/rider/orders/:orderId/arrive-pickup", controller.ArrivePickup)
+		auth.PUT("/rider/orders/:orderId/status", controller.UpdateDeliveryStatus)
+		auth.POST("/rider/orders/:orderId/issue", controller.ReportIssue)
+
+		// 收入明细 & 配送记录
+		auth.GET("/rider/income/details", controller.GetIncomeDetails)
+		auth.GET("/rider/delivery/records", controller.GetDeliveryRecords)
+
+		// 工作统计
+		auth.GET("/rider/stats/work", controller.GetWorkStats)
+		auth.GET("/rider/stats/monthly", controller.GetMonthlyStats)
+
+		// 评价 & 排行榜
+		auth.GET("/rider/reviews", controller.GetReviews)
+		auth.GET("/rider/ranking/:type", controller.GetRanking)
+
+		// 通知 & 系统消息 & 热力图
+		auth.GET("/rider/notifications", controller.GetNotifications)
+		auth.PUT("/rider/notifications/:id/read", controller.MarkNotificationRead)
+		auth.GET("/rider/messages/system", controller.GetSystemMessages)
+		auth.GET("/rider/heatmap", controller.GetHeatmapData)
+
+		// 认证
+		auth.GET("/rider/verification", controller.GetVerification)
+		auth.POST("/rider/verification", controller.SubmitVerification)
+
+		// 设置
+		auth.GET("/rider/settings/work", controller.GetWorkSettings)
+		auth.PUT("/rider/settings/work", controller.UpdateWorkSettings)
+		auth.GET("/rider/settings/account", controller.GetAccountSettings)
+		auth.PUT("/rider/settings/account", controller.UpdateAccountSettings)
+		auth.GET("/rider/settings/notification", controller.GetNotificationSettings)
+		auth.PUT("/rider/settings/notification", controller.UpdateNotificationSettings)
+
 	}
 	return fe
 }
