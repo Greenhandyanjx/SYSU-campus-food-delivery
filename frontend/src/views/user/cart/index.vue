@@ -357,9 +357,22 @@ async function onCheckout() {
       const res: any = await cartApi.createPending({ shops: pendingShops })
       // 尝试解析响应中的 orders 字段并保存到 session，供 Checkout 使用
       const orders = (res && res.data && (res.data.orders || res.data.orders)) || res.orders || res
-      let ids: any[] = []
+      const extractId = (o: any) => {
+        if (o == null) return null
+        if (typeof o === 'number') return String(o)
+        if (typeof o === 'string') return o
+        const candidates = [o.orderId, o.id, o.OrderID, o.order_id, o.OrderId, o.ID]
+        for (const c of candidates) { if (c !== undefined && c !== null) return String(c) }
+        if (o.data && (o.data.id || o.data.orderId)) return String(o.data.id || o.data.orderId)
+        if (o.order && (o.order.id || o.order.orderId)) return String(o.order.id || o.order.orderId)
+        return null
+      }
+      let ids: string[] = []
       if (Array.isArray(orders)) {
-        ids = orders.map((o: any) => String(o.orderId || o.OrderID || o.order_id || o.id || o))
+        for (const o of orders) {
+          const id = extractId(o)
+          if (id) ids.push(id)
+        }
       }
       if (ids.length > 0) {
         sessionStorage.setItem('pending_orders', JSON.stringify(ids))

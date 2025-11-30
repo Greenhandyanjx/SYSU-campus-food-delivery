@@ -171,6 +171,8 @@ import {
   dishStatusByStatus,
   dishCategoryList as fetchDishCategoryList
 } from '@/api/merchant/dish'
+import { getBaseUserDetail } from '@/api/chat'
+import request from '@/api/merchant/request'
 
 const router = useRouter()
 const input = ref('')
@@ -181,6 +183,7 @@ const checkList = ref<string[]>([])
 const tableData = ref<any[]>([])
 const dishState = ref<any>('')
 const dishCategoryOptions = ref<any[]>([])
+const merchantId = ref<number | null>(null)
 const categoryId = ref('')
 const dishStatus = ref('')
 const imageUrl = ref('')
@@ -194,14 +197,16 @@ const saleStatus = ref([
 async function init(isSearchFlag?: boolean) {
   isSearch.value = !!isSearchFlag
   try {
-    const res = await getDishPage({
+    const params: any = {
       page: page.value,
       pageSize: pageSize.value,
       name: input.value || undefined,
       categoryId: categoryId.value || undefined,
       imageUrl: imageUrl.value || undefined,
       status: dishStatus.value
-    })
+    }
+    if (merchantId.value) params.merchantId = merchantId.value
+    const res = await getDishPage(params)
 
     // 组件已卸载则直接返回（防止卸载后更新导致 DOM 访问错误）
     if (isUnmounted.value) return
@@ -345,8 +350,23 @@ function handleCurrentChange(val: any) {
 }
 
 onMounted(() => {
-  init()
-  getDishCategoryList()
+  // 获取当前 base user id 并解析对应的 merchant（通过 base_id）以便前端双重校验/传参
+  ;(async () => {
+    try {
+      const u = await getBaseUserDetail()
+      const uid = u && u.data && u.data.data && u.data.data.id
+      if (uid) {
+        // 通过 base_id 查询商家信息
+        const res = await request({ url: '/merchant/detail', method: 'get', params: { base_id: uid } })
+        const m = res && res.data && res.data.data
+        if (m && m.id) merchantId.value = m.id
+      }
+    } catch (e) {
+      // ignore, merchantId will stay null and backend will still enforce auth filtering
+    }
+    init()
+    getDishCategoryList()
+  })()
 })
 onBeforeUnmount(() => {
   isUnmounted.value = true

@@ -114,6 +114,8 @@ import {
   enableOrDisableSetmeal,
   deleteSetmeal,
 } from "@/api/merchant/setMeal";
+import { getBaseUserDetail } from '@/api/chat'
+import request from '@/api/merchant/request'
 
 const router = useRouter();
 
@@ -123,6 +125,7 @@ const pageSize = ref(10);
 const total = ref(0);
 const records = ref<any[]>([]);
 const options = ref<any[]>([]);
+const merchantId = ref<number | null>(null)
 const categoryId = ref<any>("");
 const statusArr = [
   { value: "0", label: "停售" },
@@ -139,6 +142,7 @@ function pageQuery() {
     status: status.value,
     categoryId: categoryId.value,
   };
+  if (merchantId.value) (params as any).merchantId = merchantId.value
   getSetmealPage(params).then((res: any) => {
     if (Number(res.data.code) === 1) {
       console.log("套餐列表：", res.data.data); // ✅ 在 return 之前打印
@@ -215,12 +219,23 @@ function handleSelectionChange(val: any) {
 }
 
 onMounted(() => {
-  getCategoryByType({ type: 2 }).then((res: any) => {
-    if (res.data.code === 1) {
-      options.value = res.data.data;
-    }
-  });
-  pageQuery();
+  ;(async () => {
+    try {
+      const u = await getBaseUserDetail()
+      const uid = u && u.data && u.data.data && u.data.data.id
+      if (uid) {
+        const res = await request({ url: '/merchant/detail', method: 'get', params: { base_id: uid } })
+        const m = res && res.data && res.data.data
+        if (m && m.id) merchantId.value = m.id
+      }
+    } catch (e) {}
+    getCategoryByType({ type: 2 }).then((res: any) => {
+      if (res.data.code === 1) {
+        options.value = res.data.data;
+      }
+    });
+    pageQuery();
+  })()
 });
 </script>
 <style lang="scss">

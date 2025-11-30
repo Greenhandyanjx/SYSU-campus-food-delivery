@@ -184,6 +184,8 @@ func GetOrderDetail(c *gin.Context) {
 	response := gin.H{
 		"code": 1,
 		"data": gin.H{
+			"deliveryFee":     order.DeliveryFee,
+			"delivery_fee":    order.DeliveryFee,
 			"id":              order.ID,
 			"orderId":         order.ID,
 			"number":          order.CreatedAt.Format("20060102") + fmt.Sprintf("%06d", order.ID),
@@ -305,19 +307,21 @@ func GetUserOrderList(c *gin.Context) {
 		}
 
 		items = append(items, gin.H{
-			"id":          o.ID,
-			"number":      num,
-			"amount":      o.TotalPrice,
-			"status":      o.Status,
-			"orderTime":   o.CreatedAt.Format(time.RFC3339),
-			"createdAt":   o.CreatedAt.Format(time.RFC3339),
-			"created_at":  o.CreatedAt.Format(time.RFC3339),
-			"time":        o.CreatedAt.Format(time.RFC3339),
-			"payDeadline": payDeadline,
-			"merchantId":  o.MerchantID,
-			"storeName":   m.ShopName,
-			"storeLogo":   m.Logo,
-			"items":       itms,
+			"id":              o.ID,
+			"number":          num,
+			"amount":          o.TotalPrice,
+			"deliveryFee":     o.DeliveryFee,
+			"delivery_amount": o.DeliveryFee,
+			"status":          o.Status,
+			"orderTime":       o.CreatedAt.Format(time.RFC3339),
+			"createdAt":       o.CreatedAt.Format(time.RFC3339),
+			"created_at":      o.CreatedAt.Format(time.RFC3339),
+			"time":            o.CreatedAt.Format(time.RFC3339),
+			"payDeadline":     payDeadline,
+			"merchantId":      o.MerchantID,
+			"storeName":       m.ShopName,
+			"storeLogo":       m.Logo,
+			"items":           itms,
 		})
 	}
 
@@ -781,9 +785,9 @@ func CreatePayOrder(c *gin.Context) {
 	}
 
 	// 为每个商家创建或升级 order，关联同一个 payinfo
-	// 先查找当前用户是否已有 pending (status=0) 订单，若存在并匹配 merchant，则升级该订单为待支付状态并关联本次 payinfo
+	// 先查找当前用户是否已有 pending (status=1) 订单，若存在并匹配 merchant，则复用该订单并关联本次 payinfo
 	var pendingOrders []models.Order
-	if err := tx.Where("status = ? AND consigneeid = ?", 0, req.Consigneeid).Find(&pendingOrders).Error; err == nil {
+	if err := tx.Where("status = ? AND consigneeid = ?", 1, req.Consigneeid).Find(&pendingOrders).Error; err == nil {
 		// pendingOrders loaded
 	}
 
@@ -797,7 +801,11 @@ func CreatePayOrder(c *gin.Context) {
 	for _, s := range req.Shops {
 		if po, ok := pendingMap[s.MerchantID]; ok {
 			// 升级现有 pending order
-			if err := tx.Model(&models.Order{}).Where("id = ?", po.ID).Updates(map[string]interface{}{"status": 1, "pay_infoid": int(pay.ID), "total_price": s.TotalPrice}).Error; err != nil {
+			updates := map[string]interface{}{"status": 1, "pay_infoid": int(pay.ID), "total_price": s.TotalPrice}
+			if s.DeliveryAmount > 0 {
+				updates["delivery_fee"] = s.DeliveryAmount
+			}
+			if err := tx.Model(&models.Order{}).Where("id = ?", po.ID).Updates(updates).Error; err != nil {
 				tx.Rollback()
 				c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to upgrade pending order"})
 				return
@@ -814,6 +822,7 @@ func CreatePayOrder(c *gin.Context) {
 			ExpectedTime: time.Now(),
 			Status:       1, // 1 = unpaid/created
 			TotalPrice:   s.TotalPrice,
+			DeliveryFee:  s.DeliveryAmount,
 			MerchantID:   s.MerchantID,
 			Notes:        req.Remarks,
 			PayInfoid:    int(pay.ID),
@@ -930,8 +939,9 @@ func CreatePendingOrder(c *gin.Context) {
 			PickupPoint:  time.Now(),
 			DropofPoint:  time.Now(),
 			ExpectedTime: time.Now(),
-			Status:       1, // 1 = unpaid/created (用户已创建，待付款)
+			Status:       1, // 1 = unpaid/created (预下单/未支付)
 			TotalPrice:   s.TotalPrice + s.DeliveryAmount,
+			DeliveryFee:  s.DeliveryAmount,
 			MerchantID:   s.MerchantID,
 			Notes:        req.Remarks,
 			PayInfoid:    int(pay.ID),

@@ -422,7 +422,9 @@ onMounted(async () => {
     const route = useRoute()
     const qid = route.query.orderId
     if (qid) {
-      // 支付已有订单 —— 不创建新的 pending，只将该订单 id 作为待支付目标
+      // 如果 URL 带有 orderId，立即将其作为待支付目标，避免后续回退到 createPayOrder
+      pendingOrders.value = [String(qid)]
+      // 支付已有订单 —— 不创建新的 pending，只将该订单 id 作为待支付目标并尝试加载详情
       try {
         const od: any = await orderApi.getOrderDetail(String(qid))
         const odata = od && od.data && (od.data.data || od.data)
@@ -451,7 +453,11 @@ onMounted(async () => {
     } else {
       // 原购物车结算路径：为当前选中项创建 pending（持久化尝试）
       let payloadShops: any[] = []
-      payloadShops = shopList.value.map((s: any) => ({ merchantId: s.storeId || s.merchantId || s.id, totalPrice: s.shopTotal }))
+      // send totalPrice as items total (exclude delivery); deliveryFee sent separately
+      payloadShops = shopList.value.map((s: any) => {
+        const itemsTotal = (s.items || []).reduce((sm: number, it: any) => sm + Number(it.price || 0) * Number(it.qty || 0), 0)
+        return ({ merchantId: s.storeId || s.merchantId || s.id, totalPrice: itemsTotal, deliveryAmount: Number(s.deliveryFee || s.delivery_fee || 0) })
+      })
 
       if (payloadShops && payloadShops.length > 0 && selectedAddress.value) {
         const payload = { shops: payloadShops, consigneeid: selectedAddress.value.id, totalPrice: totalAmount.value, remarks: form.value.remark }

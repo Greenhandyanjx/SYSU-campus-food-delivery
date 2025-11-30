@@ -165,6 +165,10 @@ function mapBackendOrder(o) {
     statusText: o.status_text || o.statusText || mapStatusText(statusNum),
     time: formatFriendlyTime(rawTime),
     payDeadline: o.pay_deadline || o.payDeadline || null,
+    // delivery fee: support multiple backend field names
+    delivery_fee: o.delivery_fee ?? o.deliveryFee ?? o.deliveryAmount ?? o.delivery ?? o.fee ?? 0,
+    // keep legacy aliases for safety
+    deliveryFee: o.delivery_fee ?? o.deliveryFee ?? o.deliveryAmount ?? o.delivery ?? o.fee ?? 0,
     items
   }
 }
@@ -190,7 +194,20 @@ function mapStatusText(status) {
 }
 
 // actions
-function onPay(order) { router.push({ path: '/user/payment/confirm', query: { orderId: order.id } }) }
+function onPay(order) {
+  try {
+    // 直接复用已有订单：写入 pending_orders，结算页会优先使用该项并直接支付
+    const oid = order && (order.id || order.ID || order.orderId)
+    if (oid) {
+      try { sessionStorage.setItem('pending_orders', JSON.stringify([String(oid)])) } catch (e) {}
+    }
+    router.push('/user/payment/confirm')
+  } catch (e) {
+    console.warn('prepare checkout payload from order failed', e)
+    // fallback: navigate to confirm page without payload
+    router.push('/user/payment/confirm')
+  }
+}
 async function onCancel(order) {
   try { await orderApi.cancelOrder(order.id) } catch (e) {}
   // set numeric cancelled status
@@ -209,7 +226,15 @@ async function onReorder(order) {
 }
 function onReview(order) { alert('去评价: ' + order.id) }
 function onViewRefund(order) { alert('查看退款详情: ' + order.id) }
-function openStore(id) { router.push({ name: 'userStore', params: { name: id } }) }
+function openStore(id) { 
+  // prefer path-based navigation using numeric id to avoid relying on 'name' param
+  if (id === undefined || id === null) {
+    // fallback: try to navigate by raw id otherwise do nothing
+    console.warn('openStore called with undefined id')
+    return
+  }
+  router.push({ path: `/user/store/${id}` })
+}
 async function onAutoCancel(order) {
   try { await orderApi.cancelOrder(order.id) } catch (e) {}
   order.status = 6
