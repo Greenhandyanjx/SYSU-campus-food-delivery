@@ -55,7 +55,7 @@ const props = defineProps({
   token: { type: String, required: true },
   merchantName: { type: String, default: "商家" },
   merchantAvatar: { type: String, default: "/imgs/merchant.png" },
-  userAvatar: { type: String, default: "/imgs/user.png" }
+  userAvatar: { type: String, default: "/src/assets/user.png" }
 })
 
 const messages = ref([])
@@ -69,7 +69,7 @@ const currentBaseId = ref(null)
 // reactive local display fields (initialized from props)
 const merchantName = ref(props.merchantName || '商家')
 const merchantAvatar = ref(props.merchantAvatar || '/imgs/merchant.png')
-const userAvatarLocal = ref(props.userAvatar || '/imgs/user.png')
+const userAvatarLocal = ref(props.userAvatar || '/src/assets/user.png')
 const userNameLocal = ref('我')
 const userBaseIdLocal = ref(props.userBaseId || null)
 
@@ -126,7 +126,7 @@ async function ensureNames() {
         const u = await getBaseUserDetail()
         if (u && u.data && u.data.data) {
           userBaseIdLocal.value = u.data.data.id
-          userAvatarLocal.value = userAvatarLocal.value || '/imgs/user.png'
+          userAvatarLocal.value = userAvatarLocal.value || '/src/assets/user.png'
           userNameLocal.value = u.data.data.username || userNameLocal.value
         }
       } catch (e) {}

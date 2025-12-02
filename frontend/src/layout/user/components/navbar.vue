@@ -43,8 +43,8 @@
 		<div class="right">
 			<el-dropdown trigger="click" @command="handleCommand">
 				<span class="el-dropdown-link user-link">
-					<el-avatar size="32" icon="User"/>
-					<span class="username">{{ username || '游客' }}</span>
+          <el-avatar :size="45" :src="avatar || defaultAvatar" />
+            <span class="username">{{ username || '游客' }}</span>
 				</span>
 				<template #dropdown>
 					<el-dropdown-menu>
@@ -59,6 +59,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
+import * as myApi from '@/api/user/my'
 import { useRouter, useRoute } from 'vue-router'
 import SearchSuggest from '@/components/SearchSuggest.vue'
 import { Search } from '@element-plus/icons-vue'
@@ -75,7 +76,8 @@ const route = useRoute()
 const q = ref('')
 const city = ref(localStorage.getItem('city') || '定位中...')
 const username = ref(localStorage.getItem('username') || '')
-const avatar = ref('/src/assets/login/mini-logo.png')
+const avatar = ref(localStorage.getItem('avatar') || '')
+const defaultAvatar = '/src/assets/user.png'
 
 // 仅当路由是订单列表或订单详情时，显示订单搜索框
 const isOrderRoute = computed(() => {
@@ -252,6 +254,13 @@ onMounted(() => {
   window.addEventListener('resize', onScroll);
   // 页面加载时获取一次实时地址展示
   fetchAndSetCurrentAddress().catch(() => {})
+  // 尝试从后端拉取用户资料（头像/用户名）以显示在导航栏
+  myApi.getProfile().then((p: any) => {
+    if (!p) return
+    username.value = p.nickname || p.username || localStorage.getItem('username') || username.value
+    avatar.value = p.avatar_url || p.avatar || avatar.value
+    if (avatar.value) localStorage.setItem('avatar', avatar.value)
+  }).catch(() => {})
 })
 onUnmounted(() => { window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll); if (rafId != null) cancelAnimationFrame(rafId) })
 </script>

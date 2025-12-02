@@ -20,12 +20,12 @@
     </section>
 
 			<!-- 轮播 banner -->
-<div class="banner-container">
+  <div class="banner-container">
     <Carousel :images="images" :interval="4000" @banner-click="onCategoryClick(images)" />
   </div>
 
 			<!-- 活动卡片 -->
-				<section class="activities">
+				<!-- <section class="activities">
 					<div class="activity" v-for="(a, i) in activities" :key="i">
 						<div class="act-icon" :style="{ backgroundImage: `linear-gradient(135deg, ${a.gradient[0]}, ${a.gradient[1]})` }">
 							<img :src="a.icon" alt="" />
@@ -35,7 +35,7 @@
 							<div class="sub">{{ a.sub }}</div>
 						</div>
 					</div>
-				</section>
+				</section> -->
 
             <!-- 推荐店铺（瀑布流） -->
             <section class="recommend" id="meals">

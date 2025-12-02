@@ -107,7 +107,10 @@ func GetUserCart(c *gin.Context) {
 				"selected":   it.Selected,
 				"categoryId": categoryId,
 				"category":   categoryName,
-				"image":      imagePath,
+				// provide multiple keys for compatibility with frontend variants
+				"image":    imagePath,
+				"img":      imagePath,
+				"imageUrl": imagePath,
 			})
 		}
 
@@ -213,6 +216,8 @@ func GetUserCart(c *gin.Context) {
 			"categoryId": categoryId,
 			"category":   categoryName,
 			"image":      imagePath,
+			"img":        imagePath,
+			"imageUrl":   imagePath,
 		}
 		shop := shopsMap[merchantID]
 		shop["items"] = append(shop["items"].([]gin.H), respItem)

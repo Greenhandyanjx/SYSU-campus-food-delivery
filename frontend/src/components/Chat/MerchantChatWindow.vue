@@ -46,7 +46,7 @@ const wrap = ref(null)
 
 const merchantName = ref('商家')
 const merchantAvatar = ref('/imgs/merchant.png')
-const myAvatar = ref('/imgs/user.png')
+const myAvatar = ref('/src/assets/user.png')
 const otherAvatar = ref('/imgs/merchant.png')
 const chatUserName = ref('')
 
@@ -128,7 +128,7 @@ async function ensure() {
       const u = await getBaseUserDetail()
       if (u && u.data && u.data.data) {
         userBaseIdLocal.value = u.data.data.id
-        myAvatar.value = '/imgs/user.png'
+        myAvatar.value = '/src/assets/user.png'
       }
     } catch (e) {}
   }

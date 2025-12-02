@@ -6,7 +6,7 @@
         <div class="profile-cover"></div>
         <div class="profile-content">
           <div class="left">
-            <el-avatar size="92" class="avatar" :src="''">
+            <el-avatar size="92" class="avatar" :src="avatar || defaultAvatar">
               <!-- fallback icon -->
             </el-avatar>
             <div class="info">
@@ -82,6 +82,8 @@ import chatClient from '@/utils/chatClient'
 
 const router = useRouter()
 const username = ref(localStorage.getItem('username') || '游客')
+const avatar = ref('')
+const defaultAvatar = '/src/assets/user.png'
 const points = ref(0)
 const orderCount = ref(0)
 const couponCount = ref(0)
@@ -93,6 +95,8 @@ onMounted(async () => {
   points.value = p.points || 0
   orderCount.value = p.orderCount || 0
   couponCount.value = p.couponCount || 0
+  // avatar
+  avatar.value = p.avatar_url || p.avatar || ''
   // 获取用户未读会话总数
   try {
     const r = await request.get('/user/chats')
@@ -211,6 +215,11 @@ function onImgError(e: any) {
 
 .profile-card .left { display:flex; gap:14px; align-items:center }
 .profile-card .avatar { box-shadow: 0 6px 20px rgba(255, 170, 0, 0.18); border: 3px solid #fff; background: #fff7e6 }
+.avatar img {
+  object-fit: cover; /* 保持图片比例，同时覆盖整个容器 */
+  width: 100%;
+  height: 100%;
+}
 .profile-card .info { text-align: left }
 .profile-card .info .name { font-weight:700; color:#4a2c00; font-size:18px }
 .profile-card .info .meta { color:#8c6b00; margin-top:6px; font-size:13px }

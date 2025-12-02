@@ -12,10 +12,28 @@ const DEMO_PROFILE = {
 export async function getProfile() {
   try {
     const res = await request.get('/user/profile')
-    // Normalize
-    return res.data || DEMO_PROFILE
+    // Normalize: return inner data object if backend uses utils.Success wrapper
+    return (res.data && res.data.data) ? res.data.data : (res.data || DEMO_PROFILE)
   } catch (e) {
     return DEMO_PROFILE
+  }
+}
+
+export async function updateProfile(payload: { nickname?: string; phone?: string; avatar_url?: string }) {
+  try {
+    const res = await request.post('/user/profile/update', payload)
+    return res.data
+  } catch (e) {
+    throw e
+  }
+}
+
+export async function changePassword(payload: { username?: string; oldpassword: string; newpassword: string }) {
+  try {
+    const res = await request.post('/change_password', payload)
+    return res.data
+  } catch (e) {
+    throw e
   }
 }
 

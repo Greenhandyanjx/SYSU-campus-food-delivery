@@ -276,7 +276,17 @@ function openStore(id) {
 }
 
 function onImgError(e) {
-  try { e.target.src = '/src/assets/noImg.png' } catch (err) {}
+  try {
+    const t = e && e.target
+    if (!t) return
+    // If it's a rider avatar, use user default; otherwise use generic noImg
+    const cls = (t.className || '')
+    if (cls && cls.toString().indexOf('rider-avatar') !== -1) {
+      t.src = '/src/assets/user.png'
+    } else {
+      t.src = '/src/assets/noImg.png'
+    }
+  } catch (err) {}
 }
 
 // 更新倒计时
