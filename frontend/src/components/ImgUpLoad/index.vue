@@ -232,9 +232,7 @@ async function httpRequest({ file, onProgress, onError }: any) {
 .upload-item {
   display: flex;
   align-items: center;
-  .el-form-item__content {
-    width: 500px !important;
-  }
+  position: relative; /* 限定绝对定位子元素在此范围内，避免覆盖父卡片 */
 }
 .upload-tips {
   font-size: 12px;
@@ -245,28 +243,41 @@ async function httpRequest({ file, onProgress, onError }: any) {
 }
 .el-upload-list__item-actions {
   position: absolute;
-  width: 100%;
-  height: 100%;
   left: 0;
-  top: 0;
-  cursor: default;
-  text-align: center;
-  color: #fff;
-  opacity: 0;
-  font-size: 20px;
-  background-color: rgba(0, 0, 0, 0.5);
-  transition: opacity 0.3s;
+  right: 0;
+  bottom: 0;
+
+  /* 更浅、更柔和的透明黑背景 */
+  background-color: rgba(0, 0, 0, 0.25);
+
+  /* 字体居中 */
   display: flex;
   justify-content: center;
   align-items: center;
-  flex-direction: column;
+  gap: 8px;
+
+  color: #fff;
+  font-size: 13px;
+  padding: 5px 8px;
+
+  /* 嵌入图片底部的圆角 */
+  border-radius: 0 0 6px 6px;
+
+  /* 不再 hover 才出现：始终显示 */
+  opacity: 1;
+  transition: opacity 0.15s;
+
+  /* 保证在图片之上但不挡太多 */
+  z-index: 5;
 }
+
 .avatar-uploader .el-upload {
   border: 1px dashed #d9d9d9;
   border-radius: 6px;
   cursor: pointer;
   position: relative;
   overflow: hidden;
+  display: inline-block; /* 避免占满父容器宽度 */
 }
 .avatar-uploader {
   display: inline-block;
@@ -276,31 +287,37 @@ async function httpRequest({ file, onProgress, onError }: any) {
   border-color: #ffc200;
 }
 .el-upload-span {
-  width: 100px;
-  height: 30px;
-  border: 1px solid #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  padding: 6px 10px;
   border-radius: 4px;
-  font-size: 14px;
-  text-align: center;
-  line-height: 30px;
+  font-size: 13px;
+  color: #ffffff;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.16);
 }
 
 .el-upload-span:first-child {
-  margin-bottom: 20px;
+  margin-right: 6px;
 }
 
 .avatar-uploader-icon {
   font-size: 28px;
   color: #8c939d;
-  width: 200px;
-  height: 160px;
-  line-height: 160px;
+  width: 160px;
+  height: 120px;
+  line-height: 120px;
   text-align: center;
 }
 
 .avatar {
-  width: 200px;
-  height: 160px;
+  max-width: 160px;
+  max-height: 120px;
+  width: 100%;
+  height: auto;
   display: block;
+  object-fit: cover;
 }
 </style>

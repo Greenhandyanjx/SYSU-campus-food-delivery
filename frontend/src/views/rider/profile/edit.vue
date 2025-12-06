@@ -14,7 +14,7 @@
     <!-- 头像部分 -->
     <div class="avatar-section">
       <div class="avatar-wrapper" @click="changeAvatar">
-        <el-avatar :size="80" :src="formData.avatar" />
+        <el-avatar :size="80" :src="formData.avatar || defaultAvatar" />
         <div class="camera-overlay">
           <i class="css-icon camera"></i>
         </div>
