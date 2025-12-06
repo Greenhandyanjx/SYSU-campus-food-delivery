@@ -152,15 +152,21 @@ func UpdateUserProfile(c *gin.Context) {
 	var user models.User
 	if err := global.Db.Where("base_id = ?", baseUserID).First(&user).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			// 创建新用户行
-			user = models.User{
-				BaseID:    baseUserID,
-				Nickname:  req.Nickname,
-				Phone:     req.Phone,
-				AvatarURL: req.AvatarURL,
-			}
-			if err := global.Db.Create(&user).Error; err != nil {
-				utils.Error(c, err)
+			// 仅当提供了至少一个可保存的字段时才创建新行，避免产生空记录
+			if req.Nickname != "" || req.Phone != "" || req.AvatarURL != "" {
+				user = models.User{
+					BaseID:    baseUserID,
+					Nickname:  req.Nickname,
+					Phone:     req.Phone,
+					AvatarURL: req.AvatarURL,
+				}
+				if err := global.Db.Create(&user).Error; err != nil {
+					utils.Error(c, err)
+					return
+				}
+			} else {
+				// 没有可保存的数据，直接返回成功（无操作）
+				utils.Success(c, gin.H{"ok": true})
 				return
 			}
 		} else {

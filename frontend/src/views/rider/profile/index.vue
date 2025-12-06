@@ -18,7 +18,7 @@
     <!-- 骑手信息卡片 -->
     <div class="profile-card">
       <div class="profile-header">
-        <el-avatar :size="80" :src="riderInfo.avatar" />
+        <el-avatar :size="80" :src="riderInfo.avatar || '/src/assets/user.png'" />
         <div class="profile-info">
           <h2>{{ riderInfo.name }}</h2>
           <div class="rating-section">
@@ -194,6 +194,8 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import riderApi from '@/api/rider'
+
+const defaultAvatar = '/src/assets/user.png'
 
 const router = useRouter()
 

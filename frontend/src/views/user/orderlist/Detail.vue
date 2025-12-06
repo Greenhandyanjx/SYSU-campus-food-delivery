@@ -66,7 +66,7 @@
               <span>{{ order.address }}</span>
             </div>
             <div v-if="order.rider" class="rider-info">
-              <img :src="order.rider.avatar || '/src/assets/noImg.png'" @error="onImgError" class="rider-avatar" />
+              <img :src="order.rider.avatar || '/src/assets/user.png'" @error="onImgError" class="rider-avatar" />
               <div class="rider-detail">
                 <div class="rider-name">{{ order.rider.name }}</div>
                 <div class="rider-phone">{{ order.rider.phone }}</div>

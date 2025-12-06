@@ -5,11 +5,27 @@
         <div class="profile-cover"></div>
         <div class="profile-content">
           <div class="left">
-            <el-avatar :size="112" class="avatar" :src="avatar || defaultAvatar" />
-            <div style="margin-top:8px;">
-              <el-button size="small" @click="openEditAvatar">修改头像</el-button>
-            </div>
-          </div>
+                    <div class="avatar-box">
+                      <el-avatar :size="112" class="avatar-preview">
+                        <img
+                          :src="avatar || defaultAvatar"
+                          alt="avatar"
+                          style="width: 100%; height: 100%; object-fit: cover;"
+                        />
+                      </el-avatar>
+                      <div style="margin-top:8px;display:flex;gap:8px;align-items:center;">
+                        <el-button size="small" @click="() => (editingAvatar = !editingAvatar)">{{ editingAvatar ? '取消' : '修改头像' }}</el-button>
+                        <el-button size="small" @click="openEditAvatar" v-if="!editingAvatar">上传图片</el-button>
+                      </div>
+                    </div>
+                    <div v-if="editingAvatar" class="avatar-uploader-inline">
+                      <ImgUpLoad v-model="editAvatar" :type="'.jpg,.jpeg,.png'" :size="4" />
+                      <div style="margin-top:8px;display:flex;gap:8px;">
+                        <el-button size="small" @click="saveAvatar">保存</el-button>
+                        <el-button size="small" @click="() => { editingAvatar = false; editAvatar = avatar }">取消</el-button>
+                      </div>
+                    </div>
+                  </div>
           <div class="info-col">
             <div class="field-row">
               <div class="field-label">昵称</div>
@@ -58,8 +74,25 @@
             </div>
             <div class="field-row">
               <div class="field-label">密码</div>
-              <div class="field-value">******</div>
-              <div class="field-action"><el-button type="text" @click="openChangePassword">修改密码</el-button></div>
+              <div class="field-value">
+                <template v-if="!editingPassword">******</template>
+                <template v-else>
+                  <div style="display:flex;flex-direction:column;gap:8px;max-width:420px">
+                    <el-input v-model="pwdForm.oldpassword" placeholder="旧密码" type="password" />
+                    <el-input v-model="pwdForm.newpassword" placeholder="新密码" type="password" />
+                    <el-input v-model="pwdForm.confirm" placeholder="确认新密码" type="password" />
+                  </div>
+                </template>
+              </div>
+              <div class="field-action">
+                <template v-if="!editingPassword">
+                  <el-button type="text" @click.prevent="editingPassword = true">修改密码</el-button>
+                </template>
+                <template v-else>
+                  <el-button type="text" @click.prevent="() => { editingPassword = false; pwdForm = { oldpassword:'', newpassword:'', confirm:'' } }">取消</el-button>
+                  <el-button type="primary" @click.prevent="savePassword">保存</el-button>
+                </template>
+              </div>
             </div>
           </div>
         </div>
@@ -90,7 +123,7 @@
       </el-form>
       <span slot="footer" class="dialog-footer">
         <el-button @click="dlgPwd = false">取消</el-button>
-        <el-button type="primary" @click="changePassword">保存</el-button>
+        <el-button type="primary" @click="savePassword">保存</el-button>
       </span>
     </el-dialog>
   </div>
@@ -98,13 +131,16 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import ImgUpLoad from '@/components/ImgUpLoad/index.vue'
 import * as myApi from '@/api/user/my'
 import { ElMessage } from 'element-plus'
+import defaultAvatar from '@/assets/user.png'
+import defaultAvatar2x from '@/assets/user@2x.png'
 
 const nickname = ref('')
 const phone = ref('')
 const avatar = ref('')
-const defaultAvatar = '/src/assets/user.png'
+// const defaultAvatar = '@/assets/user.png'
 
 const dlgAvatar = ref(false)
 const dlgPwd = ref(false)
@@ -112,6 +148,8 @@ const dlgPwd = ref(false)
 const editNickname = ref('')
 const editPhone = ref('')
 const editAvatar = ref('')
+const editingAvatar = ref(false)
+const editingPassword = ref(false)
 // inline edit state for phone and nickname
 const editingPhone = ref(false)
 const editingNickname = ref(false)
@@ -205,18 +243,23 @@ onBeforeUnmount(() => { if (_codeTimer) clearInterval(_codeTimer) })
 
 async function saveAvatar() {
   try {
-    await myApi.updateProfile({ avatar_url: editAvatar.value })
-    avatar.value = editAvatar.value
+    // if upload component provided a full URL, prefer that; otherwise use existing
+    const url = editAvatar.value || avatar.value || ''
+    await myApi.updateProfile({ avatar_url: url })
+    avatar.value = url
+    editingAvatar.value = false
     dlgAvatar.value = false
     ElMessage.success('头像已更新')
   } catch (e) { ElMessage.error('更新失败') }
 }
 
-async function changePassword() {
+async function savePassword() {
   if (pwdForm.value.newpassword !== pwdForm.value.confirm) { ElMessage.error('两次新密码不一致'); return }
+  if (!pwdForm.value.oldpassword) { ElMessage.error('请输入旧密码'); return }
   try {
     await myApi.changePassword({ oldpassword: pwdForm.value.oldpassword, newpassword: pwdForm.value.newpassword })
-    dlgPwd.value = false
+    editingPassword.value = false
+    pwdForm.value = { oldpassword: '', newpassword: '', confirm: '' }
     ElMessage.success('密码已修改')
   } catch (e) { ElMessage.error('修改密码失败') }
 }
@@ -229,10 +272,19 @@ async function changePassword() {
 .profile-content { display: flex; gap: 18px; padding: 18px; align-items: center; }
 .left { display:flex; flex-direction:column; align-items:center; gap:8px; padding: 18px }
 .info-col { flex: 1; padding: 12px 18px }
+.profile-content { flex-wrap: wrap; }
+.avatar-preview img { width: 100%; height: 100%; object-fit: cover; display: block }
+.avatar-uploader-inline { margin-top: 12px; }
+.avatar-box { display:flex; flex-direction:column; align-items:center }
 .field-row { display:flex; align-items:center; gap:12px; padding: 8px 0; }
 .field-label { width: 80px; color:#7a5a14; font-weight:600 }
 .field-value { flex:1 }
 .field-action { width: 80px; text-align:right }
 
 @media(max-width:900px){ .my-page { width: 92%; padding: 12px } }
+@media(max-width:600px){
+  .profile-content { flex-direction: column; align-items: flex-start }
+  .left { width: 100%; }
+  .info-col { width: 100%; padding: 12px 0 }
+}
 </style>
