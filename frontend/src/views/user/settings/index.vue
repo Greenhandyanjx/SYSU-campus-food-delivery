@@ -261,7 +261,7 @@ async function savePassword() {
     editingPassword.value = false
     pwdForm.value = { oldpassword: '', newpassword: '', confirm: '' }
     ElMessage.success('密码已修改')
-  } catch (e) { ElMessage.error('修改密码失败') }
+  } catch (e) { ElMessage.error('旧密码错误') }
 }
 </script>
 

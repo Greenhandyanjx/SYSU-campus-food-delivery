@@ -45,9 +45,9 @@ const input = ref('')
 const wrap = ref(null)
 
 const merchantName = ref('商家')
-const merchantAvatar = ref('/imgs/merchant.png')
-const myAvatar = ref('/src/assets/user.png')
-const otherAvatar = ref('/imgs/merchant.png')
+const merchantAvatar = ref('/src/assets/merchant.svg')
+const myAvatar = ref('/src/assets/merchant.svg')
+const otherAvatar = ref('/src/assets/user.png')
 const chatUserName = ref('')
 
 const currentBaseId = ref(null)
@@ -128,7 +128,7 @@ async function ensure() {
       const u = await getBaseUserDetail()
       if (u && u.data && u.data.data) {
         userBaseIdLocal.value = u.data.data.id
-        myAvatar.value = '/src/assets/user.png'
+        myAvatar.value = '/src/assets/merchant.svg'
       }
     } catch (e) {}
   }

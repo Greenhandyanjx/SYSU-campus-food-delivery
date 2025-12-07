@@ -23,7 +23,7 @@
         <!-- 头像 -->
         <img 
           class="msg-avatar" 
-          :src="isMyMessage(m) ? merchantAvatar : userAvatarLocal"
+          :src="isMyMessage(m) ? userAvatarLocal : merchantAvatar"
         />
 
         <!-- 气泡 -->
@@ -54,7 +54,7 @@ const props = defineProps({
   userBaseId: { type: Number, required: false },
   token: { type: String, required: true },
   merchantName: { type: String, default: "商家" },
-  merchantAvatar: { type: String, default: "/imgs/merchant.png" },
+  merchantAvatar: { type: String, default: '/src/assets/merchant.svg' },
   userAvatar: { type: String, default: "/src/assets/user.png" }
 })
 
@@ -68,7 +68,7 @@ const currentBaseId = ref(null)
 
 // reactive local display fields (initialized from props)
 const merchantName = ref(props.merchantName || '商家')
-const merchantAvatar = ref(props.merchantAvatar || '/imgs/merchant.png')
+const merchantAvatar = ref(props.merchantAvatar || '/src/assets/merchant.svg')
 const userAvatarLocal = ref(props.userAvatar || '/src/assets/user.png')
 const userNameLocal = ref('我')
 const userBaseIdLocal = ref(props.userBaseId || null)
