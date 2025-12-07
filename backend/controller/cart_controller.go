@@ -406,9 +406,9 @@ func UpdateCartItem(c *gin.Context) {
 	userID := c.MustGet("baseUserID").(uint)
 	// 解析请求参数
 	var req struct {
-		StoreID string `json:"storeId" binding:"required"`
-		DishID  int    `json:"dishId" binding:"required"`
-		Qty     int    `json:"qty" binding:"required,min=0"`
+		StoreID interface{} `json:"storeId" binding:"required"`
+		DishID  int         `json:"dishId" binding:"required"`
+		Qty     int         `json:"qty" binding:"required,min=0"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.Error(c, err)
@@ -430,8 +430,26 @@ func UpdateCartItem(c *gin.Context) {
 		}
 	}
 
-	// 转换 storeID 为 uint
-	merchantID, err := strconv.ParseUint(req.StoreID, 10, 32)
+	// 将 storeId 支持数字或字符串形式，先归一为字符串
+	var storeIDStr string
+	switch v := req.StoreID.(type) {
+	case float64:
+		storeIDStr = strconv.FormatInt(int64(v), 10)
+	case int:
+		storeIDStr = strconv.Itoa(v)
+	case int64:
+		storeIDStr = strconv.FormatInt(v, 10)
+	case uint:
+		storeIDStr = strconv.FormatUint(uint64(v), 10)
+	case string:
+		storeIDStr = v
+	default:
+		utils.Error(c, fmt.Errorf("invalid storeId type"))
+		return
+	}
+
+	// 转换为 uint
+	merchantID, err := strconv.ParseUint(storeIDStr, 10, 32)
 	if err != nil {
 		utils.Error(c, err)
 		return

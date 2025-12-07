@@ -27,10 +27,10 @@
     <!-- 右侧操作区 -->
     <div class="navbar-right">
       <el-dropdown trigger="click" @command="handleCommand">
-        <span class="el-dropdown-link" style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <el-avatar size="32" icon="User" />
-          <span class="username">{{ username || '用户' }}</span>
-        </span>
+            <span class="el-dropdown-link" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <el-avatar :size="32" :src="logoSrc" />
+              <span class="username">{{ username || '用户' }}</span>
+            </span>
         <template #dropdown>
           <el-dropdown-menu>
             <el-dropdown-item command="profile">个人信息</el-dropdown-item>
@@ -63,6 +63,19 @@ const handleSelect = (path: string) => {
 }
 
 const username = ref(localStorage.getItem('username') || '')
+import { onMounted } from 'vue'
+import { getMerchantProfile } from '@/api/merchant/profile'
+const logoSrc = ref('/src/assets/merchant.svg')
+
+onMounted(async () => {
+  try {
+    const r: any = await getMerchantProfile()
+    if (r && r.data && r.data.data) {
+      const d = r.data.data
+      logoSrc.value = d.logo || d.logoUrl || '/src/assets/merchant.svg'
+    }
+  } catch (e) {}
+})
 
 const handleCommand = (command: string) => {
   if (command === 'logout') {

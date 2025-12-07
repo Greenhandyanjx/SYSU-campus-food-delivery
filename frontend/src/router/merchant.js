@@ -61,7 +61,7 @@ const routes = [
       },
       {
         path: "profile",
-        component: () => import("@/views/profile.vue"),
+        component: () => import("@/views/merchant/profile.vue"),
         meta: {
           title: "个人信息",
           icon: "icon-user",

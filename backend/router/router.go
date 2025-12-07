@@ -70,6 +70,9 @@ func SetRouter() *gin.Engine {
 		auth.POST("/change_password", controller.ChangePassword)
 
 		auth.POST("/merchant/dish/add", controller.Dish_add)
+		// 商家个人信息（认证）
+		auth.GET("/merchant/profile", controller.GetMerchantProfile)
+		auth.POST("/merchant/profile/update", controller.UpdateMerchantProfile)
 		auth.POST("/merchant/dish/edit", controller.Edit_dish)
 		auth.POST("/merchant/dish/delete", controller.Delete_dish)
 		auth.GET("/merchant/dish/list", controller.QueryDishList)
@@ -149,6 +152,10 @@ func SetRouter() *gin.Engine {
 		auth.GET("/user/profile", controller.GetUserProfile)
 		auth.POST("/user/profile/update", controller.UpdateUserProfile)
 		auth.POST("/user/cart/add", controller.AddToCart) // 添加到购物车
+		// 更新购物车（包含修改数量 / 删除，当 qty==0 时会删除该项）
+		auth.POST("/user/cart/update", controller.UpdateCartItem)
+		// 兼容旧的 remove 路径，指向同一个处理函数
+		auth.POST("/user/cart/remove", controller.UpdateCartItem)
 		auth.POST("/user/cart/deleteSelected", controller.DeleteSelected)
 		auth.POST("/user/cart/selectAll", controller.SelectAll)
 		auth.POST("/user/cart/selectItem", controller.SelectItem)
