@@ -31,6 +31,8 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import merchantSvg from '@/assets/merchant.svg'
+import userPng from '@/assets/user.png'
 import chatClient from '@/utils/chatClient'
 import { getChatHistory, getMerchantDetail, getBaseUserDetail } from '@/api/chat'
 import request from '@/api/merchant/request'
@@ -45,9 +47,9 @@ const input = ref('')
 const wrap = ref(null)
 
 const merchantName = ref('商家')
-const merchantAvatar = ref('/src/assets/merchant.svg')
-const myAvatar = ref('/src/assets/merchant.svg')
-const otherAvatar = ref('/src/assets/user.png')
+const merchantAvatar = ref(merchantSvg)
+const myAvatar = ref(merchantSvg)
+const otherAvatar = ref(userPng)
 const chatUserName = ref('')
 
 const currentBaseId = ref(null)
@@ -128,7 +130,7 @@ async function ensure() {
       const u = await getBaseUserDetail()
       if (u && u.data && u.data.data) {
         userBaseIdLocal.value = u.data.data.id
-        myAvatar.value = '/src/assets/merchant.svg'
+        myAvatar.value = merchantSvg
       }
     } catch (e) {}
   }

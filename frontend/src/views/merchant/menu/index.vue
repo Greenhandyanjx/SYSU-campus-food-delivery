@@ -88,8 +88,7 @@
                       :src="row.imageUrl">
               <template #error>
                 <div class="image-slot">
-                  <img src="/src/assets/noImg.png"
-                       style="width: auto; height: 40px; border: none">
+                  <img :src="noImg" style="width: auto; height: 40px; border: none" />
                 </div>
               </template>
             </el-image>
@@ -173,6 +172,8 @@ import {
 } from '@/api/merchant/dish'
 import { getBaseUserDetail } from '@/api/chat'
 import request from '@/api/merchant/request'
+import noImg from '@/assets/noImg.png'
+import { safeImage } from '@/utils/asset'
 
 const router = useRouter()
 const input = ref('')
@@ -220,9 +221,9 @@ async function init(isSearchFlag?: boolean) {
       function createDefaultRow(r: any) {
         const nowStr = new Date().toLocaleString()
         return {
-          id: r?.id ?? `demo-${Math.random().toString(36).slice(2, 8)}`, // <- 使用反引号或字符串包裹
+          id: r?.id ?? `demo-${Math.random().toString(36).slice(2, 8)}`,
           name: r?.name || '示例菜名',
-          imageUrl: r?.imageUrl || '/src/assets/noImg.png',
+          imageUrl: r?.imageUrl || noImg,
           categoryName: r?.categoryName || '默认分类',
           price: typeof r?.price === 'number' ? r.price : (r?.price ? Number(r.price) : 0),
           status: r?.status ?? 1,

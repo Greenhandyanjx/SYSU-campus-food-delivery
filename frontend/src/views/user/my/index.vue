@@ -1,5 +1,5 @@
 <template>
-  <div class="my-bg">
+  <div class="my-bg" :style="{ backgroundImage: `url(${bgImg})` }">
     <div class="my-page">
     <!-- 顶部个人信息卡片 -->
     <div class="profile-card modern">
@@ -13,19 +13,19 @@
               <div class="name">{{ username }}</div>
               <div class="meta">会员：<span class="vip">普通用户</span> · 积分 <strong>{{ points }}</strong></div>
               <div class="quick-links">
-                <div class="badge"><img src="/src/assets/icons/vip.svg" alt="vip" @error="onImgError"/> 会员中心</div>
-                <div class="badge"><img src="/src/assets/icons/points.svg" alt="points" @error="onImgError"/> 积分</div>
+                <div class="badge"><img :src="vipIcon" alt="vip" @error="onImgError"/> 会员中心</div>
+                <div class="badge"><img :src="pointsIcon" alt="points" @error="onImgError"/> 积分</div>
               </div>
             </div>
           </div>
           <div class="right">
             <div class="summary">
               <div class="s-item" @click="go('orders')">
-                <img src="/src/assets/icons/orders.svg" alt="orders" @error="onImgError" />
+                <img :src="ordersIcon" alt="orders" @error="onImgError" />
                 <div class="s-text">全部订单<span class="count">{{ orderCount }}</span></div>
               </div>
               <div class="s-item" @click="go('coupons')">
-                <img src="/src/assets/icons/coupons.svg" alt="coupons" @error="onImgError" />
+                <img :src="couponsIcon" alt="coupons" @error="onImgError" />
                 <div class="s-text">我的优惠券<span class="count">{{ couponCount }}</span></div>
               </div>
             </div>
@@ -36,36 +36,36 @@
       <!-- 功能网格 -->
       <div class="feature-grid">
         <div class="f-item" @click="go('orders')">
-          <img src="/src/assets/icons/orders.svg" alt="orders" @error="onImgError" />
+          <img :src="ordersIcon" alt="orders" @error="onImgError" />
           <div>我的订单</div>
         </div>
         <div class="f-item" @click="go('wallet')">
-          <img src="/src/assets/icons/wallet.svg" alt="wallet" @error="onImgError" />
+          <img :src="walletIcon" alt="wallet" @error="onImgError" />
           <div>钱包</div>
         </div>
         <div class="f-item" @click="go('coupons')">
-          <img src="/src/assets/icons/coupons.svg" alt="coupons" @error="onImgError" />
+          <img :src="couponsIcon" alt="coupons" @error="onImgError" />
           <div>优惠券</div>
         </div>
         <div class="f-item" @click="go('address')">
-          <img src="/src/assets/icons/address.svg" alt="address" @error="onImgError" />
+          <img :src="addressIcon" alt="address" @error="onImgError" />
           <div>我的地址</div>
         </div>
         <div class="f-item" @click="go('support')" style="position:relative">
-          <img src="/src/assets/icons/support.svg" alt="support" @error="onImgError" />
+          <img :src="supportIcon" alt="support" @error="onImgError" />
           <div>客服与帮助</div>
           <span v-if="unreadSupport" class="support-badge">{{ unreadSupport }}</span>
         </div>
         <div class="f-item" @click="go('settings')">
-          <img src="/src/assets/icons/settings.svg" alt="settings" @error="onImgError" />
+          <img :src="settingsIcon" alt="settings" @error="onImgError" />
           <div>设置</div>
         </div>
         <div class="f-item" @click="go('vip')">
-          <img src="/src/assets/icons/vip.svg" alt="vip" @error="onImgError" />
+          <img :src="vipIcon" alt="vip" @error="onImgError" />
           <div>会员中心</div>
         </div>
         <div class="f-item danger" @click="go('logout')">
-          <img src="/src/assets/icons/logout.svg" alt="logout" @error="onImgError" />
+          <img :src="logoutIcon" alt="logout" @error="onImgError" />
           <div>退出登录</div>
         </div>
       </div>
@@ -75,6 +75,18 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import userPng from '@/assets/user.png'
+import noImg from '@/assets/noImg.png'
+import vipIcon from '@/assets/icons/vip.svg'
+import pointsIcon from '@/assets/icons/points.svg'
+import ordersIcon from '@/assets/icons/orders.svg'
+import couponsIcon from '@/assets/icons/coupons.svg'
+import walletIcon from '@/assets/icons/wallet.svg'
+import addressIcon from '@/assets/icons/address.svg'
+import supportIcon from '@/assets/icons/support.svg'
+import settingsIcon from '@/assets/icons/settings.svg'
+import logoutIcon from '@/assets/icons/logout.svg'
+import bgImg from '@/assets/login/img_denglu_bj.jpg'
 import { useRouter } from 'vue-router'
 import * as myApi from '@/api/user/my'
 import request from '@/api/merchant/request'
@@ -83,7 +95,7 @@ import chatClient from '@/utils/chatClient'
 const router = useRouter()
 const username = ref(localStorage.getItem('username') || '游客')
 const avatar = ref('')
-const defaultAvatar = '/src/assets/user.png'
+const defaultAvatar = userPng
 const points = ref(0)
 const orderCount = ref(0)
 const couponCount = ref(0)
@@ -159,7 +171,12 @@ async function go(key: string) {
 }
 
 function onImgError(e: any) {
-  try { e.target && (e.target.src = '/src/assets/noImg.png') } catch (e) {}
+  try {
+    const tgt = e && e.target
+    if (!tgt) return
+    // avoid infinite loop: only set fallback if not already set
+    if (!String(tgt.src || '').includes('noImg')) tgt.src = noImg
+  } catch (err) {}
 }
 </script>
 
@@ -168,7 +185,9 @@ function onImgError(e: any) {
 .my-bg {
   width: 100%;
   min-height: 100vh;
-  background: url('/src/assets/login/img_denglu_bj.jpg') center/cover no-repeat;
+  /* backgroundImage is set inline from script via bgImg import */
+  background-size: cover;
+  background-position: center;
   background-attachment: fixed;
   display: flex;
   justify-content: center;

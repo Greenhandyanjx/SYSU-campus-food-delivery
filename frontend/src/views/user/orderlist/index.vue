@@ -69,6 +69,8 @@ import { useRoute, useRouter } from 'vue-router'
 import OrderCard from '@/components/OrderList/OrderCard.vue'
 import orderApi from '@/api/user/order'
 import storeApi from '@/api/user/store'
+import noImg from '@/assets/noImg.png'
+import { safeImage } from '@/utils/asset'
 // Chat handled inside OrderCard via ChatLauncher component
 
 const route = useRoute()
@@ -138,7 +140,7 @@ function mapBackendOrder(o) {
         name: it.name || it.dish_name || it.title || '',
         price: it.price || it.unit_price || it.amount || 0,
         count: it.qty || it.count || it.quantity || 1,
-        img: it.image || it.img || it.picture || ''
+        img: safeImage(it.image || it.img || it.picture || '', noImg)
       })
     }
   }
@@ -160,7 +162,7 @@ function mapBackendOrder(o) {
     id: o.id || o.order_no || o.orderNo || '',
     storeId: o.store_id || o.storeId || o.merchant_id || o.merchantId || '',
     storeName: o.store_name || o.storeName || o.shop_name || '',
-    storeLogo: o.store_logo || o.logo || '/src/assets/noImg.png',
+    storeLogo: safeImage(o.store_logo || o.logo, noImg),
     status: statusNum,
     statusText: o.status_text || o.statusText || mapStatusText(statusNum),
     time: formatFriendlyTime(rawTime),

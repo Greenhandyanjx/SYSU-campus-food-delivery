@@ -56,7 +56,7 @@ async function load() {
     // 仅调用用户侧会话接口，移除本地 mock 回退
     const res = await request.get('/user/chats')
 
-    if (res.data && res.data.code === 1) {
+    if (res.data && Number(res.data.code) === 1) {
       // 兼容后端字段名（merchant_name / merchant_avatar）与前端旧字段
       const raw = res.data.data || []
       const list = raw.map((c) => ({

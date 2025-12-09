@@ -293,6 +293,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, getCurrentInstance } from 'vue'
 import Empty from '@/components/Empty/index.vue'
+import { getMerchantProfile } from '@/api/merchant/profile'
 import {
   getOrderDetailPage,
   queryOrderDetailById,
@@ -328,6 +329,7 @@ const page = ref(1)
 const pageSize = ref(10)
 const status = ref(2)
 const orderData = ref<any[]>([])
+const currentMerchantId = ref<any>(null)
 const isTableOperateBtn = ref(true)
 
 const cancelOrderReasonList = ref([
@@ -446,9 +448,22 @@ const tabList = computed(() => {
   ]
 })
 
+
 onMounted(() => {
   getOrderListData(status.value)
 })
+
+// 获取当前商家 id（用于前端二次防御过滤）
+;(async () => {
+  try {
+    const r: any = await getMerchantProfile()
+    if (r && r.data && Number(r.data.code) === 1 && r.data.data) {
+      currentMerchantId.value = r.data.data.id || r.data.data.ID || r.data.data.merchant_id || r.data.data.merchantId || null
+    }
+  } catch (e) {
+    // 忽略：后端应已在服务端进行过滤
+  }
+})()
 
 // 获取订单数据
 async function getOrderListData(s: number) {
@@ -490,7 +505,7 @@ function orderAcceptFn(rowItem: any, event?: Event) {
   dialogOrderStatus.value = rowItem.status
   orderAccept({ id: orderId.value })
     .then((res: any) => {
-      if (res.data.code === 1) {
+      if (Number(res.data.code) === 1) {
         proxy.$message.success('操作成功')
         orderId.value = ''
         dialogVisible.value = false
@@ -544,7 +559,7 @@ function confirmCancel() {
 
   fn(payload)
     .then((res: any) => {
-      if (res.data.code === 1) {
+      if (Number(res.data.code) === 1) {
         proxy.$message.success('操作成功')
         cancelDialogVisible.value = false
         orderId.value = ''
@@ -568,7 +583,7 @@ function cancelOrDeliveryOrComplete(s: number, id: string, event?: Event) {
   const fn = s === 3 ? deliveryOrder : completeOrder
   fn(params)
     .then((res: any) => {
-      if (res.data.code === 1) {
+      if (Number(res.data.code) === 1) {
         proxy.$message.success('操作成功')
         orderId.value = ''
         dialogVisible.value = false
@@ -928,18 +943,35 @@ function handleCurrentChange(val: any) {
     padding-left: 30px;
   }
   td.operate .cell {
-    .before,
-    .middle,
-    .after {
-      height: 39px;
-      width: 48px;
-    }
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
   }
-  td.operate .cell,
   td.otherOperate .cell {
     display: flex;
     flex-wrap: nowrap;
     justify-content: center;
+    align-items: center;
+    gap: 8px;
+  }
+  td.operate .cell .before,
+  td.operate .cell .middle,
+  td.operate .cell .after,
+  td.otherOperate .cell .before,
+  td.otherOperate .cell .middle,
+  td.otherOperate .cell .after {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+  /* Ensure buttons don't wrap into multiple lines */
+  td.operate .cell button,
+  td.otherOperate .cell button {
+    white-space: nowrap;
+    padding: 0 6px;
   }
 }
 </style>

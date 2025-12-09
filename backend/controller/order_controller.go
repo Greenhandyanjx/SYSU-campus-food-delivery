@@ -38,13 +38,54 @@ func GetOrderListByStatus(c *gin.Context) {
 		return
 	}
 	// 查询订单列表
-	result := global.Db.Model(&models.Order{}).Where("status = ?", status).Limit(size).Offset(offset).Find(&orders)
+	query := global.Db.Model(&models.Order{}).Where("status = ?", status)
+	// 如果此请求来自已认证的商家，则按 merchant.id 过滤
+	if baseIf, ok := c.Get("baseUserID"); ok {
+		var baseID uint
+		switch v := baseIf.(type) {
+		case uint:
+			baseID = v
+		case int:
+			baseID = uint(v)
+		case int64:
+			baseID = uint(v)
+		case float64:
+			baseID = uint(v)
+		}
+		if baseID != 0 {
+			var m models.Merchant
+			if err := global.Db.Where("base_id = ?", baseID).First(&m).Error; err == nil {
+				query = query.Where("merchant_id = ?", m.ID)
+			}
+		}
+	}
+	result := query.Limit(size).Offset(offset).Find(&orders)
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get order list", "data": nil})
 		return
 	}
-	// 查询总订单数
-	global.Db.Model(&models.Order{}).Where("status = ?", status).Count(&count)
+	// 查询总订单数（与列表的过滤保持一致）
+	countQuery := global.Db.Model(&models.Order{}).Where("status = ?", status)
+	if baseIf, ok := c.Get("baseUserID"); ok {
+		var baseID uint
+		switch v := baseIf.(type) {
+		case uint:
+			baseID = v
+		case int:
+			baseID = uint(v)
+		case int64:
+			baseID = uint(v)
+		case float64:
+			baseID = uint(v)
+		}
+		if baseID != 0 {
+			var m models.Merchant
+			if err := global.Db.Where("base_id = ?", baseID).First(&m).Error; err == nil {
+				countQuery = countQuery.Where("merchant_id = ?", m.ID)
+			}
+		}
+	}
+	countQuery.Count(&count)
 	// 返回结果
 	c.JSON(http.StatusOK, gin.H{
 		"code": 1,
@@ -521,6 +562,29 @@ func OrderAccept(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "order is not in pending state", "data": nil})
 		return
 	}
+	// 如果请求来自商家，校验商家与订单归属匹配
+	if baseIf, ok := c.Get("baseUserID"); ok {
+		var baseID uint
+		switch v := baseIf.(type) {
+		case uint:
+			baseID = v
+		case int:
+			baseID = uint(v)
+		case int64:
+			baseID = uint(v)
+		case float64:
+			baseID = uint(v)
+		}
+		if baseID != 0 {
+			var m models.Merchant
+			if err := global.Db.Where("base_id = ?", baseID).First(&m).Error; err == nil {
+				if order.MerchantID != m.ID {
+					c.JSON(http.StatusForbidden, gin.H{"code": 0, "message": "unauthorized to accept this order", "data": nil})
+					return
+				}
+			}
+		}
+	}
 	// 更新订单状态为 'accepted'
 	order.Status = 3
 
@@ -567,6 +631,29 @@ func OrderReject(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "order is not in pending state", "data": nil})
 		return
 	}
+	// 校验商家归属
+	if baseIf, ok := c.Get("baseUserID"); ok {
+		var baseID uint
+		switch v := baseIf.(type) {
+		case uint:
+			baseID = v
+		case int:
+			baseID = uint(v)
+		case int64:
+			baseID = uint(v)
+		case float64:
+			baseID = uint(v)
+		}
+		if baseID != 0 {
+			var m models.Merchant
+			if err := global.Db.Where("base_id = ?", baseID).First(&m).Error; err == nil {
+				if order.MerchantID != m.ID {
+					c.JSON(http.StatusForbidden, gin.H{"code": 0, "message": "unauthorized to reject this order", "data": nil})
+					return
+				}
+			}
+		}
+	}
 	// 更新订单状态为 'rejected'
 	order.Status = 6
 	updateResult := global.Db.Save(&order)
@@ -612,6 +699,29 @@ func OrderDelivery(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "order is not in right state", "data": nil})
 		return
 	}
+	// 校验商家归属
+	if baseIf, ok := c.Get("baseUserID"); ok {
+		var baseID uint
+		switch v := baseIf.(type) {
+		case uint:
+			baseID = v
+		case int:
+			baseID = uint(v)
+		case int64:
+			baseID = uint(v)
+		case float64:
+			baseID = uint(v)
+		}
+		if baseID != 0 {
+			var m models.Merchant
+			if err := global.Db.Where("base_id = ?", baseID).First(&m).Error; err == nil {
+				if order.MerchantID != m.ID {
+					c.JSON(http.StatusForbidden, gin.H{"code": 0, "message": "unauthorized to update this order", "data": nil})
+					return
+				}
+			}
+		}
+	}
 
 	if err := global.Db.Model(&models.Order{}).Where("id=?", order.ID).Update("status", 4).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to update order status", "data": nil})
@@ -649,6 +759,29 @@ func OrderComplete(c *gin.Context) {
 	if order.Status != 4 {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "order is not in right state", "data": nil})
 		return
+	}
+	// 校验商家归属
+	if baseIf, ok := c.Get("baseUserID"); ok {
+		var baseID uint
+		switch v := baseIf.(type) {
+		case uint:
+			baseID = v
+		case int:
+			baseID = uint(v)
+		case int64:
+			baseID = uint(v)
+		case float64:
+			baseID = uint(v)
+		}
+		if baseID != 0 {
+			var m models.Merchant
+			if err := global.Db.Where("base_id = ?", baseID).First(&m).Error; err == nil {
+				if order.MerchantID != m.ID {
+					c.JSON(http.StatusForbidden, gin.H{"code": 0, "message": "unauthorized to complete this order", "data": nil})
+					return
+				}
+			}
+		}
 	}
 
 	if err := global.Db.Model(&models.Order{}).Where("id=?", order.ID).Update("status", 5).Error; err != nil {

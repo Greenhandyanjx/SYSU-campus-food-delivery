@@ -59,6 +59,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
+import userPng from '@/assets/user.png'
 import * as myApi from '@/api/user/my'
 import { useRouter, useRoute } from 'vue-router'
 import SearchSuggest from '@/components/SearchSuggest.vue'
@@ -77,7 +78,7 @@ const q = ref('')
 const city = ref(localStorage.getItem('city') || '定位中...')
 const username = ref(localStorage.getItem('username') || '')
 const avatar = ref(localStorage.getItem('avatar') || '')
-const defaultAvatar = '/src/assets/user.png'
+const defaultAvatar = userPng
 
 // 仅当路由是订单列表或订单详情时，显示订单搜索框
 const isOrderRoute = computed(() => {

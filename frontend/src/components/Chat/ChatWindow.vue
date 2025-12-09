@@ -48,14 +48,16 @@
 import { ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { getChatHistory, getWsUrl, getMerchantDetail, getBaseUserDetail } from '@/api/chat'
 import chatClient from '@/utils/chatClient'
+import merchantSvg from '@/assets/merchant.svg'
+import userPng from '@/assets/user.png'
 
 const props = defineProps({
   merchantId: { type: Number, required: true },
   userBaseId: { type: Number, required: false },
   token: { type: String, required: true },
   merchantName: { type: String, default: "商家" },
-  merchantAvatar: { type: String, default: '/src/assets/merchant.svg' },
-  userAvatar: { type: String, default: "/src/assets/user.png" }
+  merchantAvatar: { type: String, default: '' },
+  userAvatar: { type: String, default: '' }
 })
 
 const messages = ref([])
@@ -68,8 +70,8 @@ const currentBaseId = ref(null)
 
 // reactive local display fields (initialized from props)
 const merchantName = ref(props.merchantName || '商家')
-const merchantAvatar = ref(props.merchantAvatar || '/src/assets/merchant.svg')
-const userAvatarLocal = ref(props.userAvatar || '/src/assets/user.png')
+const merchantAvatar = ref(props.merchantAvatar || merchantSvg)
+const userAvatarLocal = ref(props.userAvatar || userPng)
 const userNameLocal = ref('我')
 const userBaseIdLocal = ref(props.userBaseId || null)
 
