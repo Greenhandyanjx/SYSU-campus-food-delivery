@@ -44,6 +44,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import merchantSvg from '@/assets/merchant.svg'
 import { useRouter, useRoute } from 'vue-router'
 
 const router = useRouter()
@@ -65,14 +66,14 @@ const handleSelect = (path: string) => {
 const username = ref(localStorage.getItem('username') || '')
 import { onMounted } from 'vue'
 import { getMerchantProfile } from '@/api/merchant/profile'
-const logoSrc = ref('/src/assets/merchant.svg')
+const logoSrc = ref(merchantSvg)
 
 onMounted(async () => {
   try {
     const r: any = await getMerchantProfile()
-    if (r && r.data && r.data.data) {
+      if (r && r.data && r.data.data) {
       const d = r.data.data
-      logoSrc.value = d.logo || d.logoUrl || '/src/assets/merchant.svg'
+      logoSrc.value = d.logo || d.logoUrl || merchantSvg
     }
   } catch (e) {}
 })

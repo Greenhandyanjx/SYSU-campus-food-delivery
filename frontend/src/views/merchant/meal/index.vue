@@ -175,7 +175,7 @@ function handleStartOrStop(row: any) {
     type: "warning",
   }).then(() => {
     enableOrDisableSetmeal(p).then((res: any) => {
-      if (res.data.code === 1) {
+      if (Number(res.data.code) === 1) {
         ElMessage.success("套餐售卖状态修改成功！");
         pageQuery();
       } else {
@@ -203,7 +203,7 @@ function handleDelete(type: string, id?: string) {
         param = (id as string) || "";
       }
       deleteSetmeal(param).then((res: any) => {
-        if (res.data.code === 1) {
+        if (Number(res.data.code) === 1) {
           ElMessage.success("删除成功！");
           pageQuery();
         } else {
@@ -230,7 +230,7 @@ onMounted(() => {
       }
     } catch (e) {}
     getCategoryByType({ type: 2 }).then((res: any) => {
-      if (res.data.code === 1) {
+      if (Number(res.data.code) === 1) {
         options.value = res.data.data;
       }
     });

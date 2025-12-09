@@ -51,7 +51,7 @@ func Dish_add(ctx *gin.Context) {
 	}(dish.MerchantID)
 	ctx.JSON(http.StatusOK, gin.H{
 		"code": "1",
-		"msg":  "dish added successfully",
+		"msg":  "菜品添加成功",
 	})
 }
 

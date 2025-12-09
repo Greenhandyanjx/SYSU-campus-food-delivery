@@ -41,7 +41,7 @@ function formatTime(s) {
 async function load() {
   try {
     const res = await request.get('/merchant/chats')
-    if (res.data && res.data.code === 1) {
+    if (res.data && Number(res.data.code) === 1) {
       const list = res.data.data || []
       // enrich each chat with user display name (try to fetch base user detail)
       await Promise.all(list.map(async (c) => {

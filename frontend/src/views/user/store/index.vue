@@ -4,7 +4,7 @@
     <div class="hero">
       <div class="hero-inner">
         <div class="logo">
-          <img :src="store.logo || '/src/assets/noImg.png'" alt="logo" />
+          <img :src="safeImage(store.logo || '', noImg)" alt="logo" />
         </div>
         <div class="hero-meta">
           <h1 class="store-name">{{ store.name || '店铺名称' }}</h1>
@@ -64,7 +64,7 @@
             v-for="(d, idx) in dishesFiltered"
             :key="d.id || idx"
           >
-            <img class="thumb" :src="d.image || '/src/assets/noImg.png'" />
+            <img class="thumb" :src="safeImage(d.image || '', noImg)" />
             <div class="dish-info">
               <div class="dish-top">
                 <div class="name">{{ d.name }}</div>
@@ -205,6 +205,9 @@
 <script setup lang="ts">
 import { reactive, ref, computed, onMounted,onBeforeUnmount } from 'vue'
 import qrImg from '@/assets/qrcode.png'
+import noImg from '@/assets/noImg.png'
+import { safeImage } from '@/utils/asset'
+import bgImg from '@/assets/login/img_denglu_bj.jpg'
 import ChatLauncher from '@/components/Chat/ChatLauncher.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -363,7 +366,7 @@ async function load() {
           name: d.DishName || d.name,
           price: Number(d.Price || d.price) || 0,
           desc: d.Description || d.desc || '',
-          image: d.ImagePath || d.image || '/src/assets/noImg.png',
+          image: d.ImagePath || d.image || noImg,
           categoryId: cid,
           category: label,
           tags: d.Tags || d.tags || [],
@@ -381,7 +384,7 @@ async function load() {
             name: d.DishName || d.name,
             price: Number(d.Price || d.price) || 0,
             desc: d.Description || d.desc || '',
-            image: d.ImagePath || d.image || '/src/assets/noImg.png',
+            image: d.ImagePath || d.image || noImg,
             categoryId: cid,
             category: label,
             tags: d.Tags || d.tags || [],
@@ -399,7 +402,7 @@ async function load() {
             name: m.Mealname || m.name,
             price: Number(m.Price || m.price) || 0,
             desc: m.Description || m.desc || '',
-            image: m.ImagePath || m.image || '/src/assets/noImg.png',
+            image: m.ImagePath || m.image || noImg,
             categoryId: cid,
             category: label,
             tags: m.Tags || ['套餐'],
@@ -722,7 +725,7 @@ function closePayModal() {
 
 /* ------------------ 背景与挂载 ------------------ */
 
-const visualBgUrl = ref('/src/assets/login/img_denglu_bj.jpg')
+const visualBgUrl = ref(bgImg)
 const visualBgStyle = computed(() => ({
   backgroundImage: `url(${visualBgUrl.value})`
 }))

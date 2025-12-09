@@ -99,6 +99,8 @@
 <script setup>
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import ChatLauncher from '@/components/Chat/ChatLauncher.vue'
+import noImg from '@/assets/noImg.png'
+import { safeImage } from '@/utils/asset'
 
 const props = defineProps({
   order: { type: Object, required: true }
@@ -177,11 +179,10 @@ onBeforeUnmount(() => {
 
 // 图片错误兜底
 const onImgError = (e) => {
-  if (e.target) e.target.src = '/src/assets/noImg.png'
+  if (e && e.target) e.target.src = noImg
 }
 
-const itemImage = (it) =>
-  it.img || it.image || it.picture || it.pic || it.thumb || it.imgUrl || '/src/assets/noImg.png'
+const itemImage = (it) => safeImage(it.img || it.image || it.picture || it.pic || it.thumb || it.imgUrl || '', noImg)
 </script>
 
 <style scoped>

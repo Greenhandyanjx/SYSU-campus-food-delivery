@@ -158,10 +158,10 @@
           :class-name="orderStatus === 0 ? 'operate' : 'otherOperate'"
           :min-width="
             [2, 3, 4].includes(orderStatus)
-              ? 130
+              ? 180
               : [0].includes(orderStatus)
-              ? 140
-              : 'auto'
+              ? 200
+              : 240
           "
         >
           <template #default="{ row }">
@@ -365,6 +365,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { getMerchantProfile } from '@/api/merchant/profile'
 import HeadLable from '@/components/HeadLable/index.vue'
 import InputAutoComplete from '@/components/InputAutoComplete/index.vue'
 import TabChange from './tabChange.vue'
@@ -402,6 +403,7 @@ const counts = ref(0)
 const page = ref(1)
 const pageSize = ref(10)
 const tableData = ref<any[]>([])
+const currentMerchantId = ref<any>(null)
 const diaForm = ref<any>({})
 const isSearch = ref(false)
 const orderStatus = ref(0)
@@ -457,6 +459,16 @@ onMounted(() => {
   if (route.query.orderId && route.query.orderId !== 'undefined') {
     goDetail(route.query.orderId as string, 2)
   }
+  ;(async () => {
+    try {
+      const r: any = await getMerchantProfile()
+      if (r && r.data && Number(r.data.code) === 1 && r.data.data) {
+        currentMerchantId.value = r.data.data.id || r.data.data.ID || r.data.data.merchant_id || r.data.data.merchantId || null
+      }
+    } catch (e) {
+      // defensive: ignore, backend should already filter
+    }
+  })()
 })
 
 function initFun(st: number) {
@@ -477,7 +489,7 @@ function change(activeIndex: number) {
 async function getOrderListBy3Status() {
   try {
     const res = await getOrderListBy({})
-    if (res.data.code === 1) {
+    if (Number(res.data.code) === 1) {
       Object.assign(orderStatics, res.data.data)
     } else {
       ElMessage.error(res.data.msg)
@@ -532,8 +544,14 @@ endTime: valueTime.value[1] ? formatForApi(valueTime.value[1]) : undefined,
     if (Number(res.data.code) === 1) {
       const data = res.data.data || {}
       const raw = data.items || []
+      // 后端应只返回当前商家的订单；为保险起见，在前端二次筛选
+      const filtered = raw.filter((it: any) => {
+        if (!currentMerchantId.value) return true
+        const mid = it.merchant_id ?? it.merchantId ?? it.merchantid ?? it.MerchantID ?? it.merchant
+        return String(mid) === String(currentMerchantId.value)
+      })
       // 格式化时间字段，防止前端出现 NaN 或 undefined
-      tableData.value = raw.map((it: any) => {
+      tableData.value = filtered.map((it: any) => {
         const safeFormat = (v: any) => {
           if (v === null || v === undefined || v === '') return ''
           try {
@@ -734,7 +752,7 @@ async function orderAcceptHandler(r: any, setTableFlag = true) {
   isTableOperateBtn.value = setTableFlag
   try {
     const res = await orderAccept({ id: orderId.value })
-    if (res.data.code === 1) {
+    if (Number(res.data.code) === 1) {
       ElMessage.success('操作成功')
       orderId.value = ''
       dialogVisible.value = false
@@ -767,7 +785,7 @@ async function confirmCancel() {
     cancelReason.value === '自定义原因' ? remark.value : cancelReason.value
   try {
     const res = await fn(payload)
-    if (res.data.code === 1) {
+    if (Number(res.data.code) === 1) {
       ElMessage.success('操作成功')
       cancelDialogVisible.value = false
       orderId.value = ''
@@ -784,7 +802,7 @@ async function cancelOrDeliveryOrComplete(status: number, id: string) {
   const params = { status, id }
   try {
     const res = await (status === 3 ? deliveryOrder(params) : completeOrder(params))
-    if (res.data.code === 1) {
+    if (Number(res.data.code) === 1) {
       ElMessage.success('操作成功')
       orderId.value = ''
       dialogVisible.value = false
@@ -1135,18 +1153,35 @@ function handleCurrentChange(val: any) {
     padding-left: 50px;
   }
   td.operate .cell {
-    .before,
-    .middle,
-    .after {
-      height: 39px;
-      width: 48px;
-    }
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
   }
-  td.operate .cell,
   td.otherOperate .cell {
     display: flex;
     flex-wrap: nowrap;
     justify-content: center;
+    align-items: center;
+    gap: 8px;
+  }
+  td.operate .cell .before,
+  td.operate .cell .middle,
+  td.operate .cell .after,
+  td.otherOperate .cell .before,
+  td.otherOperate .cell .middle,
+  td.otherOperate .cell .after {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+  /* Ensure buttons don't wrap into multiple lines */
+  td.operate .cell button,
+  td.otherOperate .cell button {
+    white-space: nowrap;
+    padding: 0 6px;
   }
   .order-dialog {
     .el-dialog {

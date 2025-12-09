@@ -1,8 +1,10 @@
+import noImg from '@/assets/noImg.png'
+
 export const sampleStores = [
   {
     name: '黄焖鸡米饭',
     desc: '经典家常菜，味道鲜香',
-    logo: '/src/assets/noImg.png',
+    logo: noImg,
     tags: ['家常菜', '下饭王'],
     rating: 4.8,
     sales: 320,
@@ -17,7 +19,7 @@ export const sampleStores = [
   {
     name: '茶百道',
     desc: '奶香浓郁，果茶清爽',
-    logo: '/src/assets/noImg.png',
+    logo: noImg,
     tags: ['奶茶', '饮品', '水果茶'],
     rating: 4.9,
     sales: 520,
