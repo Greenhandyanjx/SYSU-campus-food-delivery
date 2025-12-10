@@ -124,17 +124,26 @@ onMounted(async () => {
       const uid = msg.user_base_id || msg.userBaseId
       if (!uid) return
       // 触发重新加载
-      request.get('/user/chats').then(rr => {
-        if (rr?.data?.code === 1) {
-          const arr = rr.data.data || []
-          unreadSupport.value = arr.reduce((s, it) => s + (it.unread_count || 0), 0)
-        }
-      }).catch(()=>{})
+      // 使用防抖合并多次通知
+      if (!window.__myUnreadRefreshTimer) {
+        window.__myUnreadRefreshTimer = setTimeout(() => {
+          window.__myUnreadRefreshTimer = null
+          request.get('/user/chats').then(rr => {
+            if (rr?.data?.code === 1) {
+              const arr = rr.data.data || []
+              unreadSupport.value = arr.reduce((s, it) => s + (it.unread_count || 0), 0)
+            }
+          }).catch(()=>{})
+        }, 600)
+      }
     } catch(e) {}
   }
   chatClient.onMessage(handler)
   // 移除监听在组件卸载时
-  window.addEventListener('beforeunload', () => chatClient.offMessage(handler))
+  window.addEventListener('beforeunload', () => {
+    chatClient.offMessage(handler)
+    try { if (window.__myUnreadRefreshTimer) { clearTimeout(window.__myUnreadRefreshTimer); window.__myUnreadRefreshTimer = null } } catch(e) {}
+  })
 })
 
 async function go(key: string) {

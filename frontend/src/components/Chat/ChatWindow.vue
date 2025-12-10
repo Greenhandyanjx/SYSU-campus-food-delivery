@@ -9,7 +9,10 @@
         <img class="avatar" :src="merchantAvatar" alt="商家" />
         <span class="title">{{ merchantName }} · 在线客服</span>
       </div>
-      <button class="local-close" @click="$emit('close')" aria-label="关闭聊天">✕</button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <img src="/JDlogo.png" class="jd-logo" alt="嘉递" />
+        <button class="local-close" @click="$emit('close')" aria-label="关闭聊天">✕</button>
+      </div>
     </div>
 
     <!-- 消息区域 -->
@@ -62,7 +65,6 @@ const props = defineProps({
 
 const messages = ref([])
 const input = ref('')
-let ws = null
 const msgWrap = ref(null)
 
 // 当前登录者 base_user id（用于判断消息方向：来自当前者 = 我）
@@ -144,22 +146,8 @@ async function ensureNames() {
   }
 }
 
-function connectWs() {
-  // backend expects raw token without the "Bearer " prefix in the query param
-  const pureToken = (props.token || '').replace(/^Bearer\s+/i, '')
-  const url = getWsUrl() + `?token=${encodeURIComponent(pureToken)}`
-  ws = new WebSocket(url)
-
-  ws.onmessage = (ev) => {
-    try {
-      const data = JSON.parse(ev.data)
-      messages.value.push(data)
-      nextTick(scrollBottom)
-    } catch (err) {
-      // ignore malformed messages
-    }
-  }
-}
+// We use centralized chatClient (singleton) for incoming push messages.
+// Ensure the client is connected and subscribe to messages below.
 
 function handleGlobalMessage(msg) {
   // append only if message belongs to this chat (merchant/user pair)
@@ -191,10 +179,8 @@ const payload = {
   const ok = chatClient.send(payload)
 
   if (!ok) {
-    console.warn('[ChatWindow] chatClient failed, fallback to local ws')
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(payload))
-    }
+    console.warn('[ChatWindow] chatClient not open — attempting reconnect')
+    try { chatClient.connect() } catch (e) {}
   }
 
   // 本地立即显示一条消息
@@ -243,8 +229,9 @@ onMounted(async () => {
   await detectRole()
   await ensureNames()
   await loadHistory()
-  connectWs()
   chatClient.onMessage(handleGlobalMessage)
+  // ensure centralized websocket connection
+  try { chatClient.connect() } catch (e) {}
 })
 
 // 当外部传入的 merchantId / userBaseId 发生变化时，重新加载会话
@@ -258,6 +245,8 @@ watch(() => props.merchantId, async (newVal, oldVal) => {
   try {
     await fetch('/api/user/chats/mark_read', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: localStorage.getItem('token') || '' }, body: JSON.stringify({ merchant_id: Number(newVal) }) })
   } catch (e) {}
+  // 通知其它组件当前用户会话已读（例如刷新用户会话列表）
+  try { window.dispatchEvent(new CustomEvent('user:chats:marked_read', { detail: { merchant_id: Number(newVal) } })) } catch (e) {}
 })
 
 watch(() => props.userBaseId, async (newVal, oldVal) => {
@@ -276,7 +265,6 @@ watch(() => props.merchantAvatar, (nv) => {
 })
 
 onBeforeUnmount(() => {
-  ws?.close()
   chatClient.offMessage(handleGlobalMessage)
 })
 </script>
@@ -343,6 +331,13 @@ onBeforeUnmount(() => {
   margin-left: 12px;
   font-size: 16px;
   font-weight: bold;
+}
+
+.jd-logo {
+  width: 28px;
+  height: 28px;
+  object-fit:contain;
+  border-radius:4px;
 }
 
 /* ====================== 消息区域 ====================== */

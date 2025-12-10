@@ -2,6 +2,7 @@
   <div>
     <div class="container homecon">
       <h2 class="homeTitle homeTitleBtn">
+        <img src="/JDlogo.png" class="jd-logo" alt="嘉递外卖" />
         订单信息
         <ul class="conTab">
           <li
@@ -688,6 +689,14 @@ function handleCurrentChange(val: any) {
     font-weight: bold;
     display: inline-block;
   }
+}
+
+.jd-logo {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  vertical-align: middle;
+  margin-right: 8px;
 }
 
 .order-middle {

@@ -1,10 +1,13 @@
 <template>
   <div class="dashboard-container">
-    <TabChange
+    <div class="orders-header">
+      <img src="/JDlogo.png" class="jd-logo" alt="嘉递外卖" />
+      <TabChange
       :order-statics="orderStatics"
       :default-activity="defaultActivity"
       @tabChange="change"
     />
+    </div>
   <div class="container main-container" :class="{ hContainer: tableData.length }" >
       <!-- 搜索项 -->
       <div class="tableBar">
@@ -1239,6 +1242,11 @@ function handleCurrentChange(val: any) {
   width: 320px;
 }
 
+</style>
+
+<style scoped>
+.orders-header { display:flex; align-items:center; gap:10px; }
+.jd-logo { width:36px; height:36px; object-fit:contain; }
 </style>
 
 /* 原生模态样式 */

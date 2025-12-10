@@ -9,7 +9,15 @@
   <teleport to="body">
     <div v-if="!isMerchant && showGlobalChat" class="global-chat-overlay" @click.self="showGlobalChat = false">
       <div class="global-chat-modal">
-        <ChatWindow :merchantId="globalMerchantId" :userBaseId="globalUserBaseId" :token="token" :merchantName="globalMerchantName" :merchantAvatar="globalMerchantAvatar" />
+        <ChatWindow
+          :key="String(globalMerchantId) + '-' + String(globalUserBaseId)"
+          :merchantId="globalMerchantId"
+          :userBaseId="globalUserBaseId"
+          :token="token"
+          :merchantName="globalMerchantName"
+          :merchantAvatar="globalMerchantAvatar"
+          @close="showGlobalChat = false"
+        />
       </div>
     </div>
   </teleport>
@@ -31,17 +39,46 @@ const isMerchant = ref(false)
 
 async function openHandler(e) {
   const d = (e && e.detail) || {}
-  if (!d.merchantId) return
-  globalMerchantId.value = Number(d.merchantId)
-  globalUserBaseId.value = d.userBaseId || null
-  try {
-    const r = await getMerchantDetail(globalMerchantId.value)
-    if (r && r.data && r.data.data) {
-      globalMerchantName.value = r.data.data.shop_name || globalMerchantName.value
-      globalMerchantAvatar.value = r.data.data.logo || globalMerchantAvatar.value
+  // robustly accept merchant id in either camelCase or snake_case and treat 0 as valid
+  let mid = null
+  if (d && Object.prototype.hasOwnProperty.call(d, 'merchantId')) {
+    mid = d.merchantId
+  } else if (d && Object.prototype.hasOwnProperty.call(d, 'merchant_id')) {
+    mid = d.merchant_id
+  }
+
+  // also accept userBaseId variants
+  const userBase = (d && (d.userBaseId || d.user_base_id)) || null
+
+  console.log('[App] chat:open received', d, 'parsed merchantId=', mid, 'userBaseId=', userBase)
+
+  // only treat merchant as present when not null/undefined (0 is valid)
+  if (mid !== null && typeof mid !== 'undefined') {
+    globalMerchantId.value = Number(mid)
+  } else {
+    globalMerchantId.value = null
+  }
+  globalUserBaseId.value = userBase
+
+  // show the chat modal immediately for snappy UX only when we actually have a merchant id
+  if (globalMerchantId.value !== null) {
+    console.log('[App] showing global chat modal for', globalMerchantId.value, globalUserBaseId.value)
+    showGlobalChat.value = true
+  } else {
+    console.log('[App] not showing global chat: merchantId is null or undefined')
+  }
+
+  if (globalMerchantId.value !== null) {
+    try {
+      const r = await getMerchantDetail(globalMerchantId.value)
+      if (r && r.data && r.data.data) {
+        globalMerchantName.value = r.data.data.shop_name || globalMerchantName.value
+        globalMerchantAvatar.value = r.data.data.logo || globalMerchantAvatar.value
+      }
+    } catch (err) {
+      // ignore enrichment error
     }
-  } catch (err) {}
-  showGlobalChat.value = true
+  }
 }
 
 onMounted(() => window.addEventListener('chat:open', openHandler))

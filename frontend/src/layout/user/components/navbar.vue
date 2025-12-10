@@ -1,6 +1,7 @@
 <template>
-	<header ref="navRef" class="meituan-navbar">
-		<div class="left">
+  <header ref="navRef" class="meituan-navbar">
+    <div class="left">
+      <img src="/JDlogo.png" class="site-logo" alt="嘉递外卖" />
 			<el-button type="text" class="loc-btn" @click="onLocation">
         <img src="@\assets\icons\location.svg" alt="定位" />
         <div class="loc-info">
@@ -79,6 +80,9 @@ const city = ref(localStorage.getItem('city') || '定位中...')
 const username = ref(localStorage.getItem('username') || '')
 const avatar = ref(localStorage.getItem('avatar') || '')
 const defaultAvatar = userPng
+
+// site logo style (small, aligns with left controls)
+
 
 // 仅当路由是订单列表或订单详情时，显示订单搜索框
 const isOrderRoute = computed(() => {
@@ -394,6 +398,9 @@ onUnmounted(() => { window.removeEventListener('scroll', onScroll); window.remov
   display: flex;
   align-items: center;
 }
+
+/* site logo style (small, aligns with left controls) */
+.site-logo { width: 30px; height: 30px; object-fit: contain; padding:0; }
 .notice-search:hover,
 .notice-search:focus-within {
   box-shadow: 0 0 0 3px rgba(255, 213, 79, 0.3);
@@ -414,7 +421,7 @@ onUnmounted(() => { window.removeEventListener('scroll', onScroll); window.remov
 }
 .notice-search :deep(.el-input__suffix) {
   position: relative;
-  width: 0;
+  width: 10px;
 }
 
 /* === 搜索按钮 === */

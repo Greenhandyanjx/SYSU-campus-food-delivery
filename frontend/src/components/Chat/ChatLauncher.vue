@@ -1,6 +1,9 @@
 <template>
   <div>
-    <button class="chat-launcher" @click.stop="openChat">{{ triggerText }}</button>
+    <button class="chat-launcher" @click.stop="openChat">
+      <img src="/JDlogo.png" alt="嘉递" class="chat-launcher-logo" />
+      <span class="chat-launcher-text">{{ triggerText }}</span>
+    </button>
 
     <teleport to="body">
       <div v-if="showChat" class="chat-overlay" @click.self="closeChat">
@@ -94,6 +97,14 @@ function closeChat() {
   cursor: pointer;
   font-size: 10px;
 }
+.chat-launcher-logo {
+  width: 18px;
+  height: 18px;
+  vertical-align: middle;
+  margin-right: 6px;
+  border-radius: 3px;
+}
+.chat-launcher-text { vertical-align: middle }
 .chat-overlay {
   position: fixed;
   inset: 0;
