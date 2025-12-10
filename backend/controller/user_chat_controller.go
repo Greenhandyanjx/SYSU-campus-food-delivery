@@ -15,6 +15,7 @@ type UserChatSummary struct {
 	LastMessage    string    `json:"last_message"`
 	LastAt         time.Time `json:"last_at"`
 	UnreadCount    int64     `json:"unread_count"`
+	UserBaseID     uint      `json:"user_base_id"`
 	MerchantName   string    `json:"merchant_name"`
 	MerchantAvatar string    `json:"merchant_avatar"`
 }
@@ -50,34 +51,35 @@ func GetUserChats(c *gin.Context) {
 		LastMessage    string    `json:"last_message"`
 		LastAt         time.Time `json:"last_at"`
 		UnreadCount    int64     `json:"unread_count"`
+		UserBaseID     uint      `json:"user_base_id"`
 		MerchantName   string    `json:"merchant_name"`
 		MerchantAvatar string    `json:"merchant_avatar"`
 	}
 
 	// 聚合查询：先取每个 merchant 的最后消息，再统计未读（来自商家且 status != 'read'），最后 Join 商家信息
 	sql := `
-	SELECT t.merchant_id, t.last_message, t.last_at, COALESCE(u.unread_count,0) AS unread_count, mm.shop_name AS merchant_name, mm.logo AS merchant_avatar
-	FROM (
-	  SELECT cm.merchant_id, cm.content AS last_message, cm.created_at AS last_at
-	  FROM chat_messages cm
-	  JOIN (
-		SELECT merchant_id, MAX(created_at) AS last_at
-		FROM chat_messages
-		WHERE user_base_id = ?
-		GROUP BY merchant_id
-	  ) s ON cm.merchant_id = s.merchant_id AND cm.created_at = s.last_at
-	  WHERE cm.user_base_id = ?
-	) t
-	LEFT JOIN (
-	  SELECT cm.merchant_id, COUNT(*) AS unread_count
-	  FROM chat_messages cm
-	  JOIN merchants m ON m.id = cm.merchant_id
-	  WHERE cm.user_base_id = ? AND cm.from_base_id = m.base_id AND cm.status != 'read'
-	  GROUP BY cm.merchant_id
-	) u ON t.merchant_id = u.merchant_id
-	LEFT JOIN merchants mm ON mm.id = t.merchant_id
-	ORDER BY t.last_at DESC
-	`
+		SELECT t.merchant_id, t.last_message, t.last_at, t.user_base_id, COALESCE(u.unread_count,0) AS unread_count, mm.shop_name AS merchant_name, mm.logo AS merchant_avatar
+		FROM (
+			SELECT cm.merchant_id, cm.content AS last_message, cm.created_at AS last_at, cm.user_base_id
+			FROM chat_messages cm
+			JOIN (
+				SELECT merchant_id, MAX(created_at) AS last_at
+				FROM chat_messages
+				WHERE user_base_id = ?
+				GROUP BY merchant_id
+			) s ON cm.merchant_id = s.merchant_id AND cm.created_at = s.last_at
+			WHERE cm.user_base_id = ?
+		) t
+		LEFT JOIN (
+			SELECT cm.merchant_id, COUNT(*) AS unread_count
+			FROM chat_messages cm
+			JOIN merchants m ON m.id = cm.merchant_id
+			WHERE cm.user_base_id = ? AND cm.from_base_id = m.base_id AND cm.status != 'read'
+			GROUP BY cm.merchant_id
+		) u ON t.merchant_id = u.merchant_id
+		LEFT JOIN merchants mm ON mm.id = t.merchant_id
+		ORDER BY t.last_at DESC
+		`
 
 	var rows []row
 	if err := global.Db.Raw(sql, userBaseID, userBaseID, userBaseID).Scan(&rows).Error; err != nil {
@@ -92,6 +94,7 @@ func GetUserChats(c *gin.Context) {
 			LastMessage:    r.LastMessage,
 			LastAt:         r.LastAt,
 			UnreadCount:    r.UnreadCount,
+			UserBaseID:     r.UserBaseID,
 			MerchantName:   r.MerchantName,
 			MerchantAvatar: r.MerchantAvatar,
 		})

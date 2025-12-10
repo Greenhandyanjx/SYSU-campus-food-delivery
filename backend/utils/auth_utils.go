@@ -26,12 +26,17 @@ func GenerateJWT(username string) (string, error) {
 }
 
 // GenerateJWTWithRole 生成包含 role 的 JWT
-func GenerateJWTWithRole(username, role string) (string, error) {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+// GenerateJWTWithRole 生成包含 role 的 JWT，若 merchantId 非空则把 merchantId 一并放入 claims
+func GenerateJWTWithRole(username, role string, merchantId string) (string, error) {
+	claims := jwt.MapClaims{
 		"username": username,
 		"role":     role,
 		"exp":      time.Now().Add(time.Hour * 72).Unix(),
-	})
+	}
+	if merchantId != "" {
+		claims["merchantId"] = merchantId
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signedtoken, err := token.SignedString([]byte("secret"))
 	return "Bearer " + signedtoken, err
 }

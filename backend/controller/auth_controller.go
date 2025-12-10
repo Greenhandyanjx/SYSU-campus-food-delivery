@@ -142,7 +142,15 @@ func Register(ctx *gin.Context) {
 		return
 	}
 
-	token, err := utils.GenerateJWTWithRole(base.Username, base.Role)
+	// 如果为商家，附带 merchantId 到 token 中
+	merchantIdStr := ""
+	if base.Role == "merchant" {
+		var createdMerchant models.Merchant
+		if err := global.Db.Where("base_id = ?", base.ID).First(&createdMerchant).Error; err == nil {
+			merchantIdStr = fmt.Sprintf("%d", createdMerchant.ID)
+		}
+	}
+	token, err := utils.GenerateJWTWithRole(base.Username, base.Role, merchantIdStr)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": "0", "msg": "token error"})
 		return
@@ -189,7 +197,15 @@ func Login(ctx *gin.Context) {
 		return
 	}
 
-	token, err := utils.GenerateJWTWithRole(user.Username, user.Role)
+	// 如果登录的是商家，尝试查找对应 merchant 并把 merchantId 放入 token
+	merchantIdStr := ""
+	if user.Role == "merchant" {
+		var m models.Merchant
+		if err := global.Db.Where("base_id = ?", user.ID).First(&m).Error; err == nil {
+			merchantIdStr = fmt.Sprintf("%d", m.ID)
+		}
+	}
+	token, err := utils.GenerateJWTWithRole(user.Username, user.Role, merchantIdStr)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"code": "0",

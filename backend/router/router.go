@@ -44,9 +44,7 @@ func SetRouter() *gin.Engine {
 		// 允许未登录用户上传图片（用于注册页面等）
 		noAuth.POST("/common/upload", controller.UploadImage)
 
-		noAuth.GET("/merchant/orders/status", controller.GetOrderListByStatus)
-		noAuth.GET("/merchant/orders/page", controller.GetOrderPage)
-		noAuth.GET("/merchant/order/detail", controller.GetOrderDetail)
+		// 商家订单列表与详情需要鉴权，移动到 auth 组下面以便中间件设置 baseUserID
 		// 支付平台回调（notify）
 		noAuth.POST("/order/notify", controller.PaymentNotify)
 		// 前端轮询订单状态（允许无鉴权以兼容扫码页面）
@@ -67,6 +65,10 @@ func SetRouter() *gin.Engine {
 	auth := fe.Group("/api")
 	auth.Use(midware.AuthMiddleware())
 	{
+		// merchant order endpoints require authentication
+		auth.GET("/merchant/orders/status", controller.GetOrderListByStatus)
+		auth.GET("/merchant/orders/page", controller.GetOrderPage)
+		auth.GET("/merchant/order/detail", controller.GetOrderDetail)
 		auth.POST("/change_password", controller.ChangePassword)
 
 		auth.POST("/merchant/dish/add", controller.Dish_add)

@@ -11,7 +11,7 @@
           </div>
           <div class="bottom">
             <div class="last">{{ c.last_message }}</div>
-            <div v-if="c.unread_count" class="badge">{{ c.unread_count }}</div>
+            <div v-if="getUnread(c.merchant_id)" class="badge">{{ getUnread(c.merchant_id) > 99 ? '99+' : getUnread(c.merchant_id) }}</div>
           </div>
         </div>
       </li>
@@ -24,9 +24,22 @@ import { ref, onMounted, onBeforeUnmount } from 'vue'
 import request from '@/api/merchant/request'
 import { getMerchantDetail, getBaseUserDetail } from '@/api/chat'
 import chatClient from '@/utils/chatClient'
+import { useChatStore } from '@/stores/chatStore'
 
+// 保留原有样式与模板，但逻辑沿用商家端会话外壳（以 merchant 为 peer）
 const chats = ref([])
 const active = ref(null)
+const isLoading = ref(false)
+const currentBaseId = ref(null) // 当前登录的用户 id
+const chatStore = useChatStore()
+
+function getUnread(mid) {
+  try {
+    if (mid === null || typeof mid === 'undefined') return 0
+    const v = chatStore.sessions[String(mid)]
+    return (v && Number(v.unread)) ? Number(v.unread) : 0
+  } catch (e) { return 0 }
+}
 
 function formatTime(s) {
   if (!s) return ''
@@ -34,128 +47,228 @@ function formatTime(s) {
   const now = new Date()
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const startOfYesterday = new Date(startOfToday.getTime() - 24 * 3600 * 1000)
-
   const pad = (n) => String(n).padStart(2, '0')
   const timePart = `${pad(dt.getHours())}:${pad(dt.getMinutes())}`
-
-  if (dt >= startOfToday) {
-    return `今天 ${timePart}`
-  }
-  if (dt >= startOfYesterday) {
-    return `昨天 ${timePart}`
-  }
-  if (dt.getFullYear() === now.getFullYear()) {
-    return `${dt.getMonth() + 1}月${dt.getDate()}日 ${timePart}`
-  }
+  if (dt >= startOfToday) return `今天 ${timePart}`
+  if (dt >= startOfYesterday) return `昨天 ${timePart}`
+  if (dt.getFullYear() === now.getFullYear()) return `${dt.getMonth() + 1}月${dt.getDate()}日 ${timePart}`
   return `${dt.getFullYear()}年${dt.getMonth() + 1}月${dt.getDate()}日 ${timePart}`
 }
 
-let currentBaseId = null
-async function load() {
+const userNameCache = ref({})
+async function fetchMerchantInfo(mid) {
+  if (mid === null || typeof mid === 'undefined') return null
+  if (userNameCache.value[mid]) return userNameCache.value[mid]
   try {
-    // 仅调用用户侧会话接口，移除本地 mock 回退
-    const res = await request.get('/user/chats')
+    const r = await getMerchantDetail(mid)
+    const md = r?.data?.data
+    const info = { name: md?.shop_name || md?.shopName || null, avatar: md?.logo || md?.logoUrl || null }
+    userNameCache.value[mid] = info
+    return info
+  } catch (e) {
+    return null
+  }
+}
 
+let lastLoadAt = 0
+const MIN_LOAD_INTERVAL = 5000
+async function load() {
+  const now = Date.now()
+  if (isLoading.value) return
+  if (now - lastLoadAt < MIN_LOAD_INTERVAL) return
+  isLoading.value = true
+  lastLoadAt = now
+  try {
+    const res = await request.get('/user/chats')
     if (res.data && Number(res.data.code) === 1) {
-      // 兼容后端字段名（merchant_name / merchant_avatar）与前端旧字段
-      const raw = res.data.data || []
-      const list = raw.map((c) => ({
+      let list = (res.data.data || []).map(c => ({
         merchant_id: c.merchant_id,
         merchantName: c.merchant_name || c.merchantName || null,
         merchantAvatar: c.merchant_avatar || c.merchantAvatar || null,
         last_message: c.last_message,
         last_at: c.last_at,
         unread_count: c.unread_count || 0,
-        user_base_id: c.user_base_id || c.userBaseId || null,
+        user_base_id: c.user_base_id || c.userBaseId || null
       }))
 
-      // 只有在后端未返回商家展示信息时，才去查询商家详情作为补充
+      // 异步补充商家展示信息（当后端未返回时）
       await Promise.all(list.map(async (c) => {
-        if ((!c.merchantName || !c.merchantAvatar) && c.merchant_id) {
+        if ((!c.merchantName || !c.merchantAvatar) && c.merchant_id !== null && typeof c.merchant_id !== 'undefined') {
           try {
-            const r = await getMerchantDetail(c.merchant_id)
-            const md = r?.data?.data
-            if (md) {
-              c.merchantName = md.shop_name || md.shopName || c.merchantName
-              c.merchantAvatar = md.logo || md.logoUrl || c.merchantAvatar
+            const info = await fetchMerchantInfo(c.merchant_id)
+            if (info) {
+              c.merchantName = c.merchantName || info.name
+              c.merchantAvatar = c.merchantAvatar || info.avatar
             }
-          } catch (e) {
-            // ignore enrichment errors
-          }
+          } catch (e) { }
         }
       }))
 
       chats.value = list
+
+      // 初始化 Pinia 会话状态（key 使用 merchant_id）
+      try {
+        list.forEach(c => {
+          if (c && c.merchant_id !== undefined && c.merchant_id !== null) {
+            chatStore.upsertSession(String(c.merchant_id), { unread: c.unread_count || 0, meta: { merchantName: c.merchantName, merchantAvatar: c.merchantAvatar } })
+          }
+        })
+      } catch (e) {}
     } else {
       chats.value = []
     }
   } catch (e) {
-    console.error('load user chats failed', e)
-    // 请求失败时返回空列表（不再使用本地 mock）
+    console.warn('load user chats failed', e)
     chats.value = []
+  } finally {
+    isLoading.value = false
   }
 }
 
-function open(c) {
-  // debug: log item shape to help diagnose unexpected types
-  try { console.log('[UserChatList.open] item:', c) } catch (e) {}
-
-  // 读取 merchant id 时更加鲁棒：支持字段为 value / getter 函数 / 不同命名
+async function open(c) {
+  // 使用订单页内的发起聊天流程：优先使用 numeric merchant_id，补充商家和用户信息后再打开聊天窗口
+  let midCandidate = (c && (c.merchant_id || c.merchantId || c.storeId || c.store_id))
   let mid = null
-  try {
-    if (c == null) mid = null
-    else if (typeof c === 'object') {
-      if (c.merchant_id !== undefined) {
-        mid = (typeof c.merchant_id === 'function') ? c.merchant_id() : c.merchant_id
-      } else if (c.merchantId !== undefined) {
-        mid = (typeof c.merchantId === 'function') ? c.merchantId() : c.merchantId
-      }
-    }
-  } catch (e) {
-    console.warn('[UserChatList.open] read merchant id error', e)
+  if (midCandidate === 0 || midCandidate) {
+    const n = Number(midCandidate)
+    if (!Number.isNaN(n)) mid = n
+  }
+
+  // 尝试从会话项里直接获取 user_base_id（如果后端返回）
+  let baseUserId = (c && (c.user_base_id || c.userBaseId)) || null
+
+  if (mid === null) {
+    // 回退：无法解析 merchant id，提示并返回
+    console.warn('[UserChatList.open] cannot resolve merchant id from item', c)
+    alert('无法定位商家 ID，无法发起聊天')
+    return
   }
 
   active.value = mid
-  // 标记为已读（通知后端把来自该商家的消息标记为 read）
-  ;(async () => {
-    try {
-      if (mid) await request.post('/user/chats/mark_read', { merchant_id: mid })
-    } catch (e) {
-      console.warn('mark read failed', e)
+
+  // 标记本地 session 已读（乐观）
+  try { chatStore.markSessionRead(String(mid)) } catch (e) {}
+
+  // 后端标记已读并刷新列表
+  try {
+    await request.post('/user/chats/mark_read', { merchant_id: mid })
+  } catch (e) { console.warn('mark read failed', e) }
+
+  // 获取当前登录用户 id（用于 chat window payload）
+  try {
+    const cur = await getBaseUserDetail()
+    if (cur && cur.data && cur.data.data) baseUserId = cur.data.data.id
+  } catch (e) { console.warn('getBaseUserDetail failed', e) }
+
+  // 补充商家信息以便 ChatWindow 里能直接展示名称/头像
+  let merchantInfo = null
+  try {
+    const m = await getMerchantDetail(mid)
+    merchantInfo = m && m.data && m.data.data
+  } catch (e) { }
+
+  const detail = {
+    merchantId: mid,
+    merchant_id: mid,
+    userBaseId: baseUserId,
+    user_base_id: baseUserId,
+    merchantName: merchantInfo?.shop_name || merchantInfo?.shopName || null,
+    merchantAvatar: merchantInfo?.logo || merchantInfo?.logoUrl || null
+  }
+
+  try {
+    console.log('[UserChatList.open] dispatching chat:open', detail)
+    window.dispatchEvent(new CustomEvent('chat:open', { detail }))
+  } catch (e) { console.warn('[UserChatList.open] dispatch failed', e) }
+
+  try { window.dispatchEvent(new CustomEvent('user:chats:marked_read', { detail: { merchant_id: mid } })) } catch (e) {}
+
+  // 最后刷新本地列表（异步）
+  try { await load() } catch (e) { console.warn('reload after open failed', e) }
+}
+
+function updateChatFromMsg(msg) {
+  try {
+    const mid = msg.merchant_id || msg.merchantId
+    const uid = msg.user_base_id || msg.userBaseId
+    const from = msg.from_base_id || msg.fromBaseId
+    if (typeof uid === 'undefined' || uid === null) return
+    // 仅处理发给当前登录用户的消息
+    if (currentBaseId.value && Number(uid) !== Number(currentBaseId.value)) return
+
+    let idx = chats.value.findIndex(c => Number(c.merchant_id) === Number(mid))
+    let c
+    if (idx >= 0) c = chats.value[idx]
+    else {
+      c = { merchant_id: mid, last_message: '', last_at: new Date().toISOString(), unread_count: 0, user_base_id: uid, merchantName: null, merchantAvatar: null }
+      chats.value.unshift(c)
+      idx = 0
     }
-    // 立即刷新列表，保证未读数字实时消失
-    await load()
-    window.dispatchEvent(new CustomEvent('chat:open', { detail: { merchantId: mid || null, userBaseId: (c && (c.user_base_id || c.userBaseId)) || null } }))
-  })()
+
+    c.last_message = msg.content || c.last_message
+    c.last_at = msg.created_at || msg.last_at || new Date().toISOString()
+    // 如果消息来自对方（非当前用户）则计为未读
+    if (from && currentBaseId.value && Number(from) !== Number(currentBaseId.value)) {
+      c.unread_count = (Number(c.unread_count) || 0) + 1
+    }
+
+    // 补充商家名
+    if (!c.merchantName && c.merchant_id) fetchMerchantInfo(c.merchant_id).then(info => { if (info) { c.merchantName = info.name; c.merchantAvatar = info.avatar } })
+
+    try {
+      const isSelf = from && currentBaseId.value && Number(from) === Number(currentBaseId.value)
+      chatStore.addMessage(String(mid), msg, !!isSelf)
+    } catch (e) {}
+
+    if (idx > 0) {
+      chats.value.splice(idx, 1)
+      chats.value.unshift(c)
+    }
+  } catch (e) {
+    console.warn('updateChatFromMsg failed', e)
+  }
 }
 
 onMounted(() => {
-  // 获取当前登录者 id（用于判断哪些消息是发给我的）
   ;(async () => {
     try {
       const cur = await getBaseUserDetail()
-      if (cur && cur.data && cur.data.data) currentBaseId = cur.data.data.id
+      if (cur && cur.data && cur.data.data) currentBaseId.value = cur.data.data.id
     } catch (e) {}
     await load()
   })()
-  // 定时刷新会话列表
-  const timer = setInterval(load, 15000)
 
-  // 注册全局 ws 通知：收到消息时如果是针对当前用户则刷新会话列表
-  const handler = (msg) => {
+  const wrappedHandler = (msg) => {
     try {
+      // 只处理发给当前用户的消息
       const uid = msg.user_base_id || msg.userBaseId
       if (!uid) return
-      if (currentBaseId && Number(uid) === Number(currentBaseId)) {
-        // 只要有新的消息，刷新会话列表以更新未读计数与排序
-        load()
+      if (currentBaseId.value && Number(uid) === Number(currentBaseId.value)) {
+        // 防抖合并短时间内多次通知
+        if (!window.__userChatListRefreshTimer) {
+          window.__userChatListRefreshTimer = setTimeout(() => { window.__userChatListRefreshTimer = null; load() }, 600)
+        }
+        updateChatFromMsg(msg)
       }
     } catch (e) {}
   }
-  chatClient.onMessage(handler)
+
+  chatClient.onMessage(wrappedHandler)
+  try { chatClient.connect() } catch (e) {}
+
+  const userMarkReadHandler = (ev) => {
+    try {
+      const d = (ev && ev.detail) || {}
+      const mid = d.merchant_id || d.merchantId || null
+      if (mid !== null && typeof mid !== 'undefined') load()
+    } catch (e) { console.warn('userMarkReadHandler error', e) }
+  }
+  window.addEventListener('user:chats:marked_read', userMarkReadHandler)
+
   onBeforeUnmount(() => {
-    clearInterval(timer)
-    chatClient.offMessage(handler)
+    chatClient.offMessage(wrappedHandler)
+    try { if (window.__userChatListRefreshTimer) { clearTimeout(window.__userChatListRefreshTimer); window.__userChatListRefreshTimer = null } } catch(e) {}
+    window.removeEventListener('user:chats:marked_read', userMarkReadHandler)
   })
 })
 </script>
