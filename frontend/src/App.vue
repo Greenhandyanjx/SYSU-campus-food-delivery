@@ -7,7 +7,7 @@
 
   <!-- 全局聊天弹窗：使用 teleport 在 body 上展示居中模态窗口，行为与商家端一致 -->
   <teleport to="body">
-    <div v-if="!isMerchant && showGlobalChat" class="global-chat-overlay" @click.self="showGlobalChat = false">
+    <div v-if="showGlobalChat" class="global-chat-overlay" @click.self="showGlobalChat = false">
       <div class="global-chat-modal">
         <ChatWindow
           :key="String(globalMerchantId) + '-' + String(globalUserBaseId)"
@@ -24,7 +24,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import MessageNotify from '@/components/Chat/MessageNotify.vue'
 import ChatWindow from '@/components/Chat/ChatWindow.vue'
 import { getMerchantDetail } from '@/api/chat'
@@ -64,6 +64,12 @@ async function openHandler(e) {
   if (globalMerchantId.value !== null) {
     console.log('[App] showing global chat modal for', globalMerchantId.value, globalUserBaseId.value)
     showGlobalChat.value = true
+    try {
+      await nextTick()
+      console.log('[App] DOM overlay present?', !!document.querySelector('.global-chat-overlay'))
+      const el = document.querySelector('.global-chat-overlay')
+      console.log('[App] overlay innerHTML length', el ? el.innerHTML.length : 0)
+    } catch (e) { console.warn('[App] nextTick/dom-check failed', e) }
   } else {
     console.log('[App] not showing global chat: merchantId is null or undefined')
   }

@@ -57,7 +57,7 @@ function formatTime(s) {
 
 const userNameCache = ref({})
 async function fetchMerchantInfo(mid) {
-  if (!mid) return null
+  if (mid === null || typeof mid === 'undefined') return null
   if (userNameCache.value[mid]) return userNameCache.value[mid]
   try {
     const r = await getMerchantDetail(mid)
@@ -125,25 +125,66 @@ async function load() {
   }
 }
 
-function open(c) {
-  // 使用商家端外壳风格：把 merchant_id 作为 peer
-  const mid = (c && (c.merchant_id || c.merchantId)) || null
-  const userBase = (c && (c.base_id || c.userBaseId)) || null
+async function open(c) {
+  // 使用订单页内的发起聊天流程：优先使用 numeric merchant_id，补充商家和用户信息后再打开聊天窗口
+  let midCandidate = (c && (c.merchant_id || c.merchantId || c.storeId || c.store_id))
+  let mid = null
+  if (midCandidate === 0 || midCandidate) {
+    const n = Number(midCandidate)
+    if (!Number.isNaN(n)) mid = n
+  }
+
+  // 尝试从会话项里直接获取 user_base_id（如果后端返回）
+  let baseUserId = (c && (c.user_base_id || c.userBaseId)) || null
+
+  if (mid === null) {
+    // 回退：无法解析 merchant id，提示并返回
+    console.warn('[UserChatList.open] cannot resolve merchant id from item', c)
+    alert('无法定位商家 ID，无法发起聊天')
+    return
+  }
+
   active.value = mid
-  const detail = { merchantId: mid, merchant_id: mid, userBaseId: userBase, user_base_id: userBase }
+
+  // 标记本地 session 已读（乐观）
+  try { chatStore.markSessionRead(String(mid)) } catch (e) {}
+
+  // 后端标记已读并刷新列表
+  try {
+    await request.post('/user/chats/mark_read', { merchant_id: mid })
+  } catch (e) { console.warn('mark read failed', e) }
+
+  // 获取当前登录用户 id（用于 chat window payload）
+  try {
+    const cur = await getBaseUserDetail()
+    if (cur && cur.data && cur.data.data) baseUserId = cur.data.data.id
+  } catch (e) { console.warn('getBaseUserDetail failed', e) }
+
+  // 补充商家信息以便 ChatWindow 里能直接展示名称/头像
+  let merchantInfo = null
+  try {
+    const m = await getMerchantDetail(mid)
+    merchantInfo = m && m.data && m.data.data
+  } catch (e) { }
+
+  const detail = {
+    merchantId: mid,
+    merchant_id: mid,
+    userBaseId: baseUserId,
+    user_base_id: baseUserId,
+    merchantName: merchantInfo?.shop_name || merchantInfo?.shopName || null,
+    merchantAvatar: merchantInfo?.logo || merchantInfo?.logoUrl || null
+  }
+
   try {
     console.log('[UserChatList.open] dispatching chat:open', detail)
     window.dispatchEvent(new CustomEvent('chat:open', { detail }))
   } catch (e) { console.warn('[UserChatList.open] dispatch failed', e) }
-  try { if (mid !== null && typeof mid !== 'undefined') chatStore.markSessionRead(String(mid)) } catch (e) {}
 
-  ;(async () => {
-    try {
-      if (mid !== null && typeof mid !== 'undefined') await request.post('/user/chats/mark_read', { merchant_id: mid })
-    } catch (e) { console.warn('mark read failed', e) }
-    try { window.dispatchEvent(new CustomEvent('user:chats:marked_read', { detail: { merchant_id: mid } })) } catch (e) {}
-    await load()
-  })()
+  try { window.dispatchEvent(new CustomEvent('user:chats:marked_read', { detail: { merchant_id: mid } })) } catch (e) {}
+
+  // 最后刷新本地列表（异步）
+  try { await load() } catch (e) { console.warn('reload after open failed', e) }
 }
 
 function updateChatFromMsg(msg) {

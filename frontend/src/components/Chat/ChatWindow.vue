@@ -6,7 +6,7 @@
 
       <div class="chat-header">
       <div class="header-left">
-        <img class="avatar" :src="merchantAvatar" alt="商家" />
+        <img class="avatar" :src="merchantAvatar" alt="商家" @error="onMerchantImgError($event)" />
         <span class="title">{{ merchantName }} · 在线客服</span>
       </div>
       <div style="display:flex;align-items:center;gap:8px">
@@ -27,6 +27,7 @@
         <img 
           class="msg-avatar" 
           :src="isMyMessage(m) ? userAvatarLocal : merchantAvatar"
+          @error="onMsgImgError($event, isMyMessage(m))"
         />
 
         <!-- 气泡 -->
@@ -55,9 +56,9 @@ import merchantSvg from '@/assets/merchant.svg'
 import userPng from '@/assets/user.png'
 
 const props = defineProps({
-  merchantId: { type: Number, required: true },
+  merchantId: { type: Number, required: false },
   userBaseId: { type: Number, required: false },
-  token: { type: String, required: true },
+  token: { type: String, required: false },
   merchantName: { type: String, default: "商家" },
   merchantAvatar: { type: String, default: '' },
   userAvatar: { type: String, default: '' }
@@ -74,6 +75,25 @@ const currentBaseId = ref(null)
 const merchantName = ref(props.merchantName || '商家')
 const merchantAvatar = ref(props.merchantAvatar || merchantSvg)
 const userAvatarLocal = ref(props.userAvatar || userPng)
+function onMerchantImgError(ev) {
+  try {
+    const el = ev && ev.target
+    if (!el) return
+    // 避免无限触发：只允许一次回退
+    if (el.dataset && el.dataset.fallback === '1') return
+    if (el.dataset) el.dataset.fallback = '1'
+    el.src = merchantSvg
+  } catch (e) {}
+}
+function onMsgImgError(ev, isMine) {
+  try {
+    const el = ev && ev.target
+    if (!el) return
+    if (el.dataset && el.dataset.fallback === '1') return
+    if (el.dataset) el.dataset.fallback = '1'
+    el.src = isMine ? userPng : merchantSvg
+  } catch (e) {}
+}
 const userNameLocal = ref('我')
 const userBaseIdLocal = ref(props.userBaseId || null)
 
@@ -93,7 +113,9 @@ function formatTime(s) {
 
 async function loadHistory() {
   // load history using the resolved userBaseId (from ensureNames)
-  if (!userBaseIdLocal.value || !props.merchantId) return
+  // treat 0 as a valid id: only bail out when null/undefined
+  if (userBaseIdLocal.value === null || typeof userBaseIdLocal.value === 'undefined') return
+  if (props.merchantId === null || typeof props.merchantId === 'undefined') return
   const res = await getChatHistory(props.merchantId, userBaseIdLocal.value)
   if (res && res.data?.data) {
     messages.value = res.data.data.reverse()
@@ -122,7 +144,7 @@ async function ensureNames() {
     } catch (e) {}
   }
   // user info: 若没有传入 props.userBaseId，则默认把当前登录者视为 user（普通用户打开聊天）
-  if (!props.userBaseId) {
+  if (props.userBaseId === null || typeof props.userBaseId === 'undefined') {
     if (currentBaseId.value) {
       userBaseIdLocal.value = currentBaseId.value
     } else {
@@ -155,8 +177,8 @@ function handleGlobalMessage(msg) {
   const uid = msg.user_base_id || msg.userBaseId
   // ignore server echoes of messages we just sent (from_base_id equals our own base id)
   const from = msg.from_base_id || msg.fromBaseId
-  if (from && userBaseIdLocal.value && Number(from) === Number(userBaseIdLocal.value)) return
-  if (!mid || Number(mid) !== Number(props.merchantId)) return
+  if (from && (userBaseIdLocal.value !== null && typeof userBaseIdLocal.value !== 'undefined') && Number(from) === Number(userBaseIdLocal.value)) return
+  if (mid === null || typeof mid === 'undefined' || Number(mid) !== Number(props.merchantId)) return
   // push and scroll
   messages.value.push(msg)
   nextTick(scrollBottom)
@@ -226,17 +248,25 @@ const isMyMessage = (msg) => {
 }
 
 onMounted(async () => {
-  await detectRole()
-  await ensureNames()
-  await loadHistory()
-  chatClient.onMessage(handleGlobalMessage)
-  // ensure centralized websocket connection
-  try { chatClient.connect() } catch (e) {}
+  try {
+    console.log('[ChatWindow] mounting for merchantId=', props.merchantId, 'userBaseId=', props.userBaseId)
+    await detectRole()
+    await ensureNames()
+    await loadHistory()
+    chatClient.onMessage(handleGlobalMessage)
+    // ensure centralized websocket connection
+    try { chatClient.connect() } catch (e) { console.warn('[ChatWindow] chatClient.connect failed', e) }
+    try { window.dispatchEvent(new CustomEvent('chat:window:mounted', { detail: { merchantId: props.merchantId, userBaseId: userBaseIdLocal.value } })) } catch (e) {}
+    console.log('[ChatWindow] mounted')
+  } catch (err) {
+    console.error('[ChatWindow] mount error', err)
+    try { window.dispatchEvent(new CustomEvent('chat:window:error', { detail: { error: String(err) } })) } catch (e) {}
+  }
 })
 
 // 当外部传入的 merchantId / userBaseId 发生变化时，重新加载会话
 watch(() => props.merchantId, async (newVal, oldVal) => {
-  if (!newVal) return
+  if (newVal === null || typeof newVal === 'undefined') return
   // 重置消息并重新加载
   messages.value = []
   await ensureNames()
@@ -251,6 +281,7 @@ watch(() => props.merchantId, async (newVal, oldVal) => {
 
 watch(() => props.userBaseId, async (newVal, oldVal) => {
   // 当 userBaseId 变化（例如商家端切换客户）时重新加载
+  if (newVal === null || typeof newVal === 'undefined') return
   messages.value = []
   await ensureNames()
   await loadHistory()
