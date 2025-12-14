@@ -72,6 +72,9 @@
               class-name="orderTime"
               min-width="130"
             >
+              <template v-slot="{ row }">
+                <span>{{ formatDateToCN(row.expected_time) }}</span>
+              </template>
             </el-table-column>
             <el-table-column prop="totalprice" label="实收金额"> </el-table-column>
             <el-table-column label="备注">
@@ -186,7 +189,7 @@
 
         <div class="modal-body">
           <div class="order-top">
-            <p><label>下单时间：</label>{{ diaForm.orderTime }}</p>
+            <p><label>下单时间：</label>{{ formatDateToCN(diaForm.orderTime) }}</p>
           </div>
 
           <div class="order-middle">
@@ -196,7 +199,7 @@
                 <div class="user-phone"><label>手机号：</label><span>{{ diaForm.phone }}</span></div>
                 <div v-if="[2,3,4,5].includes(dialogOrderStatus)" class="user-getTime">
                   <label>{{ dialogOrderStatus === 5 ? '送达时间：' : '预计送达时间：' }}</label>
-                  <span>{{ dialogOrderStatus === 5 ? diaForm.deliveryTime : diaForm.estimatedDeliveryTime }}</span>
+                  <span>{{ dialogOrderStatus === 5 ? formatDateToCN(diaForm.deliveryTime) : formatDateToCN(diaForm.estimatedDeliveryTime) }}</span>
                 </div>
                 <div class="user-address"><label>地址：</label><span>{{ diaForm.address }}</span></div>
               </div>
@@ -211,9 +214,9 @@
               <div class="dish-label">菜品</div>
               <div class="dish-list">
                 <div v-for="(item, index) in diaForm.orderDetailList || []" :key="index" class="dish-item">
-                  <span class="dish-name">{{ item.orderDishes }}</span>
+                  <span class="dish-name">{{ item.name }}</span>
                   <span class="dish-num">x{{ item.number || item.qty || item.quantity }}</span>
-                  <span class="dish-price">￥{{ item.amount ? (Number(item.amount).toFixed(2)) : '' }}</span>
+                  <span class="dish-price">￥{{item.price ? (Number(item.price).toFixed(2)) : '' }}</span>
                 </div>
               </div>
               <div class="dish-all-amount"><label>菜品小计</label><span>￥{{ dishSubtotal }}</span></div>
@@ -225,11 +228,11 @@
               <div class="amount-label">费用</div>
               <div class="amount-list">
                 <div class="dish-amount"><span class="amount-name">菜品小计：</span><span class="amount-price">￥{{ dishSubtotalRaw }}</span></div>
-                <div class="send-amount"><span class="amount-name">派送费：</span><span class="amount-price">￥6</span></div>
+                <div class="send-amount"><span class="amount-name">派送费：</span><span class="amount-price">￥{{ deliveryAmountDisplay }}</span></div>
                 <div class="package-amount"><span class="amount-name">打包费：</span><span class="amount-price">￥{{ packAmountDisplay }}</span></div>
                 <div class="all-amount"><span class="amount-name">合计：</span><span class="amount-price">￥{{ amountDisplay }}</span></div>
                 <div class="pay-type"><span class="pay-name">支付渠道：</span><span class="pay-value">{{ diaForm.payMethod === 1 ? '微信支付' : '支付宝支付' }}</span></div>
-                <div class="pay-time"><span class="pay-name">支付时间：</span><span class="pay-value">{{ diaForm.checkoutTime }}</span></div>
+                <div class="pay-time"><span class="pay-name">支付时间：</span><span class="pay-value">{{ formatDateToCN(diaForm.checkoutTime) }}</span></div>
               </div>
             </div>
           </div>
@@ -408,21 +411,43 @@ const orderList = ref([
 
 const dishSubtotal = computed(() => {
   const a = diaForm.value?.amount
-  const pack = diaForm.value?.packAmount || 0
+  const pack = Number(diaForm.value?.packAmount || 0)
+  const delivery = Number(diaForm.value?.deliveryAmount || diaForm.value?.delivery_amount || diaForm.value?.deliveryFee || diaForm.value?.delivery_fee || 0)
   if (typeof a === 'number') {
-    return (a - 6 - pack).toFixed(2)
+    return (a - delivery - pack).toFixed(2)
   }
   return ''
 })
 
 const dishSubtotalRaw = computed(() => {
   const a = diaForm.value?.amount
-  const pack = diaForm.value?.packAmount || 0
+  const pack = Number(diaForm.value?.packAmount || 0)
+  const delivery = Number(diaForm.value?.deliveryAmount || diaForm.value?.delivery_amount || diaForm.value?.deliveryFee || diaForm.value?.delivery_fee || 0)
   if (typeof a === 'number') {
-    return ((a - 6 - pack) * 100) / 100
+    return ((a - delivery - pack) * 100) / 100
   }
   return ''
 })
+
+const deliveryAmountDisplay = computed(() => {
+  const v = diaForm.value?.deliveryAmount || diaForm.value?.delivery_amount || diaForm.value?.deliveryFee || diaForm.value?.delivery_fee || 0
+  const n = Number(v || 0)
+  return Number.isFinite(n) ? n.toFixed(2) : '0.00'
+})
+
+// 将时间格式化为：YYYY年MM月DD日 HH:mm
+function formatDateToCN(s: any) {
+  if (!s) return ''
+  const dt = new Date(s)
+  if (isNaN(dt.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const yyyy = dt.getFullYear()
+  const mm = pad(dt.getMonth() + 1)
+  const dd = pad(dt.getDate())
+  const HH = pad(dt.getHours())
+  const MM = pad(dt.getMinutes())
+  return `${yyyy}年${mm}月${dd}日 ${HH}:${MM}`
+}
 
 const packAmountDisplay = computed(() => {
   const p = diaForm.value?.packAmount
@@ -475,8 +500,20 @@ async function getOrderListData(s: number) {
   }
   try {
     const data = await getOrderDetailPage(params)
-    // 保持原始响应结构的使用方式（和之前一致）
-    orderData.value = data?.data?.data?.items || []
+    // 保持原始响应结构的使用方式（并做一次字段规范化，确保每条都有 id/orderId/orderid）
+    const rawItems = data?.data?.data?.items || []
+    orderData.value = rawItems.map((it: any) => {
+      const idVal = Number(it.id ?? it.ID ?? it.orderId ?? it.orderID ?? it.orderid ?? it.order_id ?? 0)
+      const orderIdVal = it.orderId ?? it.orderid ?? it.orderID ?? it.id ?? idVal
+      const deliveryAmount = it.deliveryAmount ?? it.delivery_amount ?? it.deliveryFee ?? it.delivery_fee ?? it.deliveryFee
+      return Object.assign({}, it, {
+        id: idVal,
+        orderId: orderIdVal,
+        orderid: orderIdVal,
+        amount: (it.amount ?? it.totalPrice ?? it.total_price ?? 0),
+        deliveryAmount: deliveryAmount,
+      })
+    })
     console.log("表格数据 =", orderData.value)
     counts.value = data?.data?.data?.total || 0
     emit('getOrderListBy3Status')

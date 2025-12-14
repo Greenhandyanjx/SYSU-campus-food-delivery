@@ -33,7 +33,7 @@
         <!-- 气泡 -->
         <div class="bubble-wrapper">
           <div class="bubble">{{ m.content }}</div>
-          <div class="time">{{ formatTime(m.created_at) }}</div>
+          <div class="time">{{ formatDateToCN(m.created_at) }}</div>
         </div>
       </div>
     </div>
@@ -97,18 +97,17 @@ function onMsgImgError(ev, isMine) {
 const userNameLocal = ref('我')
 const userBaseIdLocal = ref(props.userBaseId || null)
 
-function formatTime(s) {
+function formatDateToCN(s) {
   if (!s) return ''
   const dt = new Date(s)
-  const now = new Date()
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const startOfYesterday = new Date(startOfToday.getTime() - 24 * 3600 * 1000)
+  if (isNaN(dt.getTime())) return ''
   const pad = (n) => String(n).padStart(2, '0')
-  const timePart = `${pad(dt.getHours())}:${pad(dt.getMinutes())}`
-  if (dt >= startOfToday) return `今天 ${timePart}`
-  if (dt >= startOfYesterday) return `昨天 ${timePart}`
-  if (dt.getFullYear() === now.getFullYear()) return `${dt.getMonth() + 1}月${dt.getDate()}日 ${timePart}`
-  return `${dt.getFullYear()}年${dt.getMonth() + 1}月${dt.getDate()}日 ${timePart}`
+  const yyyy = dt.getFullYear()
+  const mm = pad(dt.getMonth() + 1)
+  const dd = pad(dt.getDate())
+  const HH = pad(dt.getHours())
+  const MM = pad(dt.getMinutes())
+  return `${yyyy}年${mm}月${dd}日 ${HH}:${MM}`
 }
 
 async function loadHistory() {
