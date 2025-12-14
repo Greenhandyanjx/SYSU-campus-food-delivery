@@ -60,16 +60,14 @@ async function openHandler(e) {
   }
   globalUserBaseId.value = userBase
 
-  // show the chat modal immediately for snappy UX only when we actually have a merchant id
+  // 仅在非商家端展示全局聊天弹窗（商家使用页面内本地弹窗）
   if (globalMerchantId.value !== null) {
-    console.log('[App] showing global chat modal for', globalMerchantId.value, globalUserBaseId.value)
-    showGlobalChat.value = true
-    try {
-      await nextTick()
-      console.log('[App] DOM overlay present?', !!document.querySelector('.global-chat-overlay'))
-      const el = document.querySelector('.global-chat-overlay')
-      console.log('[App] overlay innerHTML length', el ? el.innerHTML.length : 0)
-    } catch (e) { console.warn('[App] nextTick/dom-check failed', e) }
+    if (!isMerchant.value) {
+      console.log('[App] showing global chat modal for', globalMerchantId.value, globalUserBaseId.value)
+      showGlobalChat.value = true
+    } else {
+      console.log('[App] running as merchant — skipping global chat modal')
+    }
   } else {
     console.log('[App] not showing global chat: merchantId is null or undefined')
   }

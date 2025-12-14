@@ -98,7 +98,11 @@
           label="下单时间"
           class-name="orderTime"
           min-width="110"
-        />
+        >
+          <template #default="{ row }">
+            <span>{{ formatDateToCN(row.orderTime) }}</span>
+          </template>
+        </el-table-column>
         <el-table-column
           v-if="[6].includes(orderStatus)"
           key="cancelTime"
@@ -127,7 +131,11 @@
           prop="expected_time"
           label="预计送达时间"
           min-width="110"
-        />
+        >
+          <template #default="{ row }">
+            <span>{{ formatDateToCN(row.expected_time || row.estimatedDeliveryTime || row.deliveryTime) }}</span>
+          </template>
+        </el-table-column>
         <el-table-column
           v-if="[0, 2, 5].includes(orderStatus)"
           key="amount"
@@ -452,6 +460,20 @@ function formatForApi(v: any) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(
     d.getHours()
   )}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
+// 格式化为中文可读时间：YYYY年MM月DD日 HH:mm
+function formatDateToCN(s: any) {
+  if (!s) return ''
+  const dt = new Date(s)
+  if (isNaN(dt.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const yyyy = dt.getFullYear()
+  const mm = pad(dt.getMonth() + 1)
+  const dd = pad(dt.getDate())
+  const HH = pad(dt.getHours())
+  const MM = pad(dt.getMinutes())
+  return `${yyyy}年${mm}月${dd}日 ${HH}:${MM}`
 }
 
 onMounted(() => {

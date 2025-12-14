@@ -7,7 +7,7 @@
         <div class="meta">
           <div class="top">
             <div class="name">{{ c.merchantName || ('商家 ' + c.merchant_id) }}</div>
-            <div class="time">{{ formatTime(c.last_at) }}</div>
+            <div class="time">{{ formatDateToCN(c.last_at) }}</div>
           </div>
           <div class="bottom">
             <div class="last">{{ c.last_message }}</div>
@@ -22,6 +22,7 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import request from '@/api/merchant/request'
+import noImg from '@/assets/noImg.png'
 import { getMerchantDetail, getBaseUserDetail } from '@/api/chat'
 import chatClient from '@/utils/chatClient'
 import { useChatStore } from '@/stores/chatStore'
@@ -41,18 +42,17 @@ function getUnread(mid) {
   } catch (e) { return 0 }
 }
 
-function formatTime(s) {
+function formatDateToCN(s) {
   if (!s) return ''
   const dt = new Date(s)
-  const now = new Date()
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const startOfYesterday = new Date(startOfToday.getTime() - 24 * 3600 * 1000)
+  if (isNaN(dt.getTime())) return ''
   const pad = (n) => String(n).padStart(2, '0')
-  const timePart = `${pad(dt.getHours())}:${pad(dt.getMinutes())}`
-  if (dt >= startOfToday) return `今天 ${timePart}`
-  if (dt >= startOfYesterday) return `昨天 ${timePart}`
-  if (dt.getFullYear() === now.getFullYear()) return `${dt.getMonth() + 1}月${dt.getDate()}日 ${timePart}`
-  return `${dt.getFullYear()}年${dt.getMonth() + 1}月${dt.getDate()}日 ${timePart}`
+  const yyyy = dt.getFullYear()
+  const mm = pad(dt.getMonth() + 1)
+  const dd = pad(dt.getDate())
+  const HH = pad(dt.getHours())
+  const MM = pad(dt.getMinutes())
+  return `${yyyy}年${mm}月${dd}日 ${HH}:${MM}`
 }
 
 const userNameCache = ref({})
@@ -84,7 +84,8 @@ async function load() {
       let list = (res.data.data || []).map(c => ({
         merchant_id: c.merchant_id,
         merchantName: c.merchant_name || c.merchantName || null,
-        merchantAvatar: c.merchant_avatar || c.merchantAvatar || null,
+        // 如果后端返回空、NULL、'null' 等值，统一回退到 noImg
+        merchantAvatar: (c.merchant_avatar || c.merchantAvatar) ? (String(c.merchant_avatar || c.merchantAvatar) === 'NULL' || String(c.merchant_avatar || c.merchantAvatar).toLowerCase() === 'null' ? noImg : (c.merchant_avatar || c.merchantAvatar)) : noImg,
         last_message: c.last_message,
         last_at: c.last_at,
         unread_count: c.unread_count || 0,
@@ -93,12 +94,12 @@ async function load() {
 
       // 异步补充商家展示信息（当后端未返回时）
       await Promise.all(list.map(async (c) => {
-        if ((!c.merchantName || !c.merchantAvatar) && c.merchant_id !== null && typeof c.merchant_id !== 'undefined') {
+          if ((!c.merchantName || !c.merchantAvatar || c.merchantAvatar === noImg) && c.merchant_id !== null && typeof c.merchant_id !== 'undefined') {
           try {
             const info = await fetchMerchantInfo(c.merchant_id)
             if (info) {
               c.merchantName = c.merchantName || info.name
-              c.merchantAvatar = c.merchantAvatar || info.avatar
+              c.merchantAvatar = c.merchantAvatar && c.merchantAvatar !== noImg ? c.merchantAvatar : (info.avatar || noImg)
             }
           } catch (e) { }
         }

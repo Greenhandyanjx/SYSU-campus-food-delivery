@@ -56,6 +56,8 @@ func SetRouter() *gin.Engine {
 		noAuth.GET("/baseuser/detail", controller.GetBaseUserDetail)
 		// debug: list active websocket connections (base_user ids)
 		noAuth.GET("/debug/ws/connections", controller.DebugConnections)
+		// debug: send a test payload to a specific base_id ws connection
+		noAuth.POST("/debug/ws/send", controller.DebugSendWS)
 		// WebSocket 握手允许通过查询参数 token 或 uid 进行鉴权，放到无鉴权组以便控制器自行处理
 		noAuth.GET("/chat/ws", controller.ChatWS)
 		noAuth.POST("/merchant/order/add", controller.Orderadd)
@@ -93,6 +95,7 @@ func SetRouter() *gin.Engine {
 		auth.POST("/merchant/order/reject", controller.OrderReject)
 		auth.POST("/merchant/order/delivery", controller.OrderDelivery)
 		auth.POST("/merchant/order/complete", controller.OrderComplete)
+		auth.POST("/merchant/order/cancel", controller.OrderCancel)
 		// 其他需要中间件保护的路由可以添加在这里
 		// 聊天 WebSocket 与历史接口
 		auth.GET("/chat/history", controller.ChatHistory)

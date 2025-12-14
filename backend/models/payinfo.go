@@ -11,7 +11,7 @@ type PayInfo struct {
 	Paymethod      int       `json:"paymethod" gorm:"not null"`
 	Packamount     float64   `json:"packamount" gorm:"not null"`
 	CheckoutTime   time.Time `json:"checkouttime" gorm:"not null"`
-	Deliveryamount float64   `json:"deliveryamount" gorm:"not null"`
+	Deliveryamount float64   `json:"deliveryamount" gorm:"not null;default:2"`
 
 	// 支付对接相关字段
 	OutTradeNo string     `json:"out_trade_no" gorm:"type:varchar(128);index"`
