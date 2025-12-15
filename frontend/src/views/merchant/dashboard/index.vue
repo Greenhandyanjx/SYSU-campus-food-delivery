@@ -73,7 +73,7 @@ const init = async () => {
   await getOrderStatisticsData()
   await getOverStatisticsData()
   await getSetMealStatisticsData()
-  await getOrderListBy3Status()
+  // dashboard relies on child OrderList to emit getOrderListBy3Status when ready
 }
 
 // 获取营业数据

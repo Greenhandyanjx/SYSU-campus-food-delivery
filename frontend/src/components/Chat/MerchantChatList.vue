@@ -59,6 +59,7 @@ import { orderAccept } from '@/api/merchant/order'
 import { getBaseUserDetail } from '@/api/chat'
 import chatClient from '@/utils/chatClient'
 import { useChatStore } from '@/stores/chatStore'
+import { emitOrderChanged } from '@/utils/orderEvents'
 
 const chats = ref([])
 const active = ref(null)
@@ -342,6 +343,7 @@ async function acceptOrder(o) {
     // 接单成功后关闭通知并可跳转详情
     orderNotify.value = null
     try { alert('接单成功: ' + o.orderId) } catch(e){}
+    try { emitOrderChanged({ orderId: o.orderId }) } catch (e) {}
   } catch (e) {
     console.warn('acceptOrder failed', e)
     try { alert('接单失败，请重试') } catch(e){}
@@ -350,8 +352,13 @@ async function acceptOrder(o) {
 
 function viewOrderDetail(o) {
   if (!o || !o.orderId) return
-  // 跳转到商家端订单详情页（根据路由实现）
-  try { router.push({ path: `/merchant/order/${o.orderId}` }) } catch (e) { window.open(`/merchant/order/${o.orderId}`, '_blank') }
+  try {
+    const ev = new CustomEvent('merchant:open_order_detail', { detail: { orderId: o.orderId } })
+    window.dispatchEvent(ev)
+  } catch (e) {
+    // fallback to route if dispatching event fails
+    try { router.push({ path: `/merchant/order/${o.orderId}` }) } catch (e) { window.open(`/merchant/order/${o.orderId}`, '_blank') }
+  }
 }
 
 </script>

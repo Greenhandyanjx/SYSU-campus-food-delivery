@@ -225,7 +225,7 @@
               <el-button
                 type="text"
                 class="blueBug non"
-                @click="goDetail(row.id || row.orderId || row.orderid, row.status, row)"
+                @click="goDetail(row.id || row.orderId || row.orderid, row.status, row, $event)"
               >
                 查看
               </el-button>
@@ -373,7 +373,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getMerchantProfile } from '@/api/merchant/profile'
@@ -391,6 +391,8 @@ import {
   orderAccept,
   getOrderListBy,
 } from '@/api/merchant/order'
+import { getOrderDetailPageCoalesced } from '@/api/merchant/order'
+import { emitOrderChanged } from '@/utils/orderEvents'
 
 const router = useRouter()
 const route = useRoute()
@@ -494,6 +496,25 @@ onMounted(() => {
       // defensive: ignore, backend should already filter
     }
   })()
+
+  // 监听 order:changed，去抖刷新页面数据
+  let __orders_refreshTimer: any = null
+  const __orders_refreshHandler = (ev: any) => {
+    try {
+      clearTimeout(__orders_refreshTimer)
+      __orders_refreshTimer = setTimeout(() => {
+        init(orderStatus.value)
+      }, 500)
+    } catch (e) { console.warn('order:changed handler failed', e) }
+  }
+  window.addEventListener('order:changed', __orders_refreshHandler)
+  // store handler reference globally so duplicate listeners are not added accidentally
+  ;(window as any).__orders_refreshHandler = __orders_refreshHandler
+
+})
+
+onBeforeUnmount(() => {
+  try { window.removeEventListener('order:changed', (window as any).__orders_refreshHandler || __orders_refreshHandler) } catch (e) {}
 })
 
 function initFun(st: number) {
@@ -565,7 +586,7 @@ endTime: valueTime.value[1] ? formatForApi(valueTime.value[1]) : undefined,
     status: activeIndex || undefined,
   }
   try {
-    const res = await getOrderDetailPage({ ...params })
+    const res = await getOrderDetailPageCoalesced({ ...params })
     if (Number(res.data.code) === 1) {
       const data = res.data.data || {}
       const raw = data.items || []
@@ -781,7 +802,7 @@ async function orderAcceptHandler(r: any, setTableFlag = true) {
       ElMessage.success('操作成功')
       orderId.value = ''
       dialogVisible.value = false
-      init(orderStatus.value)
+      try { emitOrderChanged({ orderId: orderId.value }) } catch (e) {}
     } else {
       ElMessage.error(res.data.msg)
     }
@@ -814,7 +835,7 @@ async function confirmCancel() {
       ElMessage.success('操作成功')
       cancelDialogVisible.value = false
       orderId.value = ''
-      init(orderStatus.value)
+      try { emitOrderChanged({ orderId: orderId.value }) } catch (e) {}
     } else {
       ElMessage.error(res.data.msg)
     }
@@ -831,7 +852,7 @@ async function cancelOrDeliveryOrComplete(status: number, id: string) {
       ElMessage.success('操作成功')
       orderId.value = ''
       dialogVisible.value = false
-      init(orderStatus.value)
+      try { emitOrderChanged({ orderId: orderId.value }) } catch (e) {}
     } else {
       ElMessage.error(res.data.msg)
     }
