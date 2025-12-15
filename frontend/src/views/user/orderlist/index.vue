@@ -64,7 +64,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import OrderCard from '@/components/OrderList/OrderCard.vue'
 import orderApi from '@/api/user/order'
@@ -89,6 +89,22 @@ onMounted(()=>{
   const oq = route.query.oq
   if (oq && typeof oq === 'string') keyword.value = oq
   loadOrders()
+  // 监听全局订单变更，去抖刷新
+  let __user_orders_refresh_timer = null
+  const __user_orders_refresh = (ev) => {
+    try {
+      clearTimeout(__user_orders_refresh_timer)
+      __user_orders_refresh_timer = setTimeout(()=>{
+        loadOrders()
+      }, 500)
+    } catch (e) { console.warn('user order changed handler failed', e) }
+  }
+  window.addEventListener('order:changed', __user_orders_refresh)
+  ;(window).__user_orders_refresh = __user_orders_refresh
+})
+
+onBeforeUnmount(()=>{
+  try { window.removeEventListener('order:changed', (window).__user_orders_refresh) } catch(e){}
 })
 
 watch(()=>route.query.oq, (v)=>{ if (v && typeof v === 'string') keyword.value = v })

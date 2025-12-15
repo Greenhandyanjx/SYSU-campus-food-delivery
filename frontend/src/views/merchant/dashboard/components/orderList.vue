@@ -154,7 +154,7 @@
                   <el-button
                     type="text"
                     class="blueBug non"
-                    @click="goDetail(row.id || row.orderId || row.orderid, row.status, row)"
+                    @click="goDetail(row.id || row.orderId || row.orderid, row.status, row, $event)"
                   >
                     查看
                   </el-button>
@@ -295,7 +295,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, getCurrentInstance } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, getCurrentInstance } from 'vue'
 import Empty from '@/components/Empty/index.vue'
 import { getMerchantProfile } from '@/api/merchant/profile'
 import {
@@ -308,6 +308,8 @@ import {
   orderAccept,
   getOrderListBy,
 } from '@/api/merchant/order'
+import { getOrderDetailPageCoalesced } from '@/api/merchant/order'
+import { emitOrderChanged } from '@/utils/orderEvents'
 
 const props = defineProps<{ orderStatics?: any }>()
 const emit = defineEmits(['getOrderListBy3Status'])
@@ -477,6 +479,35 @@ const tabList = computed(() => {
 
 onMounted(() => {
   getOrderListData(status.value)
+  // 监听来自其他组件（如聊天）的打开订单详情事件
+  window.addEventListener('merchant:open_order_detail', (ev: any) => {
+    try {
+      const id = ev && ev.detail && (ev.detail.orderId || ev.detail.id)
+      if (!id) return
+      // 打开 modal 并加载详情
+      goDetail(id, 2, {})
+    } catch (e) { console.warn('open_order_detail handler failed', e) }
+  })
+
+  // 监听 order:changed 事件，去抖刷新列表，避免频繁刷新导致卡顿
+  let refreshTimer: any = null
+  const refreshHandler = (ev: any) => {
+    try {
+      clearTimeout(refreshTimer)
+      refreshTimer = setTimeout(() => {
+        getOrderListData(status.value)
+      }, 500)
+    } catch (e) { console.warn('order:changed handler failed', e) }
+  }
+  window.addEventListener('order:changed', refreshHandler)
+
+  // 清理监听
+  ;(window as any).____orderList_refreshHandler = refreshHandler
+})
+
+onBeforeUnmount(() => {
+  const h = (window as any).____orderList_refreshHandler
+  if (h) window.removeEventListener('order:changed', h)
 })
 
 // 获取当前商家 id（用于前端二次防御过滤）
@@ -499,7 +530,7 @@ async function getOrderListData(s: number) {
     status: s,
   }
   try {
-    const data = await getOrderDetailPage(params)
+    const data = await getOrderDetailPageCoalesced(params)
     // 保持原始响应结构的使用方式（并做一次字段规范化，确保每条都有 id/orderId/orderid）
     const rawItems = data?.data?.data?.items || []
     orderData.value = rawItems.map((it: any) => {
@@ -547,7 +578,8 @@ function orderAcceptFn(rowItem: any, event?: Event) {
         proxy.$message.success('操作成功')
         orderId.value = ''
         dialogVisible.value = false
-        getOrderListData(status.value)
+        // 广播变化，使用统一去抖 helper 刷新列表（避免重复请求）
+        try { emitOrderChanged({ orderId: orderId.value }) } catch (e) {}
       } else {
         proxy.$message.error(res.data.msg)
       }
@@ -601,7 +633,7 @@ function confirmCancel() {
         proxy.$message.success('操作成功')
         cancelDialogVisible.value = false
         orderId.value = ''
-        getOrderListData(status.value)
+        try { emitOrderChanged({ orderId: orderId.value }) } catch (e) {}
       } else {
         proxy.$message.error(res.data.msg)
       }
@@ -625,7 +657,7 @@ function cancelOrDeliveryOrComplete(s: number, id: string, event?: Event) {
         proxy.$message.success('操作成功')
         orderId.value = ''
         dialogVisible.value = false
-        getOrderListData(status.value)
+        try { emitOrderChanged({ orderId: orderId.value }) } catch (e) {}
       } else {
         proxy.$message.error(res.data.msg)
       }
@@ -645,8 +677,30 @@ async function goDetail(id: any, s: number, r: any, event?: Event) {
   console.log("rowItem.id =", id)
   try {
     const { data } = await queryOrderDetailById({ orderId: id })
-    diaForm.value = data.data
-    row.value = r
+    const raw = data.data || {}
+    // Normalize returned payload to modal fields
+    const idVal = raw.id ?? raw.ID ?? raw.orderId ?? raw.orderID ?? raw.orderid ?? raw.orderNo ?? raw.number
+    const numberVal = raw.number ?? raw.orderNo ?? raw.orderNumber ?? raw.orderId ?? idVal
+    const amountVal = Number(raw.amount ?? raw.totalPrice ?? raw.totalprice ?? raw.total_price ?? 0)
+    const orderDetailListVal = raw.orderDetailList ?? raw.orderDetails ?? raw.items ?? raw.details ?? []
+    const packAmount = Number(raw.packAmount ?? raw.pack_amount ?? raw.packamount ?? 0)
+    const deliveryAmount = Number(raw.deliveryAmount ?? raw.delivery_amount ?? raw.deliveryFee ?? raw.delivery_fee ?? raw.delivery ?? 0)
+    const checkoutTime = raw.checkoutTime ?? raw.payTime ?? raw.pay_time ?? raw.pay_at ?? raw.PayAt
+    const expected = raw.expected_time ?? raw.expectedTime ?? raw.estimatedDeliveryTime ?? raw.expectedtime
+    const deliveryTime = raw.deliveryTime ?? raw.deliverAt ?? raw.finishAt
+    diaForm.value = Object.assign({}, raw, {
+      id: idVal,
+      orderid: numberVal,
+      number: numberVal,
+      amount: amountVal,
+      orderDetailList: orderDetailListVal,
+      packAmount: packAmount,
+      deliveryAmount: deliveryAmount,
+      checkoutTime: checkoutTime,
+      expectedDeliveryTime: expected,
+      deliveryTime: deliveryTime,
+    })
+    row.value = r || { id: idVal, status: s }
   } catch (err: any) {
     proxy.$message.error('请求出错了：' + err.message)
   }

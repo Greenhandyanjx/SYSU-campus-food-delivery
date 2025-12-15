@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -774,11 +775,15 @@ func OrderCancel(c *gin.Context) {
 	}
 	reason := ""
 	if r, ok := body["cancelReason"]; ok {
-		if rs, ok2 := r.(string); ok2 { reason = rs }
+		if rs, ok2 := r.(string); ok2 {
+			reason = rs
+		}
 	}
 	if reason == "" {
 		if r, ok := body["reason"]; ok {
-			if rs, ok2 := r.(string); ok2 { reason = rs }
+			if rs, ok2 := r.(string); ok2 {
+				reason = rs
+			}
 		}
 	}
 	if orderID == 0 {
