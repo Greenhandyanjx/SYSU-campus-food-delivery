@@ -4,6 +4,7 @@ import (
 	"backend/global"
 	"backend/models"
 	"backend/utils"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -98,6 +100,7 @@ func GetOrderListByStatus(c *gin.Context) {
 
 // 获取order列表，时间划分
 func GetOrderPage(c *gin.Context) {
+	// 获取请求参数
 	pageStr := c.Query("page")
 	sizeStr := c.Query("size")
 	beginStr := c.Query("beginTime")
@@ -105,17 +108,69 @@ func GetOrderPage(c *gin.Context) {
 	phonestr := c.Query("phone")
 	numberstr := c.Query("number")
 	status := c.Query("status")
+	// 解析分页和时间参数
 	page, size, beginTime, endTime := utils.ParsePaginationAndTime(c, pageStr, sizeStr, beginStr, endStr)
 	if page == 0 || size == 0 {
 		return
 	}
+	// 构建查询条件的字符串，用于缓存的key
+	queryConditions := fmt.Sprintf("page=%d&size=%d&beginTime=%s&endTime=%s&phone=%s&number=%s&status=%s",
+		page, size, beginStr, endStr, phonestr, numberstr, status)
+	// 尝试从 Redis 获取缓存的数据
+	var cachedData struct {
+		Items []models.OrderWithDishnames
+		Total int64
+	}
+	found, err := utils.GetJSON(context.Background(), queryConditions, &cachedData)
+	if err != nil {
+		log.Printf("Redis读取错误: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": "500",
+			"msg":  "服务器内部错误",
+		})
+		return
+	}
+	if found {
+		// 如果成功从Redis获取缓存数据，则直接返回
+		c.JSON(http.StatusOK, gin.H{
+			"code": 1,
+			"data": gin.H{
+				"items": cachedData.Items,
+				"total": cachedData.Total,
+			},
+		})
+		return
+	}
+	// 获取订单列表和总数
 	orders, count, err := utils.FetchOrders(c, page, size, beginTime, endTime, phonestr, numberstr, status)
 	if err != nil {
 		return
 	}
+	// 获取收货人和地址信息
 	consigneeMap, addressMap := utils.FetchConsigneesAndAddresses(c, orders)
+	// 将订单信息复制到 OrderWithDishnames 结构体
 	ordersWithDetails := utils.CopyOrdersToOrderWithDishnames(orders, consigneeMap, addressMap)
+	// 获取菜品名称
 	utils.FetchDishnames(c, &ordersWithDetails)
+	// 准备返回数据
+	// 序列化数据并存入Redis
+	cachedData = struct {
+		Items []models.OrderWithDishnames
+		Total int64
+	}{
+		Items: ordersWithDetails,
+		Total: count,
+	}
+	err = utils.SetJSON(context.Background(), queryConditions, cachedData, 5*time.Minute)
+	if err != nil {
+		log.Printf("Redis写入错误: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": "500",
+			"msg":  "服务器内部错误",
+		})
+		return
+	}
+	// 返回结果
 	c.JSON(http.StatusOK, gin.H{
 		"code": 1,
 		"data": gin.H{
@@ -123,7 +178,6 @@ func GetOrderPage(c *gin.Context) {
 			"total": count,
 		},
 	})
-
 }
 
 // 根据orderId获取订单详情
@@ -136,6 +190,24 @@ func GetOrderDetail(c *gin.Context) {
 	orderId, err := strconv.Atoi(orderIdStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid orderId format", "data": nil})
+		return
+	}
+	// 构建查询条件的字符串，用于缓存的key
+	queryConditions := fmt.Sprintf("order_id=%d", orderId)
+	// 尝试从 Redis 获取缓存的数据
+	var cachedData gin.H
+	found, err := utils.GetJSON(context.Background(), queryConditions, &cachedData)
+	if err != nil {
+		log.Printf("Redis读取错误: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": "500",
+			"msg":  "服务器内部错误",
+		})
+		return
+	}
+	if found {
+		// 如果成功从Redis获取缓存数据，则直接返回
+		c.JSON(http.StatusOK, cachedData)
 		return
 	}
 	// 获取订单基础信息
@@ -156,7 +228,6 @@ func GetOrderDetail(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get consignee detail", "data": nil})
 		return
 	}
-
 	// 获取收获地址信息
 	var address models.Address
 	result = global.Db.First(&address, consignee.Addressid)
@@ -164,7 +235,6 @@ func GetOrderDetail(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get address detail", "data": nil})
 		return
 	}
-
 	// 获取订单中的餐品信息并关联Meal表
 	var orderMeals []models.OrderMeal
 	result = global.Db.Preload("Meal").Table("order_meals").Where("order_id = ?", orderId).Find(&orderMeals)
@@ -226,7 +296,6 @@ func GetOrderDetail(c *gin.Context) {
 	// 同时返回商家信息以便前端展示
 	var merchant models.Merchant
 	_ = global.Db.First(&merchant, order.MerchantID)
-
 	response := gin.H{
 		"code": 1,
 		"data": gin.H{
@@ -260,6 +329,17 @@ func GetOrderDetail(c *gin.Context) {
 			"deliveryAmount": order.PayInfo.Deliveryamount,
 		},
 	}
+	// 序列化数据并存入Redis
+	err = utils.SetJSON(context.Background(), queryConditions, response, 5*time.Minute)
+	if err != nil {
+		log.Printf("Redis写入错误: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": "500",
+			"msg":  "服务器内部错误",
+		})
+		return
+	}
+	// 返回结果
 	c.JSON(http.StatusOK, response)
 }
 

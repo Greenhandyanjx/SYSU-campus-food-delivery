@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -274,25 +275,6 @@ func Edit_Meal_Status(c *gin.Context) {
 // 分页获取套餐信息
 func GetMealsPage(c *gin.Context) {
 	// 获取请求参数
-	// 获取上下文中的 baseUserID
-	baseUserID, exists := c.Get("baseUserID")
-	fmt.Println("id", baseUserID)
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"code": "401",
-			"msg":  "未找到商户ID",
-		})
-		return
-	}
-	// 确保 baseUserID 是 uint 类型
-	merchantID, ok := baseUserID.(uint)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"code": "401",
-			"msg":  "商户ID类型错误",
-		})
-		return
-	}
 	page, err1 := strconv.Atoi(c.DefaultQuery("page", "1"))
 	size, err2 := strconv.Atoi(c.DefaultQuery("size", "20"))
 	name := c.Query("name")
@@ -323,40 +305,131 @@ func GetMealsPage(c *gin.Context) {
 			return
 		}
 	}
-	// 计算分页的偏移量
+	// 获取上下文中的 baseUserID
+	baseUserID, exists := c.Get("baseUserID")
+	fmt.Println("id", baseUserID)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"code": "401",
+			"msg":  "未找到商户ID",
+		})
+		return
+	}
+	// 确保 baseUserID 是 uint 类型
+	merchantID, ok := baseUserID.(uint)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"code": "401",
+			"msg":  "商户ID类型错误",
+		})
+		return
+	}
+	// 计算分页参数
 	offset := (page - 1) * size
-
+	// 构建查询条件的字符串，用于缓存的key
+	queryConditions := fmt.Sprintf("merchant_id=%d&page=%d&size=%d&name=%s&status=%d&category_id=%d",
+		merchantID, page, size, name, status, categoryId)
+	// 尝试从 Redis 获取缓存的数据
+	var cachedData struct {
+		Items []models.Meal
+		Total int64
+	}
+	found, err := utils.GetJSON(context.Background(), queryConditions, &cachedData)
+	if err != nil {
+		log.Printf("Redis读取错误: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": "500",
+			"msg":  "服务器内部错误",
+		})
+		return
+	}
+	if found {
+		// 如果成功从Redis获取缓存数据，则直接返回
+		items := make([]gin.H, len(cachedData.Items))
+		for i, meal := range cachedData.Items {
+			items[i] = gin.H{
+				"id":         meal.ID,
+				"name":       meal.Mealname,
+				"price":      meal.Price,
+				"status":     meal.Status,
+				"imageUrl":   meal.ImagePath,
+				"categoryId": meal.Category,
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"code": "1",
+			"msg":  "获取套餐列表成功",
+			"data": gin.H{
+				"items": items,
+				"total": cachedData.Total,
+			},
+		})
+		return
+	}
 	// 构建查询条件
-	var meals []models.Meal
-	var total int64
-
-	query := global.Db.Model(&models.Meal{}).Where("merchant_id = ?", merchantID)
-
+	var query = global.Db.Model(&models.Meal{}).Where("merchant_id = ?", merchantID)
 	if name != "" {
 		query = query.Where("mealname LIKE ?", "%"+name+"%")
 	}
-	// 根据 status 查询
 	if statusParam != "" {
 		query = query.Where("status = ?", status)
 	}
-	// 根据 categoryId 查询
 	if categoryIdParam != "" {
-		query = query.Where("category= ?", categoryId)
+		query = query.Where("category = ?", categoryId)
 	}
 	// 获取总记录数
+	var total int64
 	if err := query.Count(&total).Error; err != nil {
+		log.Printf("获取套餐总数失败: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "获取套餐总数失败", "data": nil})
 		return
 	}
-
 	// 获取分页数据
+	var meals []models.Meal
 	if err := query.Offset(offset).Limit(size).Find(&meals).Error; err != nil {
+		log.Printf("获取套餐列表失败: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "获取套餐列表失败", "data": nil})
 		return
 	}
-
-	// 返回成功响应
-	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"items": meals, "total": total}})
+	// 准备返回数据
+	items := make([]gin.H, len(meals))
+	for i, meal := range meals {
+		items[i] = gin.H{
+			"id":         meal.ID,
+			"name":       meal.Mealname,
+			"price":      meal.Price,
+			"status":     meal.Status,
+			"imageUrl":   meal.ImagePath,
+			"categoryId": meal.Category,
+			"stock":      0, // 假设 stock 字段在 Meal 结构体中不存在，这里返回 0
+		}
+	}
+	// 序列化数据并存入Redis
+	cachedData = struct {
+		Items []models.Meal
+		Total int64
+	}{
+		Items: meals,
+		Total: total,
+	}
+	err = utils.SetJSON(context.Background(), queryConditions, cachedData, 5*time.Minute)
+	if err != nil {
+		log.Printf("Redis写入错误: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code": "500",
+			"msg":  "服务器内部错误",
+		})
+		return
+	}
+	// 返回结果
+	c.JSON(http.StatusOK, gin.H{
+		"code": "1",
+		"msg":  "获取套餐列表成功",
+		"data": gin.H{
+			"items": items,
+			"total": total,
+		},
+	})
 }
 
 func Get_Meal_ById(c *gin.Context) {
