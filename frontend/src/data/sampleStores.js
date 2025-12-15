@@ -1,8 +1,10 @@
+import noImg from '@/assets/noImg.png'
+
 export default [
   {
     name: '黄焖鸡米饭',
     desc: '经典家常菜，味道鲜香',
-    logo: '/src/assets/noImg.png',
+    logo: noImg,
     tags: ['家常菜', '下饭王'],
     rating: 4.8,
     sales: 320,
@@ -13,7 +15,7 @@ export default [
   {
     name: '茶百道',
     desc: '奶香浓郁，果茶清爽',
-    logo: '/src/assets/noImg.png',
+    logo: noImg,
     tags: ['奶茶', '饮品', '水果茶'],
     rating: 4.9,
     sales: 520,
@@ -25,7 +27,7 @@ export default [
   , {
     title: '麻辣香锅小站',
     summary: '香辣过瘾，配菜丰富',
-    logo: '/src/assets/noImg.png',
+    logo: noImg,
     categories: ['家常快炒', '麻辣'],
     rating: 4.6,
     sales: 210,
@@ -34,7 +36,7 @@ export default [
   {
     shopName: '煲仔饭皇',
     brief: '广式风味，热气腾腾',
-    logo: '/src/assets/noImg.png',
+    logo: noImg,
     tags: ['煲仔饭'],
     rating: 4.7,
     sales: 180,
@@ -43,7 +45,7 @@ export default [
   {
     name: '清新沙拉屋',
     // 没有 desc 或 tags，测试回退到 dishes
-    logo: '/src/assets/noImg.png',
+    logo: noImg,
     rating: 4.5,
     sales: 95,
     dishes: [{ name: '凯撒沙拉' }, { name: '水果沙拉' }]
@@ -51,7 +53,7 @@ export default [
   {
     name: '老北京炸酱面',
     desc: '经典北方面食',
-    logo: '/src/assets/noImg.png',
+    logo: noImg,
     tags: ['面食'],
     rating: 4.4,
     sales: 260,

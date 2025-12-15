@@ -20,12 +20,12 @@
     </section>
 
 			<!-- 轮播 banner -->
-<div class="banner-container">
+  <div class="banner-container">
     <Carousel :images="images" :interval="4000" @banner-click="onCategoryClick(images)" />
   </div>
 
 			<!-- 活动卡片 -->
-				<section class="activities">
+				<!-- <section class="activities">
 					<div class="activity" v-for="(a, i) in activities" :key="i">
 						<div class="act-icon" :style="{ backgroundImage: `linear-gradient(135deg, ${a.gradient[0]}, ${a.gradient[1]})` }">
 							<img :src="a.icon" alt="" />
@@ -35,7 +35,7 @@
 							<div class="sub">{{ a.sub }}</div>
 						</div>
 					</div>
-				</section>
+				</section> -->
 
             <!-- 推荐店铺（瀑布流） -->
             <section class="recommend" id="meals">
@@ -139,6 +139,22 @@ import banner5 from '@/assets/banners/images/banner5.png'
 import axios from 'axios'
 import { getDeliveryConfig } from '@/api/user/store'
 import noImg from '@/assets/noImg.png'
+import iconAll from '@/assets/icons/all.svg'
+import iconSetmeal from '@/assets/icons/setmeal.svg'
+import iconNoodle from '@/assets/icons/noodle.svg'
+import iconBurger from '@/assets/icons/burger.svg'
+import iconMilktea from '@/assets/icons/milktea.svg'
+import iconBento from '@/assets/icons/bento.svg'
+import iconBbq from '@/assets/icons/bbq.svg'
+import iconFruit from '@/assets/icons/fruit.svg'
+import iconDessert from '@/assets/icons/dessert.svg'
+import iconStirfry from '@/assets/icons/stirfry.svg'
+import iconRice from '@/assets/icons/rice.svg'
+import iconDelivery from '@/assets/icons/delivery.svg'
+import iconLunch from '@/assets/icons/lunch.svg'
+import iconDiscount from '@/assets/icons/discount.svg'
+import iconSalad from '@/assets/icons/salad.svg'
+import iconAfternoon from '@/assets/icons/afternoon.svg'
 const images = [
   {
     src: banner1,
@@ -189,22 +205,22 @@ const categories = ref([])
 
 // 本地图标映射（以 id 为 key），用于将后端返回的分类 id 映射到前端图标
 const iconMap: Record<number, string> = {
-  0: '/src/assets/icons/all.svg',
-  1: '/src/assets/icons/setmeal.svg',
-  2: '/src/assets/icons/noodle.svg',
-  3: '/src/assets/icons/burger.svg',
-  4: '/src/assets/icons/milktea.svg',
-  5: '/src/assets/icons/bento.svg',
-  6: '/src/assets/icons/bbq.svg',
-  7: '/src/assets/icons/fruit.svg',
-  8: '/src/assets/icons/dessert.svg',
-  9: '/src/assets/icons/stirfry.svg',
-  10: '/src/assets/icons/rice.svg',
-  11: '/src/assets/icons/delivery.svg',
-  12: '/src/assets/icons/lunch.svg',
-  13: '/src/assets/icons/discount.svg',
-  14: '/src/assets/icons/salad.svg',
-  15: '/src/assets/icons/afternoon.svg',
+  0: iconAll,
+  1: iconSetmeal,
+  2: iconNoodle,
+  3: iconBurger,
+  4: iconMilktea,
+  5: iconBento,
+  6: iconBbq,
+  7: iconFruit,
+  8: iconDessert,
+  9: iconStirfry,
+  10: iconRice,
+  11: iconDelivery,
+  12: iconLunch,
+  13: iconDiscount,
+  14: iconSalad,
+  15: iconAfternoon,
 }
 
 // 计算当前激活的分类：优先使用 route.query.cat，其次如果 q 与某个分类 label 相同也视作激活
@@ -297,8 +313,8 @@ async function loadData() {
           id: s.id,
           name: s.name || s.shop_name,
           desc: s.desc || s.shop_location,
-          img: s.logo || '/src/assets/noImg.png',
-          logo: s.logo || '/src/assets/noImg.png',
+          img: s.logo || noImg,
+          logo: s.logo || noImg,
           tags: s.tags || [],
           rating: s.rating || 4.8,
           sales: s.sales || 0,

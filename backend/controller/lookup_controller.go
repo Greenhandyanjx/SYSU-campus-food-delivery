@@ -63,6 +63,96 @@ func GetMerchantDetail(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": m})
 }
 
+// GetMerchantProfile 返回当前认证商家的信息（从中间件读取 baseUserID）
+func GetMerchantProfile(c *gin.Context) {
+	baseIDIf, ok := c.Get("baseUserID")
+	if !ok {
+		c.JSON(401, gin.H{"code": 0, "msg": "no user in context"})
+		return
+	}
+	var baseID uint
+	switch v := baseIDIf.(type) {
+	case uint:
+		baseID = v
+	case int:
+		baseID = uint(v)
+	case int64:
+		baseID = uint(v)
+	case float64:
+		baseID = uint(v)
+	default:
+		c.JSON(500, gin.H{"code": 0, "msg": "invalid user id type"})
+		return
+	}
+	var m models.Merchant
+	if err := global.Db.Where("base_id = ?", baseID).First(&m).Error; err != nil {
+		c.JSON(404, gin.H{"code": 0, "msg": "merchant not found"})
+		return
+	}
+	c.JSON(200, gin.H{"code": 1, "data": m})
+}
+
+// UpdateMerchantProfile 用于认证商家更新自己的信息（shop name / phone / logo / shop_location / owner）
+func UpdateMerchantProfile(c *gin.Context) {
+	baseIDIf, ok := c.Get("baseUserID")
+	if !ok {
+		c.JSON(401, gin.H{"code": 0, "msg": "no user in context"})
+		return
+	}
+	var baseID uint
+	switch v := baseIDIf.(type) {
+	case uint:
+		baseID = v
+	case int:
+		baseID = uint(v)
+	case int64:
+		baseID = uint(v)
+	case float64:
+		baseID = uint(v)
+	default:
+		c.JSON(500, gin.H{"code": 0, "msg": "invalid user id type"})
+		return
+	}
+
+	var payload struct {
+		ShopName     string `json:"shop_name"`
+		Phone        string `json:"phone"`
+		Logo         string `json:"logo"`
+		ShopLocation string `json:"shop_location"`
+		Owner        string `json:"owner"`
+	}
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		c.JSON(400, gin.H{"code": 0, "msg": "invalid body"})
+		return
+	}
+
+	updates := make(map[string]interface{})
+	if payload.ShopName != "" {
+		updates["shop_name"] = payload.ShopName
+	}
+	if payload.Phone != "" {
+		updates["phone"] = payload.Phone
+	}
+	if payload.Logo != "" {
+		updates["logo"] = payload.Logo
+	}
+	if payload.ShopLocation != "" {
+		updates["shop_location"] = payload.ShopLocation
+	}
+	if payload.Owner != "" {
+		updates["owner"] = payload.Owner
+	}
+	if len(updates) == 0 {
+		c.JSON(200, gin.H{"code": 1, "msg": "no changes"})
+		return
+	}
+	if err := global.Db.Model(&models.Merchant{}).Where("base_id = ?", baseID).Updates(updates).Error; err != nil {
+		c.JSON(500, gin.H{"code": 0, "msg": "update failed"})
+		return
+	}
+	c.JSON(200, gin.H{"code": 1, "msg": "updated"})
+}
+
 // GetBaseUserDetail 返回 base_users 表的基本信息；如果未提供 id，则从 Authorization token 推断
 func GetBaseUserDetail(c *gin.Context) {
 	idStr := c.Query("id")

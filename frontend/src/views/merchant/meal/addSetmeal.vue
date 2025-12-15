@@ -287,10 +287,10 @@ function submitForm(formName: string, st: any) {
         delete prams.id
         addSetmeal(prams)
           .then((res: any) => {
-            if (res && res.data && Number(res.data.code) === 1) {
+            if (res && res.data && Number(res.data.code) === 200) {
               ElMessage.success('套餐添加成功！')
               if (!st) {
-                router.push({ path: '/setmeal' })
+                router.push({ path: '/merchant/setmeal' })
               } else {
                 ;(ruleFormRef.value as any).resetFields()
                 dishList.value = []
@@ -300,13 +300,13 @@ function submitForm(formName: string, st: any) {
                   categoryId: '',
                   price: '',
                   code: '',
-                  image: '/images/fresh_salad_set.jpg',
+                  image: '',
                   description: '',
                   dishList: [],
                   status: true,
                   id: '',
                 })
-                imageUrl.value = '/images/fresh_salad_set.jpg'
+                imageUrl.value = ''
               }
             } else {
               ElMessage.error(res.data.msg)
@@ -319,7 +319,7 @@ function submitForm(formName: string, st: any) {
           .then((res: any) => {
             if (res.data.code === 1) {
               ElMessage.success('套餐修改成功！')
-              router.push({ path: '/setmeal' })
+              router.push({ path: '/merchant/setmeal' })
             }
           })
           .catch((err: any) => ElMessage.error('请求出错了：' + err.message))

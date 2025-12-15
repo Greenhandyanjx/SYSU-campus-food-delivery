@@ -16,7 +16,7 @@
         <div class="shop-header">
                 <el-checkbox v-model="shop.selected" @change="onToggleShop(shop)" />
                 <div class="shop-name" @click="goStore(shop)">
-                  <img class="shop-logo" :src="shop.logo || '/src/assets/noImg.png'" @error="onImgError" />
+                  <img class="shop-logo" :src="safeImage(shop.logo || '', noImg)" @error="onImgError" />
                   {{ shop.name || shop.merchant_name }}
                 </div>
               </div>
@@ -27,7 +27,7 @@
               <el-checkbox v-model="it.selected" @change="onToggleItem(shop, it)" />
             </div>
             <div class="item-thumb">
-              <img :src="it.img || '/src/assets/noImg.png'" @error="onImgError" alt="dish" />
+              <img :src="safeImage(it.img || '', noImg)" @error="onImgError" alt="dish" />
             </div>
             <div class="item-mid" @click="goStore(shop)">
               <div class="item-name">{{ it.name }}</div>
@@ -75,7 +75,7 @@
       <h3>请使用微信/支付宝扫码付款</h3>
       <div class="qr-grid" style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:12px;">
         <div style="text-align:center;">
-          <img src="/src/assets/qrcode.png" alt="pay-qr" style="width:200px;height:200px;border:1px solid #eee;border-radius:6px;" />
+          <img :src="qrImg" alt="pay-qr" style="width:200px;height:200px;border:1px solid #eee;border-radius:6px;" />
           <div style="margin-top:8px;font-size:14px;color:#333;font-weight:600">应付金额：¥{{ payAmount.toFixed(2) }}</div>
         </div>
       </div>
@@ -100,6 +100,9 @@ import { useRouter } from 'vue-router'
 import * as cartApi from '@/api/user/cart'
 import { getDishesByStore } from '@/api/user/store'
 import { ElMessageBox, ElMessage } from 'element-plus'
+import noImg from '@/assets/noImg.png'
+import { safeImage } from '@/utils/asset'
+import qrImg from '@/assets/qrcode.png'
 
 const router = useRouter()
 
@@ -319,7 +322,7 @@ async function onSelectAllChange(v: any) {
   try { await cartApi.selectAll(!!selectAllChecked.value) } catch (e) {}
 }
 
-function onImgError(e: any) { try { e.target && (e.target.src = '/src/assets/noImg.png') } catch (err) {} }
+function onImgError(e: any) { try { if (e.target) e.target.src = noImg } catch (err) {} }
 
 const totalPrice = computed(() => {
   let total = 0

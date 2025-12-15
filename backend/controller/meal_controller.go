@@ -107,7 +107,7 @@ func Meal_add(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"code": "200",
-		"msg":  "meal 创建成功",
+		"msg":  "套餐创建成功",
 	})
 	// 创建成功后更新商家分类统计
 	go UpdateMerchantTopCategories(meal.MerchantID)

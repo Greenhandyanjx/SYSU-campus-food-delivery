@@ -7,7 +7,10 @@
         <img class="m-avatar" :src="merchantAvatar" />
         <div class="m-title">{{ chatUserName || ('用户 ' + (userBaseIdLocal || '')) }} · 会话</div>
       </div>
-      <button class="m-close" @click="$emit('close')">✕</button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <img src="/JDlogo.png" class="jd-logo" alt="嘉递" />
+        <!-- <button class="m-close" @click="$emit('close')">✕</button> -->
+      </div>
     </div>
 
     <div class="m-messages" ref="wrap">
@@ -15,7 +18,7 @@
         <img class="m-msg-avatar" :src="isMyMessage(m) ? myAvatar : otherAvatar" />
         <div class="m-bubble-wrapper">
           <div class="m-bubble">{{ m.content }}</div>
-          <div class="m-time">{{ formatTime(m.created_at) }}</div>
+          <div class="m-time">{{ formatDateToCN(m.created_at) }}</div>
         </div>
       </div>
     </div>
@@ -31,6 +34,8 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import merchantSvg from '@/assets/merchant.svg'
+import userPng from '@/assets/user.png'
 import chatClient from '@/utils/chatClient'
 import { getChatHistory, getMerchantDetail, getBaseUserDetail } from '@/api/chat'
 import request from '@/api/merchant/request'
@@ -45,26 +50,25 @@ const input = ref('')
 const wrap = ref(null)
 
 const merchantName = ref('商家')
-const merchantAvatar = ref('/imgs/merchant.png')
-const myAvatar = ref('/imgs/user.png')
-const otherAvatar = ref('/imgs/merchant.png')
+const merchantAvatar = ref(merchantSvg)
+const myAvatar = ref(merchantSvg)
+const otherAvatar = ref(userPng)
 const chatUserName = ref('')
 
 const currentBaseId = ref(null)
 const userBaseIdLocal = ref(props.userBaseId || null)
 
-function formatTime(s) {
+function formatDateToCN(s) {
   if (!s) return ''
   const dt = new Date(s)
-  const now = new Date()
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const startOfYesterday = new Date(startOfToday.getTime() - 24 * 3600 * 1000)
+  if (isNaN(dt.getTime())) return ''
   const pad = (n) => String(n).padStart(2, '0')
-  const timePart = `${pad(dt.getHours())}:${pad(dt.getMinutes())}`
-  if (dt >= startOfToday) return `今天 ${timePart}`
-  if (dt >= startOfYesterday) return `昨天 ${timePart}`
-  if (dt.getFullYear() === now.getFullYear()) return `${dt.getMonth() + 1}月${dt.getDate()}日 ${timePart}`
-  return `${dt.getFullYear()}年${dt.getMonth() + 1}月${dt.getDate()}日 ${timePart}`
+  const yyyy = dt.getFullYear()
+  const mm = pad(dt.getMonth() + 1)
+  const dd = pad(dt.getDate())
+  const HH = pad(dt.getHours())
+  const MM = pad(dt.getMinutes())
+  return `${yyyy}年${mm}月${dd}日 ${HH}:${MM}`
 }
 
 async function loadHistory() {
@@ -108,7 +112,8 @@ async function ensure() {
       if (r && r.data && r.data.data) {
         merchantName.value = r.data.data.shop_name || merchantName.value
         merchantAvatar.value = r.data.data.logo || merchantAvatar.value
-        otherAvatar.value = merchantAvatar.value
+        // 当前登录者为商家时，myAvatar 应为商家头像；不要把 otherAvatar 设为商家头像
+        myAvatar.value = merchantAvatar.value || myAvatar.value
       }
     } else if (currentBaseId.value) {
       // 直接请求 /merchant/detail?base_id=xxx
@@ -117,7 +122,7 @@ async function ensure() {
       if (jr && jr.data) {
         merchantName.value = jr.data.shop_name || merchantName.value
         merchantAvatar.value = jr.data.logo || merchantAvatar.value
-        otherAvatar.value = merchantAvatar.value
+        myAvatar.value = merchantAvatar.value || myAvatar.value
       }
     }
   } catch (e) {}
@@ -128,7 +133,9 @@ async function ensure() {
       const u = await getBaseUserDetail()
       if (u && u.data && u.data.data) {
         userBaseIdLocal.value = u.data.data.id
-        myAvatar.value = '/imgs/user.png'
+        // myAvatar should be merchant avatar; otherAvatar should be user's avatar when available
+        myAvatar.value = merchantAvatar.value || merchantSvg
+        otherAvatar.value = userPng
       }
     } catch (e) {}
   }
@@ -139,6 +146,8 @@ async function ensure() {
       const ru = await getBaseUserDetail(userBaseIdLocal.value)
       const uu = ru?.data?.data
       if (uu) chatUserName.value = uu.username || uu.nickname || ''
+      // 用户头像优先取后端返回的 avatar 字段
+      if (uu) otherAvatar.value = uu.avatar || uu.avatarUrl || otherAvatar.value || userPng
     } catch (e) { }
   }
 }
@@ -160,6 +169,10 @@ onMounted(async () => {
   // 标记为已读（仅标记用户发来的消息）
   try {
     await request.post('/merchant/chats/mark_read', { merchant_id: props.merchantId, user_base_id: userBaseIdLocal.value })
+  } catch (e) {}
+  // 通知其他组件：某个会话已被标记为已读
+  try {
+    window.dispatchEvent(new CustomEvent('merchant:chats:marked_read', { detail: { merchant_id: props.merchantId, user_base_id: userBaseIdLocal.value } }))
   } catch (e) {}
   chatClient.onMessage(handleIncoming)
   chatClient.connect()
@@ -215,13 +228,14 @@ onBeforeUnmount(() => {
 .m-avatar { width:40px; height:40px; border-radius:50%; margin-right:10px }
 .m-title { font-weight:700 }
 .m-close { background:transparent; border:none; font-size:18px; cursor:pointer }
+.jd-logo { width:28px; height:28px; object-fit:contain; border-radius:4px ;margin-right:30px;}
 /* 消息区独立滚动 */
 .m-messages { flex:1; overflow-y:auto; padding:14px; background:#f5f5f5; -webkit-overflow-scrolling: touch }
 .m-row { display:flex; margin-bottom:14px; align-items:flex-end }
 .m-row.me { flex-direction:row-reverse }
-.m-msg-avatar { width:36px; height:36px; border-radius:50%; flex-shrink:0 }
+.m-msg-avatar { width:36px; height:36px; border-radius:50%; flex-shrink:0 ;margin-bottom: 20px;}
 .m-bubble-wrapper { max-width:72%; position:relative }
-.m-bubble { padding:10px 14px; border-radius:16px; background:#fff; border:1px solid #e8e8e8 }
+.m-bubble { padding:10px 14px; border-radius:16px; background:#fff; border:1px solid #e8e8e8 ; word-break:break-word ;width: auto;}
 .m-row.me .m-bubble { background:#ffe563 }
 .m-time { font-size:11px; color:#999; margin-top:6px }
 .m-input { height:64px; display:flex; padding:10px; gap:10px; background:#fff; align-items:center }
