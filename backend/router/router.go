@@ -135,6 +135,7 @@ func SetRouter() *gin.Engine {
 			rg.POST("/withdraw", rider.ApplyWithdraw)
 			rg.GET("/withdraws", rider.GetWithdraws)
 			rg.POST("/location", rider.UpdateLocation)
+			rg.GET("/stat", rider.GetStat)
 
 		}
 

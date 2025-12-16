@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 
 	"github.com/gin-gonic/gin"
 )
@@ -176,11 +175,13 @@ func changeStatus(c *gin.Context, from, to int) {
 		updates["deliver_at"] = &now
 	case OrderStatusDone:
 		updates["finish_at"] = &now
+		updates["rider_id"] = riderID // ✅兜底：最终完成时强制归属该骑手（防 rider_id=0 导致历史订单丢失）
 	}
 
 	err = global.Db.Transaction(func(tx *gorm.DB) error {
 		q := tx.Table("orders")
 
+		// 防抢单/越权
 		if from == OrderStatusNew {
 			q = q.Where("id = ? AND status = ? AND rider_id = 0", orderID, from)
 		} else {
@@ -195,19 +196,18 @@ func changeStatus(c *gin.Context, from, to int) {
 			return errors.New("订单状态不允许、已被他人接单或不属于你")
 		}
 
-		// 只有 4->5（完成）才结算
+		// 只有完成（4->5）才结算
 		if to == OrderStatusDone {
-			// 取 delivery_fee 作为收入（你表里就有）
+			// 取 delivery_fee 作为收入
 			var fee float64
 			if err := tx.Table("orders").
-				Clauses(clause.Locking{Strength: "UPDATE"}).
 				Select("delivery_fee").
 				Where("id = ?", orderID).
 				Scan(&fee).Error; err != nil {
 				return err
 			}
 
-			// fee 可能为 0，照样允许（但流水/钱包会不变）
+			// 幂等结算（你 settleRiderForOrder 里已做幂等）
 			if err := settleRiderForOrder(tx, baseUserID, riderID, orderID, fee); err != nil {
 				return err
 			}
