@@ -34,7 +34,7 @@ func GetStat(c *gin.Context) {
 
 	// 1) 待接单：全站新订单（status=New 且 rider_id=0）
 	global.Db.Table("orders").
-		Where("status = ? AND rider_id = 0", OrderStatusNew).
+		Where("status = ? AND rider_id = 0", OrderStatusToDeliver).
 		Count(&newCnt)
 
 	// 2) 进行中：自己的 3/4

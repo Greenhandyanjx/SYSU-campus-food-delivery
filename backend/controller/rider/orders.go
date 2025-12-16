@@ -74,6 +74,8 @@ func buildAddr(r orderJoinRow) string {
 	}
 	return sb.String()
 }
+
+// 结算：completed_orders+1 + income_record + wallet 入账（幂等）
 func settleRiderForOrder(tx *gorm.DB, baseUserID uint, riderID uint, orderID uint, amount float64) error {
 	// 幂等：已经结算过就直接返回
 	var cnt int64
@@ -129,9 +131,10 @@ func settleRiderForOrder(tx *gorm.DB, baseUserID uint, riderID uint, orderID uin
 		}).Error
 }
 
+// ✅ 1) 待接单池（骑手端 new）：status=3 且 rider_id=0
 // GET /api/rider/orders/new
 func GetNewOrders(c *gin.Context) {
-	list, err := queryOrdersJoined(nil, []int{OrderStatusNew}, 50)
+	list, err := queryOrdersJoined(nil, []int{OrderStatusToDeliver}, 50, true)
 	if err != nil {
 		ok(c, make([]OrderItemResp, 0))
 		return
@@ -139,13 +142,52 @@ func GetNewOrders(c *gin.Context) {
 	ok(c, list)
 }
 
-// POST /api/rider/orders/:id/accept   2 -> 3
-func AcceptOrder(c *gin.Context) { changeStatus(c, OrderStatusNew, OrderStatusToDeliver) }
+// ✅ 2) 接单：不改 status（仍为3），只抢单绑定 rider_id + accepted_at
+// POST /api/rider/orders/:id/accept
+func AcceptOrder(c *gin.Context) {
+	baseUserID := c.GetUint("baseUserID")
+	orderID64, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		fail(c, "订单ID错误")
+		return
+	}
+	orderID := uint(orderID64)
 
-// POST /api/rider/orders/:id/pickup   3 -> 4
+	riderID, err := getRiderIDFromBaseUser(baseUserID)
+	if err != nil {
+		fail(c, "未找到骑手身份（Rider 表）")
+		return
+	}
+
+	now := time.Now()
+	updates := map[string]any{
+		"rider_id":    riderID,
+		"accepted_at": &now,
+		// status 不动：仍为 3
+	}
+
+	res := global.Db.Table("orders").
+		Where("id = ? AND status = ? AND rider_id = 0", orderID, OrderStatusToDeliver).
+		Updates(updates)
+
+	if res.Error != nil {
+		fail(c, "更新失败")
+		return
+	}
+	if res.RowsAffected == 0 {
+		fail(c, "订单已被他人接单或状态不允许")
+		return
+	}
+
+	ok(c, gin.H{"success": true})
+}
+
+// ✅ 3) 取货：3 -> 4
+// POST /api/rider/orders/:id/pickup
 func PickupOrder(c *gin.Context) { changeStatus(c, OrderStatusToDeliver, OrderStatusDelivering) }
 
-// POST /api/rider/orders/:id/deliver  4 -> 5
+// ✅ 4) 送达：4 -> 5（结算）
+// POST /api/rider/orders/:id/deliver
 func DeliverOrder(c *gin.Context) { changeStatus(c, OrderStatusDelivering, OrderStatusDone) }
 
 func changeStatus(c *gin.Context, from, to int) {
@@ -167,38 +209,29 @@ func changeStatus(c *gin.Context, from, to int) {
 	updates := map[string]any{"status": to}
 
 	switch to {
-	case OrderStatusToDeliver:
-		updates["rider_id"] = riderID
-		updates["accepted_at"] = &now
 	case OrderStatusDelivering:
 		updates["pickup_at"] = &now
 		updates["deliver_at"] = &now
 	case OrderStatusDone:
 		updates["finish_at"] = &now
-		updates["rider_id"] = riderID // ✅兜底：最终完成时强制归属该骑手（防 rider_id=0 导致历史订单丢失）
+		updates["rider_id"] = riderID // 兜底：确保历史归属
 	}
 
 	err = global.Db.Transaction(func(tx *gorm.DB) error {
-		q := tx.Table("orders")
+		// ✅ 取货/送达 都必须属于该骑手
+		res := tx.Table("orders").
+			Where("id = ? AND status = ? AND rider_id = ?", orderID, from, riderID).
+			Updates(updates)
 
-		// 防抢单/越权
-		if from == OrderStatusNew {
-			q = q.Where("id = ? AND status = ? AND rider_id = 0", orderID, from)
-		} else {
-			q = q.Where("id = ? AND status = ? AND rider_id = ?", orderID, from, riderID)
-		}
-
-		res := q.Updates(updates)
 		if res.Error != nil {
 			return res.Error
 		}
 		if res.RowsAffected == 0 {
-			return errors.New("订单状态不允许、已被他人接单或不属于你")
+			return errors.New("订单状态不允许或不属于你")
 		}
 
-		// 只有完成（4->5）才结算
+		// ✅ 只有完成（4->5）才结算
 		if to == OrderStatusDone {
-			// 取 delivery_fee 作为收入
 			var fee float64
 			if err := tx.Table("orders").
 				Select("delivery_fee").
@@ -206,8 +239,6 @@ func changeStatus(c *gin.Context, from, to int) {
 				Scan(&fee).Error; err != nil {
 				return err
 			}
-
-			// 幂等结算（你 settleRiderForOrder 里已做幂等）
 			if err := settleRiderForOrder(tx, baseUserID, riderID, orderID, fee); err != nil {
 				return err
 			}
@@ -224,6 +255,7 @@ func changeStatus(c *gin.Context, from, to int) {
 	ok(c, gin.H{"success": true})
 }
 
+// ✅ 5) 进行中：status in (3,4) 且 rider_id=自己
 // GET /api/rider/orders/ongoing
 func GetOngoingOrders(c *gin.Context) {
 	baseUserID := c.GetUint("baseUserID")
@@ -232,7 +264,7 @@ func GetOngoingOrders(c *gin.Context) {
 		fail(c, "未找到骑手身份（Rider 表）")
 		return
 	}
-	list, err := queryOrdersJoined(&riderID, []int{OrderStatusToDeliver, OrderStatusDelivering}, 100)
+	list, err := queryOrdersJoined(&riderID, []int{OrderStatusToDeliver, OrderStatusDelivering}, 100, false)
 	if err != nil {
 		fail(c, "查询失败")
 		return
@@ -240,6 +272,7 @@ func GetOngoingOrders(c *gin.Context) {
 	ok(c, list)
 }
 
+// ✅ 6) 历史：status=5 且 rider_id=自己
 // GET /api/rider/orders/history
 func GetHistoryOrders(c *gin.Context) {
 	baseUserID := c.GetUint("baseUserID")
@@ -248,7 +281,7 @@ func GetHistoryOrders(c *gin.Context) {
 		fail(c, "未找到骑手身份（Rider 表）")
 		return
 	}
-	list, err := queryOrdersJoined(&riderID, []int{OrderStatusDone}, 100)
+	list, err := queryOrdersJoined(&riderID, []int{OrderStatusDone}, 100, false)
 	if err != nil {
 		fail(c, "查询失败")
 		return
@@ -258,7 +291,8 @@ func GetHistoryOrders(c *gin.Context) {
 
 // riderID == nil: 不按骑手过滤（new orders）
 // riderID != nil: 只看该骑手订单（ongoing/history）
-func queryOrdersJoined(riderID *uint, statuses []int, limit int) ([]OrderItemResp, error) {
+// onlyUnassigned: 只看 rider_id=0（用于 new）
+func queryOrdersJoined(riderID *uint, statuses []int, limit int, onlyUnassigned bool) ([]OrderItemResp, error) {
 	if len(statuses) == 0 {
 		return make([]OrderItemResp, 0), nil
 	}
@@ -280,6 +314,10 @@ WHERE o.status IN ?
 `
 
 	args := []any{statuses}
+
+	if onlyUnassigned {
+		baseSQL += " AND o.rider_id = 0 "
+	}
 
 	if riderID != nil {
 		baseSQL += " AND o.rider_id = ? "
