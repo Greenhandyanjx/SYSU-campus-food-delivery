@@ -62,7 +62,14 @@
           mode="new"
           @accept="accept"
           class="order-item"
-        />
+        >
+          <template #actions>
+            <el-button type="primary" size="large" @click="accept(o.id)">
+              <i class="iconfont icon-accept"></i>
+              接单
+            </el-button>
+          </template>
+        </RiderOrderCard>
       </TransitionGroup>
     </div>
 
@@ -341,4 +348,5 @@ onMounted(load);
 }
 
 .icon-refresh:before { content: "🔄"; }
+.icon-accept:before { content: "✅"; }
 </style>
