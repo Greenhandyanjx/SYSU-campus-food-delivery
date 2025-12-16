@@ -1,11 +1,19 @@
+@import './transitions.scss';
+@import './scrollbar.scss';
+@import './element-plus-theme.scss';
+
 :root {
-  --rider-primary: #409eff;
-  --rider-bg: #f5f7fb;
+  --rider-primary: #FFB302;
+  --rider-primary-dark: #FFA000;
+  --rider-primary-light: #FFF3E0;
+  --rider-bg: #F8F9FA;
   --rider-card: #ffffff;
-  --rider-text: #303133;
-  --rider-sub: #909399;
-  --rider-border: #ebeef5;
+  --rider-text: #333333;
+  --rider-sub: #666666;
+  --rider-border: #E8E8E8;
   --rider-radius: 14px;
+  --rider-shadow: 0 2px 8px rgba(255, 179, 2, 0.1);
+  --rider-shadow-hover: 0 4px 16px rgba(255, 179, 2, 0.2);
 }
 
 .rider-page-title {
@@ -31,7 +39,13 @@
 .rider-card {
   border: 1px solid var(--rider-border);
   border-radius: var(--rider-radius);
-  box-shadow: 0 10px 30px rgba(0,0,0,.06);
+  box-shadow: var(--rider-shadow);
+  transition: all 0.3s ease;
+}
+
+.rider-card:hover {
+  box-shadow: var(--rider-shadow-hover);
+  transform: translateY(-2px);
 }
 
 .rider-muted {

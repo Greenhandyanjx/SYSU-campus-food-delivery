@@ -1,50 +1,78 @@
 <template>
-  <div>
+  <div class="me-page">
     <div class="header">
-      <div class="title">我的</div>
+      <div class="title">
+        <span class="title-icon">👤</span>
+        个人中心
+      </div>
       <div class="header-actions">
-        <el-button :loading="loading" type="primary" @click="loadAll">刷新</el-button>
+        <el-button :loading="loading" type="primary" @click="loadAll">
+          <i class="iconfont icon-refresh"></i>刷新
+        </el-button>
       </div>
     </div>
 
     <!-- 基本资料 + 在线 -->
-    <el-card class="card" shadow="never">
-      <div class="row">
-        <div class="left">
-          <div class="name">{{ me?.name || username }}</div>
-          <div class="sub">手机号：{{ me?.phone || "-" }}</div>
-          <div class="sub">已完成：{{ me?.completedOrders ?? 0 }}，评分：{{ me?.rating ?? 0 }}</div>
-        </div>
-
-        <div class="right">
-          <div class="online">
-            <span class="label">在线</span>
-            <el-switch v-model="online" @change="saveOnline" />
+    <el-card class="card profile-card" shadow="never">
+      <div class="profile-header">
+        <div class="avatar-wrapper">
+          <div class="avatar">
+            <span class="avatar-emoji">🛵</span>
           </div>
-          <el-button type="danger" plain @click="logout">退出登录</el-button>
+        </div>
+        <div class="profile-info">
+          <div class="name">{{ me?.name || username }}</div>
+          <div class="sub">
+            <span class="info-item">📱 {{ me?.phone || "-" }}</span>
+            <span class="divider">|</span>
+            <span class="info-item">✅ 已完成：{{ me?.completedOrders ?? 0 }}</span>
+            <span class="divider">|</span>
+            <span class="info-item">⭐ 评分：{{ me?.rating ?? 0 }}</span>
+          </div>
+        </div>
+        <div class="profile-actions">
+          <div class="online-switch">
+            <span class="status-label">在线状态</span>
+            <el-switch v-model="online" @change="saveOnline" size="large" />
+          </div>
+          <el-button type="danger" @click="logout" class="logout-btn">
+            <i class="iconfont icon-logout"></i>退出登录
+          </el-button>
         </div>
       </div>
     </el-card>
 
     <!-- 钱包概览 -->
-    <div class="section-title">钱包</div>
-    <el-row :gutter="12" class="wallet-row">
+    <div class="section-title">
+      <span class="section-icon">💰</span>
+      钱包概览
+    </div>
+    <el-row :gutter="16" class="wallet-row">
       <el-col :span="8">
         <div class="stat-card">
-          <div class="k">余额</div>
-          <div class="v">¥ {{ money(wallet?.balance) }}</div>
+          <div class="card-icon">💵</div>
+          <div class="card-content">
+            <div class="k">可用余额</div>
+            <div class="v">¥ {{ money(wallet?.balance) }}</div>
+          </div>
         </div>
       </el-col>
       <el-col :span="8">
         <div class="stat-card">
-          <div class="k">冻结中</div>
-          <div class="v">¥ {{ money(wallet?.frozenAmount) }}</div>
+          <div class="card-icon">🧊</div>
+          <div class="card-content">
+            <div class="k">冻结中</div>
+            <div class="v">¥ {{ money(wallet?.frozenAmount) }}</div>
+          </div>
         </div>
       </el-col>
       <el-col :span="8">
         <div class="stat-card">
-          <div class="k">累计收入</div>
-          <div class="v">¥ {{ money(wallet?.totalIncome) }}</div>
+          <div class="card-icon">💎</div>
+          <div class="card-content">
+            <div class="k">累计收入</div>
+            <div class="v">¥ {{ money(wallet?.totalIncome) }}</div>
+          </div>
         </div>
       </el-col>
     </el-row>
@@ -284,42 +312,276 @@ onMounted(loadAll);
 </script>
 
 <style scoped lang="scss">
-.header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
-.title { font-size: 18px; font-weight: 800; }
-.header-actions { display:flex; gap: 10px; }
+.me-page {
+  padding: 20px;
+  background: var(--rider-bg);
+  min-height: calc(100vh - 60px);
+}
 
-.card { border-radius: 12px; border: 1px solid var(--rider-border); }
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
 
-.row { display:flex; justify-content:space-between; align-items:flex-start; gap: 16px; }
-.name { font-size: 20px; font-weight: 800; margin-bottom: 6px; }
-.sub { color:#606266; margin-top: 6px; }
+.title {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--rider-text);
+  display: flex;
+  align-items: center;
+  gap: 12px;
 
-.online { display:flex; align-items:center; gap:10px; margin-bottom: 10px; justify-content:flex-end; }
-.label { color:#606266; }
-.right { display:flex; flex-direction:column; align-items:flex-end; gap:8px; }
+  .title-icon {
+    font-size: 28px;
+  }
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.card {
+  border-radius: var(--rider-radius);
+  border: 1px solid var(--rider-border);
+  box-shadow: var(--rider-shadow);
+  transition: all 0.3s ease;
+
+  &:hover {
+    box-shadow: var(--rider-shadow-hover);
+  }
+}
+
+.profile-card {
+  margin-bottom: 24px;
+
+  :deep(.el-card__body) {
+    padding: 30px;
+  }
+}
+
+.profile-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+.avatar-wrapper {
+  flex-shrink: 0;
+}
+
+.avatar {
+  width: 80px;
+  height: 80px;
+  background: linear-gradient(135deg, var(--rider-primary) 0%, var(--rider-primary-dark) 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(255, 179, 2, 0.3);
+
+  .avatar-emoji {
+    font-size: 40px;
+  }
+}
+
+.profile-info {
+  flex: 1;
+}
+
+.name {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--rider-text);
+  margin-bottom: 12px;
+}
+
+.sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--rider-sub);
+  font-size: 14px;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.divider {
+  color: var(--rider-border);
+  margin: 0 4px;
+}
+
+.profile-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.online-switch {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.status-label {
+  font-size: 13px;
+  color: var(--rider-sub);
+  font-weight: 600;
+}
+
+.logout-btn {
+  border-radius: 20px;
+  padding: 8px 20px;
+}
 
 .section-title {
-  margin-top: 14px;
-  margin-bottom: 10px;
+  margin-top: 32px;
+  margin-bottom: 16px;
   font-weight: 800;
-  color: #303133;
+  font-size: 18px;
+  color: var(--rider-text);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  .section-icon {
+    font-size: 22px;
+  }
 }
 
-.wallet-row { margin-top: 6px; }
-.stat-card{
-  background:#fff;
-  border:1px solid var(--rider-border);
-  border-radius: 12px;
-  padding: 12px 14px;
+.wallet-row {
+  margin-top: 16px;
 }
-.k{ font-size:12px; color:#909399; margin-bottom: 8px; }
-.v{ font-size: 20px; font-weight: 900; color:#303133; }
 
-.tabs-top{ display:flex; align-items:center; justify-content:space-between; margin-bottom: 6px; }
-.tabs-title{ font-weight: 800; }
-.tabs-actions{ display:flex; gap: 10px; }
+.stat-card {
+  background: #fff;
+  border: 1px solid var(--rider-border);
+  border-radius: var(--rider-radius);
+  padding: 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  transition: all 0.3s ease;
+  box-shadow: var(--rider-shadow);
 
-.pager { margin-top: 12px; display:flex; justify-content:flex-end; }
+  &:hover {
+    box-shadow: var(--rider-shadow-hover);
+    transform: translateY(-2px);
+  }
 
-.tip { margin-top: 6px; font-size: 12px; color:#909399; }
+  .card-icon {
+    font-size: 32px;
+    flex-shrink: 0;
+    width: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--rider-primary-light);
+    border-radius: 50%;
+  }
+
+  .card-content {
+    flex: 1;
+  }
+
+  .k {
+    font-size: 14px;
+    color: var(--rider-sub);
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+
+  .v {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--rider-text);
+
+    &:first-child {
+      color: var(--rider-primary);
+    }
+  }
+}
+
+.tabs-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.tabs-title {
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--rider-text);
+}
+
+.tabs-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.pager {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.tip {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--rider-sub);
+}
+
+:deep(.el-button--primary) {
+  background: var(--rider-primary);
+  border-color: var(--rider-primary);
+  border-radius: 20px;
+  padding: 8px 20px;
+  font-weight: 600;
+
+  &:hover {
+    background: var(--rider-primary-dark);
+    border-color: var(--rider-primary-dark);
+  }
+}
+
+:deep(.el-tabs__header) {
+  margin: 0;
+}
+
+:deep(.el-tabs__nav-wrap::after) {
+  display: none;
+}
+
+:deep(.el-tabs__item) {
+  font-weight: 600;
+  font-size: 15px;
+  padding: 0 20px;
+}
+
+:deep(.el-tabs__active-bar) {
+  background-color: var(--rider-primary);
+}
+
+// Icon font styles
+.iconfont {
+  font-family: "iconfont" !important;
+  font-size: 14px;
+  font-style: normal;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.icon-refresh:before { content: "🔄"; }
+.icon-logout:before { content: "🚪"; }
 </style>
