@@ -14,7 +14,7 @@ func SetRouter() *gin.Engine {
 	fe := gin.Default()
 	fe.Static("/images", global.Meal_image_path) // 静态文件服务，用于访问上传的图片
 	fe.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:5173"}, // 前端地址
+		AllowOrigins:     []string{"http://localhost:5173",  "http://sysu-campus-food-jiadi.site"}, // 生产环境}, // 前端地址
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		AllowCredentials: true,
