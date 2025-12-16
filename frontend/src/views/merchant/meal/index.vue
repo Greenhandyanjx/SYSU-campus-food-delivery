@@ -77,9 +77,9 @@
         <el-table-column prop="UpdatedAt  " label="最后操作时间" />
         <el-table-column label="操作" align="center" width="250px">
           <template #default="{ row }">
-            <el-button type="text" size="small"> 修改 </el-button>
+            <el-button type="text" size="small" @click="handleEdit(row)"> 修改 </el-button>
             <el-button type="text" size="small" @click="handleStartOrStop(row)">
-              {{ row.status == "1" ? "停售" : "启售" }}
+              {{ Number(row.status) === 1 ? '停售' : '启售' }}
             </el-button>
             <el-button
               type="text"
@@ -163,26 +163,42 @@ function handleCurrentChange(p: number) {
 }
 
 function handleStartOrStop(row: any) {
-  const newStatus = row.status == 1 ? "off" : "on"; // ✅ 改这里
+  // 后端通常使用数字 0/1 表示状态。这里显式转换并切换。
+  const current = Number(row.status)
+  const newStatus = current === 1 ? 0 : 1
   const p = {
     id: row.ID,
     status: newStatus,
-  };
-  console.log("发送前参数:", p);
-  ElMessageBox.confirm("确认调整当前套餐的售卖状态, 是否继续?", "提示", {
-    confirmButtonText: "确定",
-    cancelButtonText: "取消",
-    type: "warning",
+  }
+  console.log('发送前参数:', p)
+  ElMessageBox.confirm('确认调整当前套餐的售卖状态, 是否继续?', '提示', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'warning',
   }).then(() => {
     enableOrDisableSetmeal(p).then((res: any) => {
       if (Number(res.data.code) === 1) {
-        ElMessage.success("套餐售卖状态修改成功！");
-        pageQuery();
+        ElMessage.success('套餐售卖状态修改成功！')
+        // 重新查询当前页数据
+        pageQuery()
       } else {
-        ElMessage.error(res.data.message || "修改失败");
+        ElMessage.error(res.data.message || '修改失败')
       }
-    });
-  });
+    }).catch((e:any)=>{
+      ElMessage.error('请求失败')
+    })
+  }).catch(()=>{})
+}
+
+function handleEdit(row: any) {
+  // 跳转到编辑页面，携带 id 作为查询参数
+  try {
+    // 这里复用现有的添加/编辑页面路由：/merchant/meal/add
+    // 该页面通过 query.id 判断是编辑模式
+    router.push({ path: '/merchant/meal/add', query: { id: String(row.ID || row.id) } })
+  } catch (e) {
+    console.warn('navigate to edit failed', e)
+  }
 }
 
 function handleDelete(type: string, id?: string) {
