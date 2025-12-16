@@ -81,6 +81,7 @@
           :order="o"
           mode="ongoing"
           class="order-item"
+          @open-chat="handleOpenChat"
         >
           <template #actions>
             <el-button v-if="o.status === 3" type="primary" size="large" @click="pickup(o.id)">
@@ -154,6 +155,12 @@ const deliver = async (id: number) => {
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.msg || "送达失败");
   }
+};
+
+// 处理打开聊天事件
+const handleOpenChat = (data: { type: 'user' | 'merchant'; id: number; name: string }) => {
+  // 发送全局事件，聊天组件会监听这个事件
+  window.dispatchEvent(new CustomEvent('rider:openChat', { detail: data }));
 };
 
 onMounted(load);

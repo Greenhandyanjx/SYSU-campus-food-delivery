@@ -8,11 +8,14 @@
         </div>
       </div>
     </div>
+    <!-- 骑手聊天组件 -->
+    <RiderChat />
   </div>
 </template>
 
 <script setup lang="ts">
 import Navbar from "./components/Navbar.vue";
+import RiderChat from "@/components/rider/RiderChat.vue";
 </script>
 
 <style scoped lang="scss">

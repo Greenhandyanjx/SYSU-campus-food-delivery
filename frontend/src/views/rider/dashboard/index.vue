@@ -117,9 +117,9 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { riderApi, type RiderMe } from "@/api/rider";
+import { riderApi, type RiderMe, type RiderStat } from "@/api/rider";
 
 const router = useRouter();
 const username = localStorage.getItem("username") || "rider";
@@ -127,10 +127,13 @@ const username = localStorage.getItem("username") || "rider";
 const me = ref<RiderMe | null>(null);
 const loading = ref(false);
 
-const stat = ref({
+const stat = ref<RiderStat>({
   newCount: 0,
   ongoingCount: 0,
   historyCount: 0,
+  completedCount: 0,
+  todayIncome: 0,
+  monthIncome: 0,
 });
 
 const go = (path: string) => router.push(path);
@@ -138,24 +141,31 @@ const go = (path: string) => router.push(path);
 const refreshAll = async () => {
   loading.value = true;
   try {
-    const [meRes, newRes, ongoingRes, hisRes] = await Promise.all([
+    const [meRes, statRes] = await Promise.all([
       riderApi.getMe(),
-      riderApi.getNewOrders(),
-      riderApi.getOngoing(),
-      riderApi.getHistory(),
+      riderApi.getStat(),
     ]);
 
     me.value = meRes.data.data;
-    stat.value.newCount = (newRes.data.data || []).length;
-    stat.value.ongoingCount = (ongoingRes.data.data || []).length;
-    stat.value.historyCount = (hisRes.data.data || []).length;
+    stat.value = statRes.data.data;
   } finally {
     loading.value = false;
   }
 };
 
+const handleStatRefresh = () => {
+  refreshAll();
+};
+
 onMounted(() => {
   refreshAll();
+  // 监听统计刷新事件
+  window.addEventListener('rider:stat:refresh', handleStatRefresh);
+});
+
+onUnmounted(() => {
+  // 移除事件监听
+  window.removeEventListener('rider:stat:refresh', handleStatRefresh);
 });
 </script>
 

@@ -96,6 +96,17 @@
         </div>
         <div class="actions">
           <slot name="actions" />
+          <!-- 联系商家按钮 -->
+          <el-button
+            v-if="props.mode === 'ongoing'"
+            size="small"
+            type="info"
+            plain
+            @click="openChat"
+          >
+            <i class="iconfont icon-message"></i>
+            联系商家
+          </el-button>
         </div>
       </div>
     </div>
@@ -105,6 +116,10 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { RiderOrderItem } from "@/api/rider";
+
+const emit = defineEmits<{
+  openChat: [data: { type: 'user' | 'merchant'; id: number; name: string }]
+}>()
 
 const props = defineProps<{
   order: RiderOrderItem;
@@ -164,6 +179,15 @@ const statusIcon = computed(() => {
   if (st === 4) return "🚚";
   return "📋";
 });
+
+// 打开与商家的聊天
+const openChat = () => {
+  emit('openChat', {
+    type: 'merchant',
+    id: props.order.merchantId,
+    name: props.order.restaurant || '商家'
+  })
+}
 </script>
 
 <style scoped lang="scss">
@@ -505,4 +529,5 @@ const statusIcon = computed(() => {
 }
 
 .icon-clock:before { content: "⏱️"; }
+.icon-message:before { content: "💬"; }
 </style>

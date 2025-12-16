@@ -1,5 +1,28 @@
 import { http } from "@/utils/http";
 
+// 聊天消息类型
+export type ChatMessage = {
+  id: number;
+  from_base_id: number;
+  merchant_id: number;
+  user_base_id: number;
+  content: string;
+  type: string; // text/image/other
+  status: string; // sent/delivered/read
+  created_at: string;
+  delivered_at?: string;
+  read_at?: string;
+};
+
+// 会话列表项类型
+export type ChatSession = {
+  merchant_id: number;
+  merchant_name?: string;
+  last_message: string;
+  last_at: string;
+  unread_count: number;
+};
+
 export type ApiResp<T> = { code: number | string; msg: string; data: T };
 
 export type RiderMe = {
@@ -23,6 +46,11 @@ export type RiderOrderItem = {
   estimatedTime: number;
   createdAt: string;
   status: number;
+
+  // 聊天功能字段 - 后端现在提供这些数据
+  merchantId: number;        // 商家ID
+  userId: number;            // 下单用户的ID
+  userBaseId: number;        // 用户的base_user_id，用于聊天
 
   acceptedAt?: string | null;
   pickupAt?: string | null;
@@ -56,12 +84,24 @@ export type RiderWithdraw = {
   appliedAt: string;
   processedAt?: string | null;
 };
+
+export type RiderStat = {
+  newCount: number;
+  ongoingCount: number;
+  historyCount: number;
+  completedCount: number;
+  todayIncome: number;
+  monthIncome: number;
+};
 export const riderApi = {
   getMe() {
     return http.get<ApiResp<RiderMe>>("/rider/me");
   },
   updateOnline(isOnline: boolean) {
     return http.post<ApiResp<{ success: boolean }>>("/rider/online", { isOnline });
+  },
+  getStat() {
+    return http.get<ApiResp<RiderStat>>("/rider/stat");
   },
 
   getNewOrders() {
@@ -94,5 +134,31 @@ export const riderApi = {
   },
   getWithdraws() {
     return http.get<ApiResp<RiderWithdraw[]>>("/rider/withdraws");
+  },
+
+  // 聊天相关API - 骑手使用用户端的聊天接口
+  getChatHistory(merchantId: number, userBaseId?: number) {
+    const params: any = { merchantId };
+    if (userBaseId) params.userBaseId = userBaseId;
+    return http.get<ApiResp<ChatMessage[]>>("/chat/history", { params });
+  },
+
+  getChatSessions() {
+    return http.get<ApiResp<ChatSession[]>>("/user/chats");
+  },
+
+  markChatAsRead(merchantId: number) {
+    return http.post<ApiResp<{ success: boolean }>>("/user/chats/mark_read", { merchant_id: merchantId });
+  },
+
+  sendMessage(payload: {
+    merchant_id: number;
+    user_base_id: number;
+    content: string;
+    type: string;
+  }) {
+    // WebSocket发送消息，这里提供方法但不直接发送
+    // 实际发送通过chatClientWebSocket
+    return Promise.resolve({ success: true, payload });
   },
 };
