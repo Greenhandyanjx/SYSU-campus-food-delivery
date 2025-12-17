@@ -381,6 +381,7 @@ func GetMealsPage(c *gin.Context) {
 				"status":     meal.Status,
 				"imageUrl":   meal.ImagePath,
 				"categoryId": meal.Category,
+				"UpdatedAt": meal.UpdatedAt,
 			}
 		}
 		c.JSON(http.StatusOK, gin.H{
