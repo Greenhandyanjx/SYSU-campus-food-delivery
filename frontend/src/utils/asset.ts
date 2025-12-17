@@ -10,7 +10,12 @@ export function resolveAssetUrl(url) {
     }
     return u
   }
-  return u
+  // If it's a bare filename (no leading slash), assume it's stored under /images on the backend
+  const base = import.meta.env.VITE_API_BASE_URL || ''
+  if (base) {
+    return base.replace(/\/$/, '') + '/images/' + u
+  }
+  return '/images/' + u
 }
 
 export function safeImage(url, fallback) {
