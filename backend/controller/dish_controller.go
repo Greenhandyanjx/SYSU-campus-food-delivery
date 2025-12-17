@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -87,37 +86,7 @@ func Get_dishes(ctx *gin.Context) {
         return
     }
 
-    // 构建查询条件的字符串，用于缓存的key
-    queryConditions := fmt.Sprintf("merchant_id=%d&name=%s&category_id=%s&status=%s&page=%d&size=%d",
-        merchantID, params.Name, params.CategoryId, params.Status, params.Page, params.Size)
-
-    // 尝试从 Redis 获取缓存的数据
-    var cachedData struct {
-        Items []gin.H
-        Total int64
-    }
-    found, err := utils.GetJSON(context.Background(), queryConditions, &cachedData)
-    if err != nil {
-        log.Printf("Redis读取错误: %v", err)
-        ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-            "code": "500",
-            "msg":  "服务器内部错误",
-        })
-        return
-    }
-    if found {
-        // 如果成功从Redis获取缓存数据，则直接返回
-        ctx.JSON(http.StatusOK, gin.H{
-            "code": "1",
-            "msg":  "获取菜品列表成功",
-            "data": gin.H{
-                "items": cachedData.Items,
-                "total": cachedData.Total,
-            },
-        })
-        return
-    }
-
+    
     // 构建查询条件
     var query = global.Db.Model(&models.Dish{}).Preload("Flavors").Where("merchant_id = ?", merchantID)
     if params.Name != "" {
@@ -169,7 +138,6 @@ func Get_dishes(ctx *gin.Context) {
         })
         return
     }
-
     // 准备返回数据
     items := make([]gin.H, len(dishes))
     for i, dish := range dishes {
@@ -180,22 +148,9 @@ func Get_dishes(ctx *gin.Context) {
             "status":     dish.Status,
             "imageUrl":   dish.ImagePath,
             "categoryId": dish.Category,
+            "updateTime":dish.UpdatedAt,
             "stock":      0, // 假设 stock 字段在 Dish 结构体中不存在，这里返回 0
         }
-    }
-
-    // 序列化数据并存入Redis
-    cachedData = struct {
-        Items []gin.H
-        Total int64
-    }{
-        Items: items,
-        Total: total,
-    }
-    err = utils.SetJSON(context.Background(), queryConditions, cachedData, 5*time.Minute)
-    if err != nil {
-        log.Printf("Redis写入错误: %v", err)
-        // 这里可以选择不中断请求，而是继续返回数据
     }
 
     // 返回结果
@@ -260,7 +215,6 @@ func Delete_dish(c *gin.Context) {
     }
 
     var removedIDs []int
-    var removedIDsStr []string
 
     fmt.Printf("Type of idOrList: %T\n", idOrList)
 
@@ -282,7 +236,6 @@ func Delete_dish(c *gin.Context) {
             c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "删除菜品失败", "data": nil})
             return
         }
-        removedIDsStr = append(removedIDsStr, strconv.Itoa(Intids))
     case string:
         // 批量删除菜品
         idStrings := strings.Split(ids, ",")
@@ -302,7 +255,6 @@ func Delete_dish(c *gin.Context) {
                     c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "删除菜品失败", "data": nil})
                     return
                 }
-                removedIDsStr = append(removedIDsStr, idStr)
             } else {
                 c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "id 列表中包含非数字类型", "data": nil})
                 return
@@ -312,95 +264,9 @@ func Delete_dish(c *gin.Context) {
         c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "id 字段类型错误", "data": nil})
         return
     }
-
-    // 返回成功响应
     c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"success": true, "removed": removedIDs}})
-
-    // 清除相关缓存（用户首页与该商家详情缓存）
-    go func(mid uint) {
-        ctx := context.Background()
-        fmt.Printf("Deleting cache key: stores:all\n") // 调试用
-        _ = utils.Del(ctx, "stores:all")
-        fmt.Printf("Deleting cache key: store:data:base_id:%d\n", mid) // 调试用
-        _ = utils.Del(ctx, fmt.Sprintf("store:data:base_id:%d", mid))
-        fmt.Printf("Deleting cache key: store:base_id:%d\n", mid) // 调试用
-        _ = utils.Del(ctx, fmt.Sprintf("store:base_id:%d", mid))
-        fmt.Printf("Deleting cache key: dishes:store_id:%d\n", mid) // 调试用
-        _ = utils.Del(ctx, fmt.Sprintf("dishes:store_id:%d", mid))
-        page := 1
-        pageSize := 10
-        RebuildCacheForDeletedDish(mid, page, pageSize,"", "", "")
-        // 清除具体被删除的每个菜品的缓存
-        for _, dishIDStr := range removedIDsStr {
-            fmt.Printf("Deleting cache key: dish:id:%s\n", dishIDStr) // 调试用
-            _ = utils.Del(ctx, fmt.Sprintf("dish:id:%d", dishIDStr))
-        }
-    }(baseid)
-
-    // 更新商家分类统计（异步）
-    go func() {
-        // 无 merchantID，尝试不做任何操作以避免不必要的全表扫描
-        UpdateMerchantTopCategories(baseid)
-    }()
 }
 
-func RebuildCacheForDeletedDish(mid uint, page int, pageSize int, name string, categoryId string, status string) {
-    ctx := context.Background()
-
-      // 构建查询条件的字符串，用于缓存的key
-    queryConditions := fmt.Sprintf("merchant_id=%d&name=%s&category_id=%s&status=%s&page=%d&size=%d",
-        mid, name, categoryId, status, page, pageSize)
-
-    // 构建查询条件
-    var query = global.Db.Model(&models.Dish{}).Preload("Flavors").Where("merchant_id = ?", mid)
-
-    // 假设没有其他查询条件（如 name, category_id, status），如果有需要可以扩展
-    // 如果需要包含其他查询条件，可以从请求体中提取并添加到查询条件中
-
-    // 查询菜品列表
-  // 查询菜品列表
-    var dishes []models.Dish
-    offset := (page - 1) * pageSize
-    limit := pageSize
-    
-    if err := query.Offset(offset).Limit(limit).Find(&dishes).Error; err != nil {
-        log.Printf("数据库查询错误: %v", err)
-        return
-    }
-    // 查询总记录数
-    var total int64
-    if err := query.Count(&total).Error; err != nil {
-        log.Printf("数据库计数错误: %v", err)
-        return
-    }
-    // 准备返回数据
-    items := make([]gin.H, len(dishes))
-    for i, dish := range dishes {
-        items[i] = gin.H{
-            "id":         dish.ID,
-            "name":       dish.DishName,
-            "price":      dish.Price,
-            "status":     dish.Status,
-            "imageUrl":   dish.ImagePath,
-            "categoryId": dish.Category,
-            "stock":      0, // 假设 stock 字段在 Dish 结构体中不存在，这里返回 0
-        }
-    // 序列化数据并存入Redis
-    cachedData := struct {
-        Items []gin.H
-        Total int64
-    }{
-        Items: items,
-        Total: total,
-    }
-    err := utils.SetJSON(ctx, queryConditions, cachedData, 5*time.Minute)
-    if err != nil {
-        log.Printf("Redis写入错误: %v", err)
-        return
-    }
-
-   }
-}
 
 
 func Edit_DishStatus_By_Status(c *gin.Context) {

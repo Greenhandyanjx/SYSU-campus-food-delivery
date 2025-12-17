@@ -214,13 +214,39 @@ func Meal_Delete(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "id 字段类型错误", "data": nil})
 		return
 	}
+	// 获取上下文中的 baseUserID
+	baseUserID, exists := c.Get("baseUserID")
+	if !exists {
+		log.Printf("未找到商户ID")
+		return
+	}
 	// 返回成功响应
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"succe ss": true, "removed": removedIDs}})
 	// 删除后建议更新商家分类统计（如果可得 merchantID）
 	// 清除全量缓存以保证用户端能尽快看到变更
-	go func() {
-		_ = utils.Del(context.Background(), "stores:all")
-	}()
+	merchantID, ok := baseUserID.(uint)
+	if !ok {
+		log.Printf("商户ID类型错误")
+		return
+	}
+	// 清除相关缓存（用户首页与该商家详情缓存）
+	go func(mid uint) {
+		ctx := context.Background()
+		_ = utils.Del(ctx, "stores:all")
+		_ = utils.Del(ctx, fmt.Sprintf("store:data:base_id:%d", mid))
+		_ = utils.Del(ctx, fmt.Sprintf("store:base_id:%d", mid))
+		_ = utils.Del(ctx, fmt.Sprintf("meals:store_id:%d", mid))
+		 // 使用模式匹配删除所有与 merchant_id 相关的缓存数据
+       // 使用 SCAN 命令删除所有与 merchant_id 相关的缓存数据
+    pattern := fmt.Sprintf("meal&merchant_id=%d&page=*", mid)
+    if err := utils.ScanAndDeleteKeys(ctx, pattern); err != nil {
+        log.Printf("清除缓存 %s 失败: %v", pattern, err)
+    }
+		// 清除具体被删除的每个套餐的缓存
+		for _, mealIDStr := range removedIDs {
+			_ = utils.Del(ctx, fmt.Sprintf("meal:id:%d", mealIDStr))
+		}
+	}(merchantID)
 }
 
 func Edit_Meal_Status(c *gin.Context) {
@@ -327,9 +353,10 @@ func GetMealsPage(c *gin.Context) {
 	// 计算分页参数
 	offset := (page - 1) * size
 	// 构建查询条件的字符串，用于缓存的key
-	queryConditions := fmt.Sprintf("merchant_id=%d&page=%d&size=%d&name=%s&status=%d&category_id=%d",
+	queryConditions := fmt.Sprintf("meal&merchant_id=%d&page=%d&size=%d&name=%s&status=%d&category_id=%d",
 		merchantID, page, size, name, status, categoryId)
 	// 尝试从 Redis 获取缓存的数据
+
 	var cachedData struct {
 		Items []models.Meal
 		Total int64
@@ -401,6 +428,7 @@ func GetMealsPage(c *gin.Context) {
 			"status":     meal.Status,
 			"imageUrl":   meal.ImagePath,
 			"categoryId": meal.Category,
+			"updateTime": meal.UpdatedAt,
 			"stock":      0, // 假设 stock 字段在 Meal 结构体中不存在，这里返回 0
 		}
 	}

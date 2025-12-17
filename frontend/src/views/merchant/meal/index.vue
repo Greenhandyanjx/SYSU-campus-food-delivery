@@ -114,8 +114,8 @@ import {
   enableOrDisableSetmeal,
   deleteSetmeal,
 } from "@/api/merchant/setMeal";
-import { getBaseUserDetail } from '@/api/chat'
-import request from '@/api/merchant/request'
+import { getBaseUserDetail } from "@/api/chat";
+import request from "@/api/merchant/request";
 
 const router = useRouter();
 
@@ -125,7 +125,7 @@ const pageSize = ref(10);
 const total = ref(0);
 const records = ref<any[]>([]);
 const options = ref<any[]>([]);
-const merchantId = ref<number | null>(null)
+const merchantId = ref<number | null>(null);
 const categoryId = ref<any>("");
 const statusArr = [
   { value: "0", label: "停售" },
@@ -142,13 +142,27 @@ function pageQuery() {
     status: status.value,
     categoryId: categoryId.value,
   };
-  if (merchantId.value) (params as any).merchantId = merchantId.value
+  if (merchantId.value) (params as any).merchantId = merchantId.value;
   getSetmealPage(params).then((res: any) => {
     if (Number(res.data.code) === 1) {
       console.log("套餐列表：", res.data.data); // ✅ 在 return 之前打印
       total.value = res.data.data.total || res.data.data.items.length;
       records.value = res.data.data.items || [];
+      console.log("records 数据:", records.value); // 调试信息
+      records.value.forEach((record) => {
+        if (!record.id) {
+          console.warn("记录没有 id 字段:", record);
+        }
+      });
+      // 映射 id 字段为 ID 字段
+      records.value = records.value.map((record) => ({
+        ...record,
+        ID: record.id,
+      }));
+    } else {
+      console.error("获取套餐列表失败:", res.data.message); // 处理错误情况
     }
+    // 检查每个元素是否有 id 字段
   });
 }
 
@@ -199,8 +213,10 @@ function handleDelete(type: string, id?: string) {
           arr.push(element.ID);
         });
         param = arr.join(",");
+        console.log("批量删除参数:", param); // 调试信息
       } else {
         param = (id as string) || "";
+        console.log("单个删除参数:", param); // 调试信息
       }
       deleteSetmeal(param).then((res: any) => {
         if (Number(res.data.code) === 1) {
@@ -219,14 +235,18 @@ function handleSelectionChange(val: any) {
 }
 
 onMounted(() => {
-  ;(async () => {
+  (async () => {
     try {
-      const u = await getBaseUserDetail()
-      const uid = u && u.data && u.data.data && u.data.data.id
+      const u = await getBaseUserDetail();
+      const uid = u && u.data && u.data.data && u.data.data.id;
       if (uid) {
-        const res = await request({ url: '/merchant/detail', method: 'get', params: { base_id: uid } })
-        const m = res && res.data && res.data.data
-        if (m && m.id) merchantId.value = m.id
+        const res = await request({
+          url: "/merchant/detail",
+          method: "get",
+          params: { base_id: uid },
+        });
+        const m = res && res.data && res.data.data;
+        if (m && m.id) merchantId.value = m.id;
       }
     } catch (e) {}
     getCategoryByType({ type: 2 }).then((res: any) => {
@@ -235,7 +255,7 @@ onMounted(() => {
       }
     });
     pageQuery();
-  })()
+  })();
 });
 </script>
 <style lang="scss">
