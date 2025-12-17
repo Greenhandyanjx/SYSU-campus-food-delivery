@@ -14,7 +14,7 @@ func SetRouter() *gin.Engine {
 	fe := gin.Default()
 	fe.Static("/images", global.Meal_image_path) // 静态文件服务，用于访问上传的图片
 	fe.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:5173",  "http://sysu-campus-food-jiadi.site"}, // 生产环境}, // 前端地址
+		AllowOrigins:     []string{"http://localhost:5173", "http://sysu-campus-food-jiadi.site"}, // 生产环境}, // 前端地址
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		AllowCredentials: true,
@@ -39,6 +39,8 @@ func SetRouter() *gin.Engine {
 		// 用户侧店铺查询与菜品接口
 		noAuth.GET("/store/query", controller.GetStoreByQuery)
 		noAuth.GET("/store/dishes", controller.GetStoreDishes)
+		// 公共接口：按 meal id 查询套餐详情（包含 setmealDishes），无需鉴权，供用户端预览使用
+		noAuth.GET("/store/meal/query", controller.GetPublicMealById)
 		// 用户首页获取店铺列表（无需鉴权）
 		noAuth.GET("/user/stores", controller.GetStores)
 		// 允许未登录用户上传图片（用于注册页面等）

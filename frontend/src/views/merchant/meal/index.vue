@@ -58,7 +58,8 @@
           <template #default="{ row }">
             <el-image
               style="width: 80px; height: 40px; border: none"
-              :src="row.image"
+              :src="safeImage(row.image, noImg)"
+              @error="(e) => imageErrorHandler(e, row)"
             ></el-image>
           </template>
         </el-table-column>
@@ -74,7 +75,7 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="UpdatedAt  " label="最后操作时间" />
+        <el-table-column prop="UpdatedAt" label="最后操作时间" />
         <el-table-column label="操作" align="center" width="250px">
           <template #default="{ row }">
             <el-button type="text" size="small" @click="handleEdit(row)"> 修改 </el-button>
@@ -106,6 +107,8 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
+import noImg from '@/assets/noImg.png'
+import { safeImage } from '@/utils/asset'
 import { useRouter } from "vue-router";
 import { ElMessageBox, ElMessage } from "element-plus";
 import { getCategoryByType } from "@/api/merchant/category";
@@ -134,6 +137,16 @@ const statusArr = [
 const status = ref<any>("");
 const multipleSelection = ref<any[]>([]);
 
+function imageErrorHandler(e: any, row: any) {
+  try {
+    const target = e && e.target ? e.target : null
+    if (target && target.src && !String(target.src).includes('noImg')) target.src = noImg
+      if (row) row.image = noImg
+  } catch (err) {
+    // ignore
+  }
+}
+
 function pageQuery() {
   const params = {
     page: page.value,
@@ -145,9 +158,14 @@ function pageQuery() {
   if (merchantId.value) (params as any).merchantId = merchantId.value
   getSetmealPage(params).then((res: any) => {
     if (Number(res.data.code) === 1) {
-      console.log("套餐列表：", res.data.data); // ✅ 在 return 之前打印
+      console.log("套餐列表：", res.data.data);
       total.value = res.data.data.total || res.data.data.items.length;
-      records.value = res.data.data.items || [];
+      // Normalize image field names to ensure UI always reads `image`
+      const items = (res.data.data.items || []).map((it: any) => ({
+        ...it,
+        image: it.image || it.ImagePath || it.imageUrl || it.image_path || it.img || '',
+      }))
+      records.value = items
     }
   });
 }
@@ -305,3 +323,8 @@ onMounted(() => {
   }
 }
 </style>
+
+
+
+
+

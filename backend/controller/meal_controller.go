@@ -352,7 +352,7 @@ func GetMealsPage(c *gin.Context) {
 				"name":       meal.Mealname,
 				"price":      meal.Price,
 				"status":     meal.Status,
-				"imageUrl":   meal.ImagePath,
+				"image":      meal.ImagePath,
 				"categoryId": meal.Category,
 			}
 		}
@@ -399,7 +399,7 @@ func GetMealsPage(c *gin.Context) {
 			"name":       meal.Mealname,
 			"price":      meal.Price,
 			"status":     meal.Status,
-			"imageUrl":   meal.ImagePath,
+			"image":      meal.ImagePath,
 			"categoryId": meal.Category,
 			"stock":      0, // 假设 stock 字段在 Meal 结构体中不存在，这里返回 0
 		}
@@ -451,4 +451,78 @@ func Get_Meal_ById(c *gin.Context) {
 	}
 	// 返回成功响应
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": meal})
+}
+
+// GetPublicMealById 不需要鉴权，返回单个 meal 及其 setmealDishes，供用户预览使用
+func GetPublicMealById(c *gin.Context) {
+	id := c.Query("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "id required"})
+		return
+	}
+
+	var meal models.Meal
+	if err := global.Db.First(&meal, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"code": 0, "message": "meal not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "query meal failed", "err": err.Error()})
+		return
+	}
+
+	// 查询 meal_dish
+	var mealDishes []models.MealDish
+	if err := global.Db.Where("meal_id = ?", meal.ID).Find(&mealDishes).Error; err != nil {
+		log.Printf("GetPublicMealById: meal_dish query failed: %v", err)
+		mealDishes = []models.MealDish{}
+	}
+
+	// 收集 dish ids
+	dishIDsMap := make(map[int]struct{})
+	for _, md := range mealDishes {
+		dishIDsMap[md.DishID] = struct{}{}
+	}
+	dishIDs := make([]int, 0, len(dishIDsMap))
+	for idk := range dishIDsMap {
+		dishIDs = append(dishIDs, idk)
+	}
+
+	var referencedDishes []models.Dish
+	if len(dishIDs) > 0 {
+		if err := global.Db.Where("id IN ?", dishIDs).Find(&referencedDishes).Error; err != nil {
+			log.Printf("GetPublicMealById: referenced dishes query failed: %v", err)
+			referencedDishes = []models.Dish{}
+		}
+	}
+
+	dishByID := make(map[int]models.Dish)
+	for _, dd := range referencedDishes {
+		dishByID[dd.ID] = dd
+	}
+
+	entries := make([]map[string]interface{}, 0, len(mealDishes))
+	for _, md := range mealDishes {
+		d := dishByID[md.DishID]
+		entries = append(entries, map[string]interface{}{
+			"dishId": md.DishID,
+			"name":   d.DishName,
+			"price":  d.Price,
+			"image":  d.ImagePath,
+			"copies": md.Num,
+		})
+	}
+
+	resp := map[string]interface{}{
+		"id":            meal.ID,
+		"name":          meal.Mealname,
+		"price":         meal.Price,
+		"description":   meal.Description,
+		"image":         meal.ImagePath,
+		"categoryId":    meal.Category,
+		"status":        meal.Status,
+		"setmealDishes": entries,
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": resp})
 }
