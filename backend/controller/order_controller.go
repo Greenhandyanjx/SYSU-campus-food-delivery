@@ -819,6 +819,30 @@ func OrderReject(c *gin.Context) {
 	})
 }
 
+// GetConsigneeById 返回单个 consignee 的信息（包含 Userid），供商家查询
+func GetConsigneeById(c *gin.Context) {
+	idStr := c.Query("id")
+	if idStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "id is required"})
+		return
+	}
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid id"})
+		return
+	}
+	var consignee models.Consignee
+	if err := global.Db.First(&consignee, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"code": 0, "message": "consignee not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get consignee"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": consignee})
+}
+
 func notifyUser(order models.Order, reason string) {
 	fmt.Printf("Notifying user of order ID: %d with reason: %s\n", order.ID, reason)
 	// 实际应用中可能需要调用其他服务或发送消息

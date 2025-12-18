@@ -69,6 +69,8 @@ func SetRouter() *gin.Engine {
 	auth := fe.Group("/api")
 	auth.Use(midware.AuthMiddleware())
 	{
+		// 查询收货人信息（用于商家根据 consigneeid 查找对应的 base user id）
+		auth.GET("/consignee/query", controller.GetConsigneeById)
 		// merchant order endpoints require authentication
 		auth.GET("/merchant/orders/status", controller.GetOrderListByStatus)
 		auth.GET("/merchant/orders/page", controller.GetOrderPage)
