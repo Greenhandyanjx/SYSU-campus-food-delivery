@@ -85,9 +85,11 @@
         <div class="card-block big">
           <div class="card-header">店铺地址</div>
           <div class="card-body">
-            <div v-if="!editing.shop_location">{{ form.shop_location || '未设置' }}</div>
+            <div v-if="!editing.shop_location" class="shop-location-display" :title="form.shop_location">{{ form.shop_location || '未设置' }}</div>
             <div v-else>
-              <el-input v-model="editValues.shop_location" placeholder="店铺地址" />
+              <div style="cursor: pointer;width: auto;display: flex;" @click="openAddressPicker" :title="editValues.shop_location || form.shop_location">
+                <el-input class="address-input" v-model="editValues.shop_location" placeholder="店铺地址" readonly />
+              </div>
             </div>
           </div>
           <div class="card-footer actions">
@@ -100,6 +102,7 @@
             </template>
           </div>
         </div>
+        <AddressPicker v-model="pickerValue" :visible="pickerVisible" @update:visible="pickerVisible = $event" @update:modelValue="onPickerConfirm" @close="onPickerClose" />
       </div>
     </div>
   </div>
@@ -108,6 +111,7 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
+import AddressPicker from '@/components/AddressPicker.vue'
 import ImgUpLoad from '@/components/ImgUpLoad/index.vue'
 import { getMerchantProfile, updateMerchantProfile } from '@/api/merchant/profile'
 import merchantSvg from '@/assets/merchant.svg'
@@ -119,6 +123,8 @@ const form = reactive({ shop_name: '', phone: '', logo: '', shop_location: '', o
 const editing = reactive({ shop_name: false, owner: false, phone: false, shop_location: false })
 const editingLogo = ref(false)
 const editValues = reactive({ shop_name: '', owner: '', phone: '', shop_location: '' })
+const pickerVisible = ref(false)
+const pickerValue = ref({ formatted: '', detail: '', lng: 0, lat: 0 })
 
 // phone verification state
 const codeInput = ref('')
@@ -166,6 +172,19 @@ function cancelEdit(field: string) {
   editing[field] = false
   editValues[field] = ''
   if (field === 'phone') { codeInput.value = ''; sentCode.value = ''; sentPhone.value = '' }
+}
+
+function openAddressPicker() {
+  console.log('openAddressPicker called')
+  pickerValue.value = { formatted: editValues.shop_location || form.shop_location || '', detail: '', lng: 0, lat: 0 }
+  pickerVisible.value = true
+}
+
+function onPickerClose() { pickerVisible.value = false }
+
+function onPickerConfirm(val: any) {
+  if (val && val.formatted) editValues.shop_location = val.formatted
+  pickerVisible.value = false
 }
 
 function phoneValid(p: string) {
@@ -228,5 +247,18 @@ async function saveField(field: string) {
 
 @media (max-width:900px) {
   .cards-grid { grid-template-columns: 1fr }
+}
+</style>
+<style scoped>
+:deep(.address-input) .el-input__inner {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.shop-location-display {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>
