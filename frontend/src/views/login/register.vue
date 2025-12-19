@@ -67,7 +67,7 @@
             <el-form-item prop="address">
                 <div class="form-item" :class="{ 'has-value': form.address }">
                   <div style="cursor: pointer; opacity: 1;" @click="openAddressPickerFor('address')" :title="form.address">
-                    <el-input class="address-input" v-model="form.address" prefix-icon="Location" readonly />
+                    <el-input class="address-input" v-model="form.address"  prefix-icon="Location" readonly  />
                   </div>
                   <label>收货地址（点击选择）</label>
                 </div>
@@ -219,7 +219,7 @@ const form = ref({
   password: '',
   confirm: '',
   role: 'user',
-  code: '0',
+  code: '',
   nickname: '',
   phone: '',
   address: '',

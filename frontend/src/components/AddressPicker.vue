@@ -5,7 +5,9 @@
       <div class="picker-grid">
         <div class="map-wrap">
             <div ref="mapEl" class="map-canvas"></div>
-            <button class="ap-locate-btn" @click="recenterOriginal" title="回到起始位置">◎</button>
+            <button class="ap-locate-btn" @click="recenterOriginal" title="回到起始位置">
+              <img src="\src\assets\icons\address.svg" style="width: 20px;height: 20px;color: blue;" alt="">
+            </button>
         </div>
 
         <div class="controls">
@@ -13,6 +15,8 @@
             <el-form-item label="地址（格式化）">
               <el-input
                 v-model="formatted"
+                type="textarea"
+                :autosize="{ minRows: 1, maxRows: 4 }"
                 placeholder="点击地图或拖动标记获取地址"
                 @input="onFormattedInput"
               />
@@ -376,6 +380,8 @@ function destroyMap() {
   z-index: 2000;
 }
 .ap-modal {
+  position:fixed;
+  opacity: 1;
   background: #fff;
   border-radius: 8px;
   width: 920px;

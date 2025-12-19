@@ -51,6 +51,7 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { getChatHistory, getWsUrl, getMerchantDetail, getBaseUserDetail } from '@/api/chat'
+import request from '@/api/merchant/request'
 import chatClient from '@/utils/chatClient'
 import merchantSvg from '@/assets/merchant.svg'
 import userPng from '@/assets/user.png'
@@ -252,6 +253,13 @@ onMounted(async () => {
     await detectRole()
     await ensureNames()
     await loadHistory()
+    // 当通过消息通知打开会话时，主动请求后端标记为已读并通知其它组件
+    try {
+      if (props.merchantId) {
+        await request.post('/user/chats/mark_read', { merchant_id: Number(props.merchantId) })
+        try { window.dispatchEvent(new CustomEvent('user:chats:marked_read', { detail: { merchant_id: Number(props.merchantId) } })) } catch(e) {}
+      }
+    } catch(e) { console.warn('[ChatWindow] mark_read failed', e) }
     chatClient.onMessage(handleGlobalMessage)
     // ensure centralized websocket connection
     try { chatClient.connect() } catch (e) { console.warn('[ChatWindow] chatClient.connect failed', e) }
@@ -272,8 +280,8 @@ watch(() => props.merchantId, async (newVal, oldVal) => {
   await loadHistory()
   // 如果当前用户打开的是会话，尝试通知后端标记为已读（用户端）
   try {
-    await fetch('/api/user/chats/mark_read', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: localStorage.getItem('token') || '' }, body: JSON.stringify({ merchant_id: Number(newVal) }) })
-  } catch (e) {}
+    await request.post('/user/chats/mark_read', { merchant_id: Number(newVal) })
+  } catch (e) { console.warn('[ChatWindow] mark_read watcher failed', e) }
   // 通知其它组件当前用户会话已读（例如刷新用户会话列表）
   try { window.dispatchEvent(new CustomEvent('user:chats:marked_read', { detail: { merchant_id: Number(newVal) } })) } catch (e) {}
 })
