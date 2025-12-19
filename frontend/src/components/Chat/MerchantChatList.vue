@@ -306,9 +306,20 @@ onMounted(async () => {
   }
   window.addEventListener('merchant:chats:marked_read', markReadHandler)
 
+  // 监听来自全局通知的订单提醒
+  const orderNotifyHandler = (ev) => {
+    try {
+      const d = (ev && ev.detail) || {}
+      if (!d) return
+      orderNotify.value = d
+    } catch (e) { console.warn('orderNotifyHandler error', e) }
+  }
+  window.addEventListener('merchant:order:notify', orderNotifyHandler)
+
   onBeforeUnmount(() => {
     chatClient.offMessage(wrappedHandler)
     window.removeEventListener('merchant:chats:marked_read', markReadHandler)
+    window.removeEventListener('merchant:order:notify', orderNotifyHandler)
   })
 })
 
