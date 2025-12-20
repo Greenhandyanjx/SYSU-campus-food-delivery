@@ -31,6 +31,7 @@ type OrderItemResp struct {
 	EstimatedTime   int       `json:"estimatedTime"`
 	CreatedAt       time.Time `json:"createdAt"`
 	Status          int       `json:"status"`
+	MerchantID      uint      `json:"merchantId"`
 
 	AcceptedAt *time.Time `json:"acceptedAt"`
 	PickupAt   *time.Time `json:"pickupAt"`
@@ -62,6 +63,7 @@ type orderJoinRow struct {
 	ShopName     sql.NullString `gorm:"column:shop_name"`
 	ShopLocation sql.NullString `gorm:"column:shop_location"`
 	CustomerName sql.NullString `gorm:"column:customer_name"`
+	MerchantID   uint           `gorm:"column:merchant_id"`
 
 	Province sql.NullString `gorm:"column:province"`
 	City     sql.NullString `gorm:"column:city"`
@@ -470,7 +472,7 @@ func queryOrdersJoined(riderID *uint, statuses []int, limit int, onlyUnassigned 
 SELECT
   o.id, o.status, o.created_at, o.total_price, o.delivery_fee,
   o.accepted_at, o.pickup_at, o.deliver_at, o.finish_at,
-  m.shop_name, m.shop_location,
+  m.shop_name, m.shop_location, o.merchant_id,
   c.name AS customer_name,
   a.province, a.city, a.district, a.street, a.detail
 FROM orders o
@@ -511,6 +513,7 @@ WHERE o.status IN ?
 			EstimatedTime:   20,
 			CreatedAt:       r.CreatedAt,
 			Status:          r.Status,
+			MerchantID:      r.MerchantID,
 
 			AcceptedAt: r.AcceptedAt,
 			PickupAt:   r.PickupAt,
