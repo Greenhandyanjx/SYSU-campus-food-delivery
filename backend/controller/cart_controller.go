@@ -12,6 +12,25 @@ import (
 	"gorm.io/gorm"
 )
 
+// resolveUint 尝试从多种常见类型中解析无符号整数（兼容前端可能传的数字或字符串）
+func resolveUint(v interface{}) (uint, bool) {
+	switch t := v.(type) {
+	case float64:
+		return uint(t), true
+	case int:
+		return uint(t), true
+	case int64:
+		return uint(t), true
+	case uint:
+		return t, true
+	case string:
+		if parsed, err := strconv.ParseUint(t, 10, 32); err == nil {
+			return uint(parsed), true
+		}
+	}
+	return 0, false
+}
+
 type AddToCartRequest struct {
 	MerchantID uint `json:"merchantId" binding:"required"`
 	DishID     uint `json:"dishId" binding:"required"`
@@ -110,24 +129,7 @@ func AddToCart(c *gin.Context) {
 	// 从 map 中读取前端实际传的字段
 	// 解析前端传入的商家标识（兼容多种字段名与类型）
 	var merchantBaseID uint = 0
-	// helper to resolve numeric value from interface
-	resolveUint := func(v interface{}) (uint, bool) {
-		switch t := v.(type) {
-		case float64:
-			return uint(t), true
-		case int:
-			return uint(t), true
-		case int64:
-			return uint(t), true
-		case uint:
-			return t, true
-		case string:
-			if parsed, err := strconv.ParseUint(t, 10, 32); err == nil {
-				return uint(parsed), true
-			}
-		}
-		return 0, false
-	}
+	// 使用文件级别的 resolveUint 帮助函数进行类型解析（保持变量名与逻辑不变）
 
 	var dishID uint
 	var qty int
