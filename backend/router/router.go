@@ -40,6 +40,8 @@ func SetRouter() *gin.Engine {
 		// 用户侧店铺查询与菜品接口
 		noAuth.GET("/store/query", controller.GetStoreByQuery)
 		noAuth.GET("/store/dishes", controller.GetStoreDishes)
+		// 公共接口：按 meal id 查询套餐详情（包含 setmealDishes），无需鉴权，供用户端预览使用
+		noAuth.GET("/store/meal/query", controller.GetPublicMealById)
 		// 用户首页获取店铺列表（无需鉴权）
 		noAuth.GET("/user/stores", controller.GetStores)
 		// 允许未登录用户上传图片（用于注册页面等）
@@ -68,6 +70,8 @@ func SetRouter() *gin.Engine {
 	auth := fe.Group("/api")
 	auth.Use(midware.AuthMiddleware())
 	{
+		// 查询收货人信息（用于商家根据 consigneeid 查找对应的 base user id）
+		auth.GET("/consignee/query", controller.GetConsigneeById)
 		// merchant order endpoints require authentication
 		auth.GET("/merchant/orders/status", controller.GetOrderListByStatus)
 		auth.GET("/merchant/orders/page", controller.GetOrderPage)
@@ -162,6 +166,8 @@ func SetRouter() *gin.Engine {
 		// 用户端订单接口：列表与详情
 		auth.GET("/user/order/list", controller.GetUserOrderList)
 		auth.GET("/user/order/:id", controller.GetUserOrderDetail)
+		// 用户评价订单
+		auth.POST("/user/order/:id/review", controller.ReviewOrder)
 		// 用户端订单操作：取消、支付、更新收货人/地址
 		auth.POST("/user/order/cancel", controller.CancelOrder)
 		auth.POST("/user/order/pay", controller.PayOrder)

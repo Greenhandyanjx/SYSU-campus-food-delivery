@@ -28,6 +28,7 @@ const routes = [
       { path: 'store/:name', component: () => import('@/views/user/store/index.vue'), name: 'userStore' },
       { path: 'orderlist', component: () => import('@/views/user/orderlist/index.vue') },
       { path: 'order/:id', component: () => import('@/views/user/orderlist/Detail.vue') },
+      { path: 'review/:id', component: () => import('@/views/user/review/index.vue') },
       { path: 'pay', component: () => import('@/views/user/orderlist/Detail.vue'), meta: { hidden: true } },
       { path: 'wallet', component: () => import('@/views/user/wallet/index.vue') },
       { path: 'coupons', component: () => import('@/views/user/coupons/index.vue') },

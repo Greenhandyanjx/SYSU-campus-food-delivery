@@ -373,7 +373,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getMerchantProfile } from '@/api/merchant/profile'
@@ -393,6 +393,7 @@ import {
 } from '@/api/merchant/order'
 import { getOrderDetailPageCoalesced } from '@/api/merchant/order'
 import { emitOrderChanged } from '@/utils/orderEvents'
+import request from '@/api/merchant/request'
 
 const router = useRouter()
 const route = useRoute()
@@ -486,6 +487,12 @@ onMounted(() => {
   if (route.query.orderId && route.query.orderId !== 'undefined') {
     goDetail(route.query.orderId as string, 2)
   }
+  // 监听 route.query.orderId 的变化（通过其他组件路由跳转携带 orderId）
+  watch(() => route.query.orderId, (val) => {
+    try {
+      if (val && String(val) !== 'undefined') goDetail(String(val), 2)
+    } catch (e) { console.warn('route query orderId watch failed', e) }
+  })
   ;(async () => {
     try {
       const r: any = await getMerchantProfile()
@@ -711,51 +718,52 @@ endTime: valueTime.value[1] ? formatForApi(valueTime.value[1]) : undefined,
 }
 
 async function goDetail(id: any, status: number, r?: any) {
+  if (!id) return
+  try {
+    if (window.__merchant_open_order_lock && window.__merchant_open_order_lock === String(id)) {
+      return
+    }
+  } catch (e) {}
+  try { window.__merchant_open_order_lock = String(id) } catch (e) {}
+  // 自动在 3 秒后解锁，避免死锁
+  setTimeout(() => { try { if (window.__merchant_open_order_lock === String(id)) window.__merchant_open_order_lock = null } catch (e) {} }, 3000)
+
   diaForm.value = {}
   dialogVisible.value = true
   dialogOrderStatus.value = status
-  
+
   orderId.value = id
   try {
     const { data } = await queryOrderDetailById({ orderId: id })
     const raw = data.data || {}
 
     const safeFormat = (v: any) => {
-  if (!v) return ''
+    if (!v) return ''
 
-  // 将非字符串类型统一转为字符串（避免对 Date 或对象调用 startsWith/includes 抛错）
-  let s: string
-  if (typeof v === 'string') s = v
-  else if (v instanceof Date) s = v.toISOString()
-  else s = String(v)
+    // 将非字符串类型统一转为字符串（避免对 Date 或对象调用 startsWith/includes 抛错）
+    let s: string
+    if (typeof v === 'string') s = v
+    else if (v instanceof Date) s = v.toISOString()
+    else s = String(v)
 
-  // 过滤无效时间
-  if (s === '0001-01-01T00:00:00Z' || s.startsWith('0001-01-01')) {
-    return ''
+    // 过滤无效时间
+    if (s === '0001-01-01T00:00:00Z' || s.startsWith('0001-01-01')) {
+      return ''
+    }
+
+    // 修正非 ISO 格式（空格改为 T）
+    if (s.includes(' ') && !s.includes('T')) {
+      s = s.replace(' ', 'T')
+    }
+
+    const d = new Date(s)
+    if (isNaN(d.getTime())) return ''
+
+    // 返回 ElementPlus 可识别格式：yyyy-MM-dd HH:mm:ss
+    const pad = (n: number) => String(n).padStart(2, '0')
+
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
   }
-
-  // 修正非 ISO 格式（空格改为 T）
-  if (s.includes(' ') && !s.includes('T')) {
-    s = s.replace(' ', 'T')
-  }
-
-  const d = new Date(s)
-  if (isNaN(d.getTime())) return ''
-
-  // 返回 ElementPlus 可识别格式：yyyy-MM-dd HH:mm:ss
-  const pad = (n: number) => String(n).padStart(2, '0')
-
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-}
-
-function openChatForOrder(row: any) {
-  const uid = row.user_base_id || row.userBaseId || row.userId || row.user_id || row.buyerId || row.buyer_id || row.base_user_id
-  if (!uid) {
-    ElMessage.error('无法定位订单对应的用户 ID')
-    return
-  }
-  window.dispatchEvent(new CustomEvent('chat:open', { detail: { merchantId: null, userBaseId: uid } }))
-}
 
     const idVal = raw.id ?? raw.ID ?? raw.orderId ?? raw.orderID ?? raw.orderid ?? raw.OrderID
     const numberVal = raw.number ?? raw.orderNumber ?? raw.orderNo ?? raw.orderid ?? raw.orderId ?? idVal
@@ -779,6 +787,8 @@ function openChatForOrder(row: any) {
     if (route.query.orderId) router.push('/merchant/orders')
   } catch (err: any) {
     ElMessage.error('请求出错了：' + err.message)
+  } finally {
+    try { if (window.__merchant_open_order_lock === String(id)) window.__merchant_open_order_lock = null } catch (e) {}
   }
 }
 
@@ -800,9 +810,10 @@ async function orderAcceptHandler(r: any, setTableFlag = true) {
     const res = await orderAccept({ id: orderId.value })
     if (Number(res.data.code) === 1) {
       ElMessage.success('操作成功')
+      const emittedId = orderId.value
       orderId.value = ''
       dialogVisible.value = false
-      try { emitOrderChanged({ orderId: orderId.value }) } catch (e) {}
+      try { emitOrderChanged({ orderId: emittedId }) } catch (e) {}
     } else {
       ElMessage.error(res.data.msg)
     }
@@ -812,12 +823,29 @@ async function orderAcceptHandler(r: any, setTableFlag = true) {
 }
 
 function cancelOrderHandler(r: any) {
-  cancelDialogVisible.value = true
+  // 直接调用取消接口，将订单状态改为 6（商家取消）
+  if (!r || !r.id) return ElMessage.error('订单 ID 缺失')
   orderId.value = r.id
   dialogOrderStatus.value = r.status
-  cancelDialogTitle.value = '取消'
-  dialogVisible.value = false
-  cancelReason.value = ''
+  isTableOperateBtn.value = true
+  cancelDialogVisible.value = false
+  try {
+    ;(async () => {
+      const payload: any = { id: orderId.value, cancelReason: '商家取消' }
+      const res = await orderCancel(payload)
+      if (Number(res.data.code) === 1) {
+        ElMessage.success('取消订单成功')
+        orderId.value = ''
+        try { emitOrderChanged({ orderId: r.id }) } catch (e) {}
+        // 刷新当前页列表
+        init(orderStatus.value)
+      } else {
+        ElMessage.error(res.data.msg || '取消订单失败')
+      }
+    })()
+  } catch (err: any) {
+    ElMessage.error('请求出错了：' + err.message)
+  }
 }
 
 async function confirmCancel() {
@@ -834,8 +862,9 @@ async function confirmCancel() {
     if (Number(res.data.code) === 1) {
       ElMessage.success('操作成功')
       cancelDialogVisible.value = false
+      const emittedId = orderId.value
       orderId.value = ''
-      try { emitOrderChanged({ orderId: orderId.value }) } catch (e) {}
+      try { emitOrderChanged({ orderId: emittedId }) } catch (e) {}
     } else {
       ElMessage.error(res.data.msg)
     }
@@ -850,9 +879,10 @@ async function cancelOrDeliveryOrComplete(status: number, id: string) {
     const res = await (status === 3 ? deliveryOrder(params) : completeOrder(params))
     if (Number(res.data.code) === 1) {
       ElMessage.success('操作成功')
+      const emittedId = orderId.value
       orderId.value = ''
       dialogVisible.value = false
-      try { emitOrderChanged({ orderId: orderId.value }) } catch (e) {}
+      try { emitOrderChanged({ orderId: emittedId }) } catch (e) {}
     } else {
       ElMessage.error(res.data.msg)
     }
@@ -873,6 +903,30 @@ function handleSizeChange(val: any) {
 function handleCurrentChange(val: any) {
   page.value = val
   init(orderStatus.value)
+}
+
+// 顶层：根据订单打开聊天窗口（触发全局事件，dashboard/全局 modal 会响应）
+async function openChatForOrder(row: any) {
+  // 首先尝试从订单信息中读取 consignee id
+  const consigneeId = row.consigneeid || row.consigneeId || row.Consigneeid || row.ConsigneeID || row.consigneeID
+  if (!consigneeId) {
+    ElMessage.error('无法定位订单对应的 consignee id')
+    return
+  }
+  try {
+    const res = await request.get('/consignee/query', { params: { id: consigneeId } })
+    const data = res && res.data && (res.data.data || res.data)
+    const uid = data && (data.userid || data.Userid || data.userId || data.UserID)
+    if (!uid) {
+      ElMessage.error('未找到收货人对应的用户 ID')
+      return
+    }
+    const mid = currentMerchantId.value ?? null
+    window.dispatchEvent(new CustomEvent('chat:open', { detail: { merchantId: mid, userBaseId: uid } }))
+  } catch (e: any) {
+    console.warn('openChatForOrder failed', e)
+    ElMessage.error('打开聊天失败：' + (e?.message || e))
+  }
 }
 </script>
 

@@ -65,10 +65,12 @@
             </el-form-item>
 
             <el-form-item prop="address">
-              <div class="form-item" :class="{ 'has-value': form.address }">
-                <el-input v-model="form.address" prefix-icon="Location" />
-                <label>收货地址（宿舍楼/门牌号）</label>
-              </div>
+                <div class="form-item" :class="{ 'has-value': form.address }">
+                  <div style="cursor: pointer; opacity: 1;" @click="openAddressPickerFor('address')" :title="form.address">
+                    <el-input class="address-input" v-model="form.address"  prefix-icon="Location" readonly  />
+                  </div>
+                  <label>收货地址（点击选择）</label>
+                </div>
             </el-form-item>
           </template>
 
@@ -132,8 +134,10 @@
 
             <el-form-item prop="shopLocation">
               <div class="form-item" :class="{ 'has-value': form.shopLocation }">
-                <el-input v-model="form.shopLocation" prefix-icon="Location" />
-                <label>店铺地址/位置</label>
+                <div style="cursor: pointer;" @click="openAddressPickerFor('shopLocation')" :title="form.shopLocation">
+                  <el-input class="address-input" v-model="form.shopLocation" prefix-icon="Location" readonly />
+                </div>
+                <label>店铺地址/位置（点击选择）</label>
               </div>
             </el-form-item>
 
@@ -191,6 +195,7 @@
             </el-button>
           </el-form-item>
         </el-form>
+        <AddressPicker v-model="pickerValue" :visible="pickerVisible" @update:visible="pickerVisible = $event" @update:modelValue="onPickerConfirm" @close="onPickerClose" />
       </div>
     </div>
   </div>
@@ -203,6 +208,7 @@ import { User, Lock, Check, Phone, Location, Document, Shop } from '@element-plu
 import { useRouter } from 'vue-router'
 import { registerApi, registerUser, registerRider, registerMerchant } from '@/api/auth'
 import ImageUpload from '@/components/ImgUpLoad/index.vue'
+import AddressPicker from '@/components/AddressPicker.vue'
 
 const router = useRouter()
 const registerRef = ref()
@@ -213,7 +219,7 @@ const form = ref({
   password: '',
   confirm: '',
   role: 'user',
-  code: '0',
+  code: '',
   nickname: '',
   phone: '',
   address: '',
@@ -225,8 +231,13 @@ const form = ref({
   owner: '',
   license: '',
   logo: ''
-  , shopLocation: ''
+  , shopLocation: '',
 })
+
+const pickerVisible = ref(false)
+const pickerValue = ref({ formatted: '', detail: '', lng: 0, lat: 0 })
+
+const pickerTarget = ref('address')
 
 // SMS / phone helpers
 const sending = ref(false)
@@ -260,6 +271,21 @@ function sendCode() {
     }
   }, 1000)
 }
+
+function openAddressPickerFor(field: string) {
+  console.log('openAddressPickerFor called, field=', field)
+  pickerValue.value = { formatted: (form.value as any)[field] || '', detail: '', lng: 0, lat: 0 }
+  pickerVisible.value = true
+  pickerTarget.value = field
+}
+
+function onPickerConfirm(val: any) {
+  if (!val) return
+  ;(form.value as any)[pickerTarget.value] = val.formatted || ''
+  pickerVisible.value = false
+}
+
+function onPickerClose() { pickerVisible.value = false }
 
 onBeforeUnmount(() => {
   if (_codeTimer) clearInterval(_codeTimer)
@@ -378,6 +404,14 @@ async function handleRegister() {
   })
 }
 </script>
+
+<style scoped>
+::v-deep(.address-input) .el-input__inner {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+</style>
 
 <style scoped lang="scss">
 .register-page {
