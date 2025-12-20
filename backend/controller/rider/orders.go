@@ -4,7 +4,13 @@ import (
 	"backend/global"
 	"backend/models"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"math"
+	"net/http"
+	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -187,8 +193,169 @@ func AcceptOrder(c *gin.Context) {
 func PickupOrder(c *gin.Context) { changeStatus(c, OrderStatusToDeliver, OrderStatusDelivering) }
 
 // ✅ 4) 送达：4 -> 5（结算）
-// POST /api/rider/orders/:id/deliver
-func DeliverOrder(c *gin.Context) { changeStatus(c, OrderStatusDelivering, OrderStatusDone) }
+// POST /api/rider/orders/:id/deliver  4 -> 5
+// ✅ 增强：送达前做“骑手当前位置 vs 收货地址”的距离校验
+func DeliverOrder(c *gin.Context) {
+	baseUserID := c.GetUint("baseUserID")
+
+	// 1) 解析订单ID
+	orderID64, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		fail(c, "订单ID错误")
+		return
+	}
+	orderID := uint(orderID64)
+
+	// 2) 拿骑手 RiderID（orders.rider_id 存的是 Rider 表主键）
+	riderID, err := getRiderIDFromBaseUser(baseUserID)
+	if err != nil {
+		fail(c, "未找到骑手身份（Rider 表）")
+		return
+	}
+
+	// 3) 查该订单的收货地址（并确保订单属于该骑手 & 当前是派送中）
+	deliveryAddr, err := getOrderDeliveryAddressForRider(orderID, riderID)
+	if err != nil {
+		fail(c, err.Error())
+		return
+	}
+	if strings.TrimSpace(deliveryAddr) == "" {
+		fail(c, "收货地址为空，无法校验送达")
+		return
+	}
+
+	// 4) 从 rider_profiles 读取骑手当前位置
+	var p models.RiderProfile
+	if err := global.Db.Where("user_id = ?", baseUserID).First(&p).Error; err != nil {
+		fail(c, "未找到骑手信息（RiderProfile）")
+		return
+	}
+	if p.Latitude == 0 || p.Longitude == 0 {
+		fail(c, "未获取到骑手当前位置，请先上报定位")
+		return
+	}
+
+	// 5) 收货地址 -> 经纬度（高德 Web API 正地理编码）
+	dstLng, dstLat, err := geocodeAMap(deliveryAddr)
+	if err != nil {
+		fail(c, "无法解析收货地址坐标："+err.Error())
+		return
+	}
+
+	// 6) 距离判断（阈值你可以改：100~300m 比较合理）
+	dist := distanceMeter(p.Longitude, p.Latitude, dstLng, dstLat)
+	const threshold = 150.0 // 米
+	if dist > threshold {
+		fail(c, "不在收货点附近（距离约 "+fmt.Sprintf("%.0f", dist)+"m），无法确认送达")
+		return
+	}
+
+	// 7) 校验通过 -> 继续走你原来的状态变更 + 结算逻辑（4->5）
+	changeStatus(c, OrderStatusDelivering, OrderStatusDone)
+}
+
+// ========== helpers（直接放在同文件里即可） ==========
+
+// 只查“属于该骑手、且派送中(4)”的订单地址，避免越权/误操作
+func getOrderDeliveryAddressForRider(orderID uint, riderID uint) (string, error) {
+	type row struct {
+		Province sql.NullString `gorm:"column:province"`
+		City     sql.NullString `gorm:"column:city"`
+		District sql.NullString `gorm:"column:district"`
+		Street   sql.NullString `gorm:"column:street"`
+		Detail   sql.NullString `gorm:"column:detail"`
+	}
+
+	var r row
+	sqlStr := `
+SELECT a.province, a.city, a.district, a.street, a.detail
+FROM orders o
+LEFT JOIN consignees c ON c.id = o.consigneeid
+LEFT JOIN addresses  a ON a.id = c.addressid
+WHERE o.id = ? AND o.rider_id = ? AND o.status = ?
+LIMIT 1
+`
+	if err := global.Db.Raw(sqlStr, orderID, riderID, OrderStatusDelivering).Scan(&r).Error; err != nil {
+		return "", errors.New("查询订单地址失败")
+	}
+
+	// 拼接成一条完整字符串（跟你 buildAddr 思路一致）
+	parts := []string{
+		r.Province.String,
+		r.City.String,
+		r.District.String,
+		r.Street.String,
+		r.Detail.String,
+	}
+	var sb strings.Builder
+	for _, p := range parts {
+		if strings.TrimSpace(p) != "" {
+			sb.WriteString(p)
+		}
+	}
+	addr := sb.String()
+	if strings.TrimSpace(addr) == "" {
+		return "", errors.New("未找到订单收货地址")
+	}
+	return addr, nil
+}
+
+// 高德 Web API 正地理编码：地址 -> (lng,lat)
+// 需要环境变量：AMAP_WEB_KEY
+func geocodeAMap(address string) (lng float64, lat float64, err error) {
+	key := os.Getenv("AMAP_WEB_KEY")
+	if strings.TrimSpace(key) == "" {
+		return 0, 0, errors.New("AMAP_WEB_KEY 未配置")
+	}
+
+	u := "https://restapi.amap.com/v3/geocode/geo?key=" +
+		url.QueryEscape(key) + "&address=" + url.QueryEscape(address)
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(u)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer resp.Body.Close()
+
+	var data struct {
+		Status   string `json:"status"`
+		Geocodes []struct {
+			Location string `json:"location"` // "lng,lat"
+		} `json:"geocodes"`
+		Info string `json:"info"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return 0, 0, err
+	}
+	if data.Status != "1" || len(data.Geocodes) == 0 {
+		if data.Info != "" {
+			return 0, 0, errors.New(data.Info)
+		}
+		return 0, 0, errors.New("geocode failed")
+	}
+
+	// 解析 "lng,lat"
+	if _, err := fmt.Sscanf(data.Geocodes[0].Location, "%f,%f", &lng, &lat); err != nil {
+		return 0, 0, errors.New("location parse failed")
+	}
+	return lng, lat, nil
+}
+
+// 计算两个经纬度点之间距离（米）
+func distanceMeter(lng1, lat1, lng2, lat2 float64) float64 {
+	const R = 6371000.0
+	toRad := func(d float64) float64 { return d * math.Pi / 180.0 }
+	dLat := toRad(lat2 - lat1)
+	dLng := toRad(lng2 - lng1)
+
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+		math.Cos(toRad(lat1))*math.Cos(toRad(lat2))*
+			math.Sin(dLng/2)*math.Sin(dLng/2)
+
+	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+	return R * c
+}
 
 func changeStatus(c *gin.Context, from, to int) {
 	baseUserID := c.GetUint("baseUserID")
