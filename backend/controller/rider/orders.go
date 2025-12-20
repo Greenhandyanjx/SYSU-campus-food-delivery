@@ -5,6 +5,8 @@ import (
 	"backend/models"
 	"database/sql"
 	"errors"
+	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +27,11 @@ type OrderItemResp struct {
 	EstimatedTime   int       `json:"estimatedTime"`
 	CreatedAt       time.Time `json:"createdAt"`
 	Status          int       `json:"status"`
+
+	// 新增字段用于聊天功能
+	MerchantID uint `json:"merchantId"`
+	UserID     uint `json:"userId"`     // 订单用户ID
+	UserBaseID uint `json:"userBaseId"` // 用户的base_user_id，用于聊天
 
 	AcceptedAt *time.Time `json:"acceptedAt"`
 	PickupAt   *time.Time `json:"pickupAt"`
@@ -56,6 +63,11 @@ type orderJoinRow struct {
 	ShopName     sql.NullString `gorm:"column:shop_name"`
 	ShopLocation sql.NullString `gorm:"column:shop_location"`
 	CustomerName sql.NullString `gorm:"column:customer_name"`
+
+	// 新增字段
+	MerchantID  uint `gorm:"column:merchant_id"`
+	UserID      uint `gorm:"column:user_id"`
+	UserBaseID  uint `gorm:"column:user_base_id"`
 
 	Province sql.NullString `gorm:"column:province"`
 	City     sql.NullString `gorm:"column:city"`
@@ -186,9 +198,154 @@ func AcceptOrder(c *gin.Context) {
 // POST /api/rider/orders/:id/pickup
 func PickupOrder(c *gin.Context) { changeStatus(c, OrderStatusToDeliver, OrderStatusDelivering) }
 
-// ✅ 4) 送达：4 -> 5（结算）
+// 计算两点之间的距离（单位：米）
+func calculateDistance(lat1, lon1, lat2, lon2 float64) float64 {
+	const R = 6371000 // 地球半径（米）
+
+	// 将经纬度转换为弧度
+	φ1 := lat1 * math.Pi / 180
+	φ2 := lat2 * math.Pi / 180
+	Δφ := (lat2 - lat1) * math.Pi / 180
+	Δλ := (lon2 - lon1) * math.Pi / 180
+
+	// Haversine公式
+	a := math.Sin(Δφ/2)*math.Sin(Δφ/2) +
+		math.Cos(φ1)*math.Cos(φ2)*
+		math.Sin(Δλ/2)*math.Sin(Δλ/2)
+	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+
+	return R * c
+}
+
+// 解析地址获取经纬度（这里简化处理，实际应该调用地址解析服务）
+func parseAddressToCoords(address string) (lat, lon float64, err error) {
+	// TODO: 这里应该调用地址解析服务（如高德地图API）
+	// 暂时返回错误，提示无法解析
+	return 0, 0, errors.New("无法解析地址坐标：" + address)
+}
+
+// ✅ 4) 送达：4 -> 5（需要距离校验）
 // POST /api/rider/orders/:id/deliver
-func DeliverOrder(c *gin.Context) { changeStatus(c, OrderStatusDelivering, OrderStatusDone) }
+func DeliverOrder(c *gin.Context) {
+	baseUserID := c.GetUint("baseUserID")
+	orderID64, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		fail(c, "订单ID错误")
+		return
+	}
+	orderID := uint(orderID64)
+
+	riderID, err := getRiderIDFromBaseUser(baseUserID)
+	if err != nil {
+		fail(c, "未找到骑手身份（Rider 表）")
+		return
+	}
+
+	// 1. 获取骑手当前位置
+	var riderProfile models.RiderProfile
+	if err := global.Db.Where("user_id = ?", baseUserID).First(&riderProfile).Error; err != nil {
+		fail(c, "未获取到骑手当前位置，请先上报定位")
+		return
+	}
+
+	// 检查骑手是否有位置信息
+	if riderProfile.Latitude == 0 || riderProfile.Longitude == 0 {
+		fail(c, "未获取到骑手当前位置，请先上报定位")
+		return
+	}
+
+	// 2. 获取订单的收货地址坐标
+	type OrderInfo struct {
+		DeliveryAddress string
+		Province        sql.NullString
+		City            sql.NullString
+		District        sql.NullString
+		Street          sql.NullString
+		Detail          sql.NullString
+	}
+
+	var orderInfo OrderInfo
+	err = global.Db.Raw(`
+		SELECT
+			o.delivery_address,
+			a.province, a.city, a.district, a.street, a.detail
+		FROM orders o
+		LEFT JOIN consignees c ON c.id = o.consigneeid
+		LEFT JOIN addresses a ON a.id = c.addressid
+		WHERE o.id = ? AND o.rider_id = ? AND o.status = ?
+	`, orderID, riderID, OrderStatusDelivering).Scan(&orderInfo).Error
+
+	if err != nil {
+		fail(c, "查询订单失败")
+		return
+	}
+
+	// 如果delivery_address为空，尝试拼接address字段
+	deliveryAddress := orderInfo.DeliveryAddress
+	if deliveryAddress == "" {
+		parts := []string{
+			orderInfo.Province.String,
+			orderInfo.City.String,
+			orderInfo.District.String,
+			orderInfo.Street.String,
+			orderInfo.Detail.String,
+		}
+		var sb strings.Builder
+		for _, p := range parts {
+			if p != "" {
+				sb.WriteString(p)
+			}
+		}
+		deliveryAddress = sb.String()
+	}
+
+	if deliveryAddress == "" {
+		fail(c, "无法获取订单收货地址")
+		return
+	}
+
+	// 3. 解析收货地址坐标
+	// 实际项目中应该集成地图服务API（如高德地图、百度地图等）
+	// TODO: 集成真实的地址解析服务
+	var destLat, destLon float64
+
+	// 临时测试：根据地址关键字设置一些测试坐标
+	if strings.Contains(deliveryAddress, "中山大学") || strings.Contains(deliveryAddress, "SYSU") {
+		// 中山大学珠海校区坐标
+		destLat, destLon = 22.3598, 113.5310
+		fmt.Printf("解析到中山大学地址：%s\n", deliveryAddress)
+	} else if strings.Contains(deliveryAddress, "珠海") {
+		// 珠海市中心坐标
+		destLat, destLon = 22.2769, 113.5678
+		fmt.Printf("解析到珠海地址：%s\n", deliveryAddress)
+	} else {
+		// 默认情况：使用一个固定坐标作为目的地（例如测试用）
+		// 注意：这里设置为0会导致距离校验失败，故意设置一个远离骑手的位置
+		destLat, destLon = 22.3500, 113.5500
+		fmt.Printf("使用默认目的地坐标，地址：%s\n", deliveryAddress)
+	}
+
+	// 4. 计算距离
+	distance := calculateDistance(
+		riderProfile.Latitude, riderProfile.Longitude,
+		destLat, destLon,
+	)
+
+	// 距离阈值：150米
+	const maxDistance = 150.0
+
+	fmt.Printf("距离校验：骑手位置(%.6f,%.6f) -> 目的地(%.6f,%.6f) = %.2f米\n",
+		riderProfile.Latitude, riderProfile.Longitude,
+		destLat, destLon, distance)
+
+	if distance > maxDistance {
+		fail(c, fmt.Sprintf("不在收货点附近（距离约 %d米），无法确认送达", int(distance)))
+		return
+	}
+
+	// 5. 通过距离校验，执行送达流程
+	changeStatus(c, OrderStatusDelivering, OrderStatusDone)
+}
 
 func changeStatus(c *gin.Context, from, to int) {
 	baseUserID := c.GetUint("baseUserID")
@@ -211,8 +368,8 @@ func changeStatus(c *gin.Context, from, to int) {
 	switch to {
 	case OrderStatusDelivering:
 		updates["pickup_at"] = &now
-		updates["deliver_at"] = &now
 	case OrderStatusDone:
+		updates["deliver_at"] = &now
 		updates["finish_at"] = &now
 		updates["rider_id"] = riderID // 兜底：确保历史归属
 	}
@@ -303,11 +460,14 @@ func queryOrdersJoined(riderID *uint, statuses []int, limit int, onlyUnassigned 
 SELECT
   o.id, o.status, o.created_at, o.total_price, o.delivery_fee,
   o.accepted_at, o.pickup_at, o.deliver_at, o.finish_at,
+  o.merchant_id, o.userid,
+  u.base_id AS user_base_id,
   m.shop_name, m.shop_location,
   c.name AS customer_name,
   a.province, a.city, a.district, a.street, a.detail
 FROM orders o
 LEFT JOIN merchants  m ON m.id = o.merchant_id
+LEFT JOIN users      u ON u.id = o.userid
 LEFT JOIN consignees c ON c.id = o.consigneeid
 LEFT JOIN addresses  a ON a.id = c.addressid
 WHERE o.status IN ?
@@ -344,6 +504,11 @@ WHERE o.status IN ?
 			EstimatedTime:   20,
 			CreatedAt:       r.CreatedAt,
 			Status:          r.Status,
+
+			// 新增字段
+			MerchantID: r.MerchantID,
+			UserID:     r.UserID,
+			UserBaseID: r.UserBaseID,
 
 			AcceptedAt: r.AcceptedAt,
 			PickupAt:   r.PickupAt,

@@ -73,10 +73,17 @@
             </div>
           </div>
           <div class="timeline-item" v-if="order.pickupAt">
-            <span class="timeline-icon">🚚</span>
+            <span class="timeline-icon">📦</span>
             <div class="timeline-content">
               <span class="timeline-time">{{ fmtShort(order.pickupAt) }}</span>
               <span class="timeline-label">已取货</span>
+            </div>
+          </div>
+          <div class="timeline-item" v-if="order.deliverAt">
+            <span class="timeline-icon">🚚</span>
+            <div class="timeline-content">
+              <span class="timeline-time">{{ fmtShort(order.deliverAt) }}</span>
+              <span class="timeline-label">配送中</span>
             </div>
           </div>
           <div class="timeline-item" v-if="order.finishAt">
@@ -187,6 +194,17 @@ const openChat = () => {
     id: props.order.merchantId,
     name: props.order.restaurant || '商家'
   })
+}
+
+// 打开高德地图导航
+const openNavigation = (destination: string, address: string) => {
+  // 使用高德地图URL Scheme打开导航
+  // 格式：https://uri.amap.com/navigation?to=目的地名称,经度,纬度,地址
+  // 这里没有经纬度，所以只用目的地名称和地址
+  const navUrl = `https://uri.amap.com/navigation?to=${encodeURIComponent(destination)},,${encodeURIComponent(address)}&mode=car&coordinate=gaode`;
+
+  // 在新窗口打开导航
+  window.open(navUrl, '_blank');
 }
 </script>
 

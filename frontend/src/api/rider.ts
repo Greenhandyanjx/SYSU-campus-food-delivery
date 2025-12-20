@@ -161,4 +161,13 @@ export const riderApi = {
     // 实际发送通过chatClientWebSocket
     return Promise.resolve({ success: true, payload });
   },
+
+  // 定位上报API
+  updateLocation(payload: {
+    latitude: number;
+    longitude: number;
+    address?: string;
+  }) {
+    return http.post<ApiResp<{ success: boolean }>>("/rider/location", payload);
+  },
 };

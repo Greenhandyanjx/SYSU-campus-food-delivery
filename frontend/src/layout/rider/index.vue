@@ -16,6 +16,10 @@
 <script setup lang="ts">
 import Navbar from "./components/Navbar.vue";
 import RiderChat from "@/components/rider/RiderChat.vue";
+import useRiderLocation from "@/composables/useRiderLocation";
+
+// 启动骑手位置追踪
+const { isTracking, locationError } = useRiderLocation();
 </script>
 
 <style scoped lang="scss">

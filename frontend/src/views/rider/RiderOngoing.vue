@@ -84,14 +84,45 @@
           @open-chat="handleOpenChat"
         >
           <template #actions>
-            <el-button v-if="o.status === 3" type="primary" size="large" @click="pickup(o.id)">
-              <i class="iconfont icon-pickup"></i>
-              确认取货
-            </el-button>
-            <el-button v-else type="success" size="large" @click="deliver(o.id)">
-              <i class="iconfont icon-deliver"></i>
-              确认送达
-            </el-button>
+            <div class="action-buttons">
+              <!-- 状态操作按钮 -->
+              <el-button v-if="o.status === 3" type="primary" size="large" @click="pickup(o.id)">
+                <i class="iconfont icon-pickup"></i>
+                确认取货
+              </el-button>
+              <div v-else class="deliver-action-container">
+                <el-button type="success" size="large" @click="deliver(o.id)">
+                  <i class="iconfont icon-deliver"></i>
+                  确认送达
+                </el-button>
+                <div class="delivery-tip">
+                  <i class="iconfont icon-location"></i>
+                  <span>送达需在收货点附近（150m内）</span>
+                </div>
+              </div>
+
+              <!-- 导航按钮 -->
+              <el-button
+                v-if="o.status === 3"
+                type="info"
+                size="large"
+                @click="openNavToMerchant(o)"
+                class="nav-button"
+              >
+                <i class="iconfont icon-nav"></i>
+                去取货
+              </el-button>
+              <el-button
+                v-else
+                type="info"
+                size="large"
+                @click="openNavToCustomer(o)"
+                class="nav-button"
+              >
+                <i class="iconfont icon-nav"></i>
+                去送达
+              </el-button>
+            </div>
           </template>
         </RiderOrderCard>
       </TransitionGroup>
@@ -153,7 +184,24 @@ const deliver = async (id: number) => {
     ElMessage.success("已送达");
     await load();
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.msg || "送达失败");
+    const errorMsg = e?.response?.data?.msg || "送达失败";
+
+    // 特殊处理各种错误情况
+    if (errorMsg.includes("未获取到骑手当前位置")) {
+      ElMessage.error(errorMsg);
+      ElMessage.warning("请打开浏览器定位权限/刷新页面后重试");
+    } else if (errorMsg.includes("不在收货点附近") || errorMsg.includes("距离约")) {
+      ElMessage.error(errorMsg);
+      ElMessage.info("请导航至收货点附近再尝试");
+    } else if (errorMsg.includes("无法解析收货地址坐标")) {
+      ElMessage.error(errorMsg);
+      ElMessage.warning("请联系客服处理地址问题");
+    } else {
+      ElMessage.error(errorMsg);
+    }
+
+    // 确保按钮不会被禁用
+    console.error("送达失败:", errorMsg);
   }
 };
 
@@ -161,6 +209,18 @@ const deliver = async (id: number) => {
 const handleOpenChat = (data: { type: 'user' | 'merchant'; id: number; name: string }) => {
   // 发送全局事件，聊天组件会监听这个事件
   window.dispatchEvent(new CustomEvent('rider:openChat', { detail: data }));
+};
+
+// 打开去商家导航
+const openNavToMerchant = (order: RiderOrderItem) => {
+  const navUrl = `https://uri.amap.com/navigation?to=${encodeURIComponent(order.restaurant)},,${encodeURIComponent(order.pickupAddress || '')}&mode=car&coordinate=gaode`;
+  window.open(navUrl, '_blank');
+};
+
+// 打开去收货地址导航
+const openNavToCustomer = (order: RiderOrderItem) => {
+  const navUrl = `https://uri.amap.com/navigation?to=${encodeURIComponent(order.customer)},,${encodeURIComponent(order.deliveryAddress || '')}&mode=car&coordinate=gaode`;
+  window.open(navUrl, '_blank');
 };
 
 onMounted(load);
@@ -456,4 +516,51 @@ onMounted(load);
 .icon-refresh:before { content: "🔄"; }
 .icon-pickup:before { content: "📦"; }
 .icon-deliver:before { content: "✅"; }
+.icon-location:before { content: "📍"; }
+.icon-nav:before { content: "🧭"; }
+
+// 操作按钮容器
+.action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+// 送达按钮容器
+.deliver-action-container {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+}
+
+// 送达提示
+.delivery-tip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--rider-sub);
+  background: var(--rider-primary-light);
+  padding: 4px 12px;
+  border-radius: 12px;
+
+  .iconfont {
+    font-size: 12px;
+  }
+}
+
+// 导航按钮
+.nav-button {
+  background: linear-gradient(135deg, #409EFF 0%, #66B1FF 100%);
+  border-color: #409EFF;
+
+  &:hover {
+    background: linear-gradient(135deg, #337ECC 0%, #5DA3FF 100%);
+    border-color: #337ECC;
+  }
+}
 </style>

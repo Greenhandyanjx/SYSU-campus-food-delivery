@@ -28,6 +28,12 @@
     </div>
 
     <div class="right">
+      <!-- 定位状态指示器 -->
+      <div class="location-status" :class="{ 'tracking': isTracking, 'error': hasLocationError }" @click="showLocationTip">
+        <i class="iconfont" :class="locationIcon"></i>
+        <span class="location-text">{{ locationText }}</span>
+      </div>
+
       <div class="user">{{ username }}</div>
       <el-button size="small" type="info" plain @click="logout">退出</el-button>
     </div>
@@ -35,8 +41,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { ElMessage } from "element-plus";
 
 const router = useRouter();
 const route = useRoute();
@@ -55,6 +62,44 @@ const logout = () => {
   localStorage.removeItem("username");
   router.push("/login");
 };
+
+// 定位状态相关
+const isTracking = ref(false);
+const hasLocationError = ref(false);
+
+const locationIcon = computed(() => {
+  if (hasLocationError.value) return "icon-location-error";
+  if (isTracking.value) return "icon-location-on";
+  return "icon-location-off";
+});
+
+const locationText = computed(() => {
+  if (hasLocationError.value) return "定位异常";
+  if (isTracking.value) return "定位中";
+  return "未定位";
+});
+
+// 监听定位状态变化（通过全局事件）
+const setupLocationListener = () => {
+  // 从 layout/index.vue 接收定位状态
+  window.addEventListener('rider:locationStatus', (event: any) => {
+    isTracking.value = event.detail.isTracking;
+    hasLocationError.value = !!event.detail.error;
+  });
+};
+
+// 显示定位提示
+const showLocationTip = () => {
+  if (hasLocationError.value) {
+    ElMessage.warning("定位权限被拒绝，请在浏览器设置中允许定位以正常使用送达功能");
+  } else if (!isTracking.value) {
+    ElMessage.info("正在获取定位权限...");
+  } else {
+    ElMessage.success("定位正常，系统将自动上报您的位置");
+  }
+};
+
+setupLocationListener();
 </script>
 
 <style scoped lang="scss">
@@ -124,6 +169,65 @@ const logout = () => {
   gap: 12px;
 }
 
+// 定位状态指示器
+.location-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 600;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.5);
+  }
+
+  &.tracking {
+    background: rgba(103, 194, 58, 0.2);
+    border-color: rgba(103, 194, 58, 0.4);
+    color: #fff;
+
+    &:hover {
+      background: rgba(103, 194, 58, 0.3);
+      border-color: rgba(103, 194, 58, 0.6);
+    }
+  }
+
+  &.error {
+    background: rgba(245, 108, 108, 0.2);
+    border-color: rgba(245, 108, 108, 0.4);
+    color: #fff;
+    animation: pulse 2s infinite;
+
+    &:hover {
+      background: rgba(245, 108, 108, 0.3);
+      border-color: rgba(245, 108, 108, 0.6);
+    }
+  }
+
+  .iconfont {
+    font-size: 14px;
+  }
+
+  .location-text {
+    font-size: 12px;
+    white-space: nowrap;
+  }
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+
 .user {
   color: var(--rider-primary);
   font-size: 13px;
@@ -162,5 +266,10 @@ const logout = () => {
 .icon-truck:before { content: "🚚"; }
 .icon-history:before { content: "📋"; }
 .icon-user:before { content: "👤"; }
+
+// 定位相关图标
+.icon-location-off:before { content: "📍"; }
+.icon-location-on:before { content: "🟢"; }
+.icon-location-error:before { content: "🔴"; }
 
 </style>
