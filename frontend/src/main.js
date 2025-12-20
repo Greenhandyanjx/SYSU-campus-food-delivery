@@ -1,5 +1,6 @@
 import '@/styles/home.scss';
 import '@/styles/index.scss';
+import "@/styles/rider.scss";
 import { createApp } from 'vue'
 import ElementPlus from 'element-plus'
 import { createPinia } from 'pinia'
