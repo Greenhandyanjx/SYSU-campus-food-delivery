@@ -97,7 +97,12 @@
           <template v-if="order.status === 5">
             <el-button @click="contactRider" plain>联系骑手</el-button>
             <el-button @click="onReorder" plain>再次购买</el-button>
-            <el-button type="warning" v-if="!order.reviewed" @click="onReview">评价晒单</el-button>
+            <template v-if="order.reviewed || order.is_commented || order.isCommented">
+              <el-tag type="success" effect="plain">已评价</el-tag>
+            </template>
+            <template v-else>
+              <el-button type="warning" @click="onReview">评价晒单</el-button>
+            </template>
           </template>
 
           <!-- 退款/售后 -->
@@ -358,7 +363,10 @@ async function fetch() {
           time: formatFriendlyTime(rawTime),
           delivery_fee: deliveryFeeValue,
           deliveryAmount: deliveryFeeValue,
-          deliveryFee: deliveryFeeValue
+          deliveryFee: deliveryFeeValue,
+          // review flags compatibility
+          is_commented: payload.is_commented ?? payload.isCommented ?? false,
+          reviewed: payload.reviewed ?? payload.is_commented ?? payload.isCommented ?? false
         }
       } else {
         order.value = null

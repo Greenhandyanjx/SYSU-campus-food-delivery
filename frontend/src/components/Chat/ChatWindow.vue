@@ -51,6 +51,7 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { getChatHistory, getWsUrl, getMerchantDetail, getBaseUserDetail } from '@/api/chat'
+import request from '@/api/merchant/request'
 import chatClient from '@/utils/chatClient'
 import merchantSvg from '@/assets/merchant.svg'
 import userPng from '@/assets/user.png'
@@ -252,6 +253,13 @@ onMounted(async () => {
     await detectRole()
     await ensureNames()
     await loadHistory()
+    // 当通过消息通知打开会话时，主动请求后端标记为已读并通知其它组件
+    try {
+      if (props.merchantId) {
+        await request.post('/user/chats/mark_read', { merchant_id: Number(props.merchantId) })
+        try { window.dispatchEvent(new CustomEvent('user:chats:marked_read', { detail: { merchant_id: Number(props.merchantId) } })) } catch(e) {}
+      }
+    } catch(e) { console.warn('[ChatWindow] mark_read failed', e) }
     chatClient.onMessage(handleGlobalMessage)
     // ensure centralized websocket connection
     try { chatClient.connect() } catch (e) { console.warn('[ChatWindow] chatClient.connect failed', e) }
@@ -272,8 +280,8 @@ watch(() => props.merchantId, async (newVal, oldVal) => {
   await loadHistory()
   // 如果当前用户打开的是会话，尝试通知后端标记为已读（用户端）
   try {
-    await fetch('/api/user/chats/mark_read', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: localStorage.getItem('token') || '' }, body: JSON.stringify({ merchant_id: Number(newVal) }) })
-  } catch (e) {}
+    await request.post('/user/chats/mark_read', { merchant_id: Number(newVal) })
+  } catch (e) { console.warn('[ChatWindow] mark_read watcher failed', e) }
   // 通知其它组件当前用户会话已读（例如刷新用户会话列表）
   try { window.dispatchEvent(new CustomEvent('user:chats:marked_read', { detail: { merchant_id: Number(newVal) } })) } catch (e) {}
 })
@@ -393,37 +401,38 @@ onBeforeUnmount(() => {
 
 .message-row {
   display: flex;
-  margin-bottom: 16px;
-  align-items: flex-end;             /* 关键：让气泡底部对齐 */
+  margin-bottom: 12px;
+  align-items: flex-end;
+  width: 100%;
 }
 
-.message-row.me {
-  flex-direction: row-reverse;
-}
+/* 左侧（收到）为正常方向，右侧（我）反方向 */
+.message-row:not(.me) { flex-direction: row; justify-content: flex-start }
+.message-row.me { flex-direction: row-reverse; justify-content: flex-end }
 
 /* 头像 */
-.msg-avatar {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
+.msg-avatar { width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0 }
+.message-row:not(.me) .msg-avatar { margin-right: 10px }
+.message-row.me .msg-avatar { margin-left: 10px }
 
 /* 气泡容器 */
 .bubble-wrapper {
   max-width: 72%;
   position: relative;
+  display: block;
 }
 
-/* 气泡主体 */
+/* 气泡主体：根据内容宽度自适应，支持换行，使用相对定位以便三角形定位于气泡 */
 .bubble {
+  display: inline-block;
+  position: relative;
   padding: 8px 12px;
   border-radius: 16px;
   font-size: 14px;
   line-height: 1.45;
   word-break: break-word;
-  position: relative;
-  display: inline-block;
+  white-space: pre-wrap;
+  max-width: 100%;
 }
 
 /* 左边（商家）气泡 - 白色 + 尖角 */
@@ -443,16 +452,8 @@ onBeforeUnmount(() => {
 .message-row:not(.me) .bubble::before {
   content: "";
   position: absolute;
-  left: -7px;
-  bottom: 8px;
-  border: 8px solid transparent;
-  border-right-color: #ffffff;
-}
-.message-row:not(.me) .bubble::after {
-  content: "";
-  position: absolute;
-  left: -15px;
-  bottom: 7px;
+  left: -6px;
+  top: 12px;
   border: 8px solid transparent;
   border-right-color: #ffffff;
 }
@@ -460,8 +461,8 @@ onBeforeUnmount(() => {
 .message-row.me .bubble::before {
   content: "";
   position: absolute;
-  right: -7px;
-  bottom: 8px;
+  right: -6px;
+  top: 12px;
   border: 8px solid transparent;
   border-left-color: #ffe563;
 }
@@ -470,15 +471,16 @@ onBeforeUnmount(() => {
 .time {
   font-size: 11px;
   color: #999;
-  margin-top: 4px;
-  text-align: center;
-  padding: 0 8px;
+  margin-top: 6px;
+  display: block;
+  padding: 0 6px;
 }
 
-/* 我发的消息时间在左边 */
-.message-row.me .time {
-  text-align: right;
-}
+/* 时间对齐：跟随气泡 */
+.message-row:not(.me) .bubble-wrapper { margin-right: auto; text-align: left }
+.message-row.me .bubble-wrapper { margin-left: auto; text-align: right }
+.message-row.me .time { text-align: right }
+.message-row:not(.me) .time { text-align: left }
 
 /* ====================== 输入栏（关键修复）====================== */
 .input-bar {

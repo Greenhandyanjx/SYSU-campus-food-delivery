@@ -574,12 +574,13 @@ function orderAcceptFn(rowItem: any, event?: Event) {
   dialogOrderStatus.value = rowItem.status
   orderAccept({ id: orderId.value })
     .then((res: any) => {
-      if (Number(res.data.code) === 1) {
+        if (Number(res.data.code) === 1) {
         proxy.$message.success('操作成功')
+        const emittedId = orderId.value
         orderId.value = ''
         dialogVisible.value = false
         // 广播变化，使用统一去抖 helper 刷新列表（避免重复请求）
-        try { emitOrderChanged({ orderId: orderId.value }) } catch (e) {}
+        try { emitOrderChanged({ orderId: emittedId }) } catch (e) {}
       } else {
         proxy.$message.error(res.data.msg)
       }
@@ -629,11 +630,12 @@ function confirmCancel() {
 
   fn(payload)
     .then((res: any) => {
-      if (Number(res.data.code) === 1) {
+        if (Number(res.data.code) === 1) {
         proxy.$message.success('操作成功')
         cancelDialogVisible.value = false
+        const emittedId = orderId.value
         orderId.value = ''
-        try { emitOrderChanged({ orderId: orderId.value }) } catch (e) {}
+        try { emitOrderChanged({ orderId: emittedId }) } catch (e) {}
       } else {
         proxy.$message.error(res.data.msg)
       }
@@ -653,11 +655,12 @@ function cancelOrDeliveryOrComplete(s: number, id: string, event?: Event) {
   const fn = s === 3 ? deliveryOrder : completeOrder
   fn(params)
     .then((res: any) => {
-      if (Number(res.data.code) === 1) {
+        if (Number(res.data.code) === 1) {
         proxy.$message.success('操作成功')
+        const emittedId = orderId.value
         orderId.value = ''
         dialogVisible.value = false
-        try { emitOrderChanged({ orderId: orderId.value }) } catch (e) {}
+        try { emitOrderChanged({ orderId: emittedId }) } catch (e) {}
       } else {
         proxy.$message.error(res.data.msg)
       }

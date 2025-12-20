@@ -30,7 +30,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import ChatWindow from '@/components/Chat/ChatWindow.vue'
 import { getMerchantDetail, getBaseUserDetail } from '@/api/chat'
 import { ElMessage } from 'element-plus'
@@ -46,6 +46,10 @@ const showChat = ref(false)
 const merchantIdLocal = ref(props.merchantId)
 const merchantNameLocal = ref(props.merchantName)
 const merchantAvatarLocal = ref(props.merchantAvatar)
+
+watch(() => props.merchantId, (v) => { merchantIdLocal.value = v })
+watch(() => props.merchantName, (v) => { merchantNameLocal.value = v })
+watch(() => props.merchantAvatar, (v) => { merchantAvatarLocal.value = v })
 
 const userBaseId = ref(null)
 const userAvatar = ref('')

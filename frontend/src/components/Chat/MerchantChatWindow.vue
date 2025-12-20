@@ -231,13 +231,35 @@ onBeforeUnmount(() => {
 .jd-logo { width:28px; height:28px; object-fit:contain; border-radius:4px ;margin-right:30px;}
 /* 消息区独立滚动 */
 .m-messages { flex:1; overflow-y:auto; padding:14px; background:#f5f5f5; -webkit-overflow-scrolling: touch }
-.m-row { display:flex; margin-bottom:14px; align-items:flex-end }
-.m-row.me { flex-direction:row-reverse }
-.m-msg-avatar { width:36px; height:36px; border-radius:50%; flex-shrink:0 ;margin-bottom: 20px;}
-.m-bubble-wrapper { max-width:72%; position:relative }
-.m-bubble { padding:10px 14px; border-radius:16px; background:#fff; border:1px solid #e8e8e8 ; word-break:break-word ;width: auto;}
+.m-row { display:flex; margin-bottom:12px; align-items:flex-end; width:100% }
+.m-row:not(.me) { flex-direction:row; justify-content:flex-start }
+.m-row.me { flex-direction:row-reverse; justify-content:flex-end }
+.m-msg-avatar { width:36px; height:36px; border-radius:50%; flex-shrink:0 }
+.m-row:not(.me) .m-msg-avatar { margin-right:10px }
+.m-row.me .m-msg-avatar { margin-left:10px }
+.m-bubble-wrapper { max-width:72%; position:relative; display:block }
+.m-bubble { display:inline-block; position:relative; padding:10px 14px; border-radius:16px; background:#fff; border:1px solid #e8e8e8; word-break:break-word; white-space:pre-wrap; max-width:100%; }
 .m-row.me .m-bubble { background:#ffe563 }
-.m-time { font-size:11px; color:#999; margin-top:6px }
+.m-row:not(.me) .m-bubble::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 12px;
+  border: 8px solid transparent;
+  border-right-color: #ffffff;
+}
+.m-row.me .m-bubble::before {
+  content: "";
+  position: absolute;
+  right: -6px;
+  top: 12px;
+  border: 8px solid transparent;
+  border-left-color: #ffe563;
+}
+.m-time { display:block; font-size:11px; color:#999; margin-top:6px }
+.m-row:not(.me) .m-bubble-wrapper { margin-right: auto; text-align: left }
+.m-row.me .m-bubble-wrapper { margin-left: auto; text-align: right }
+.m-row.me .m-time { text-align: right }
 .m-input { height:64px; display:flex; padding:10px; gap:10px; background:#fff; align-items:center }
 .m-input input { flex:1; height:44px; border-radius:22px; border:1px solid #ddd; padding:0 14px }
 .m-send { width:72px; height:44px; border-radius:22px; background:#ffd600; border:none; cursor:pointer }

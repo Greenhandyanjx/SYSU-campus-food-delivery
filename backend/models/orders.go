@@ -36,4 +36,7 @@ type Order struct {
 	PickupAt   *time.Time `json:"pickupAt"`   // 取货时间
 	DeliverAt  *time.Time `json:"deliverAt"`  // 开始配送时间
 	FinishAt   *time.Time `json:"finishAt"`   // 完成时间 （已派送）
+
+	// 是否已评价（用户完成后可对商家/骑手评分），默认 false
+	IsCommented bool `json:"is_commented" gorm:"default:false"`
 }

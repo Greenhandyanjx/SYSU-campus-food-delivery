@@ -32,6 +32,7 @@ type OrderItemResp struct {
 	MerchantID uint `json:"merchantId"`
 	UserID     uint `json:"userId"`     // 订单用户ID
 	UserBaseID uint `json:"userBaseId"` // 用户的base_user_id，用于聊天
+	MerchantID uint `json:"merchantId"`
 
 	AcceptedAt *time.Time `json:"acceptedAt"`
 	PickupAt   *time.Time `json:"pickupAt"`
@@ -65,9 +66,10 @@ type orderJoinRow struct {
 	CustomerName sql.NullString `gorm:"column:customer_name"`
 
 	// 新增字段
-	MerchantID  uint `gorm:"column:merchant_id"`
-	UserID      uint `gorm:"column:user_id"`
-	UserBaseID  uint `gorm:"column:user_base_id"`
+	MerchantID uint `gorm:"column:merchant_id"`
+	UserID     uint `gorm:"column:user_id"`
+	UserBaseID uint `gorm:"column:user_base_id"`
+	MerchantID uint `gorm:"column:merchant_id"`
 
 	Province sql.NullString `gorm:"column:province"`
 	City     sql.NullString `gorm:"column:city"`
@@ -211,7 +213,7 @@ func calculateDistance(lat1, lon1, lat2, lon2 float64) float64 {
 	// Haversine公式
 	a := math.Sin(Δφ/2)*math.Sin(Δφ/2) +
 		math.Cos(φ1)*math.Cos(φ2)*
-		math.Sin(Δλ/2)*math.Sin(Δλ/2)
+			math.Sin(Δλ/2)*math.Sin(Δλ/2)
 	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
 
 	return R * c
