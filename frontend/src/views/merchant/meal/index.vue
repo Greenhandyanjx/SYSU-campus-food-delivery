@@ -64,7 +64,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="categoryName" label="套餐分类" />
-        <el-table-column prop="price" label="套餐价" style="width: 50px;" />
+        <el-table-column prop="price" label="套餐价" style="width: 50px" />
         <el-table-column label="售卖状态">
           <template #default="{ row }">
             <div
@@ -77,7 +77,14 @@
         </el-table-column>
         <el-table-column label="最后操作时间">
           <template #default="{ row }">
-            <span>{{ formatDateToCN(row.UpdatedAt || row.updateTime || row.updatedAt || row.updated_at) }}</span>
+            <span>{{
+              formatDateToCN(
+                row.UpdatedAt ||
+                  row.updateTime ||
+                  row.updatedAt ||
+                  row.updated_at
+              )
+            }}</span>
           </template>
         </el-table-column>
         <el-table-column label="操作" align="center" width="250px">
@@ -165,7 +172,8 @@ function pageQuery() {
   if (merchantId.value) (params as any).merchantId = merchantId.value;
   getSetmealPage(params).then((res: any) => {
     if (Number(res.data.code) === 1) {
-      total.value = res.data.data.total || (res.data.data.items || []).length || 0;
+      total.value =
+        res.data.data.total || (res.data.data.items || []).length || 0;
       // Normalize image field names to ensure UI always reads `image`
       const items = (res.data.data.items || []).map((it: any) => ({
         ...it,
@@ -184,12 +192,16 @@ function pageQuery() {
           if (Number(catRes.data.code) === 1) {
             const map: Record<string, string> = {};
             (catRes.data.data || []).forEach((c: any) => {
-              if (c && c.id !== undefined) map[String(c.id)] = c.name || '';
+              if (c && c.id !== undefined) map[String(c.id)] = c.name || "";
             });
             const normalized = items.map((it: any) => ({
               ...it,
               categoryName:
-                it.categoryName || it.category_name || it.category || map[String(it.categoryId || it.category_id || it.category)] || '',
+                it.categoryName ||
+                it.category_name ||
+                it.category ||
+                map[String(it.categoryId || it.category_id || it.category)] ||
+                "",
             }));
             records.value = normalized;
           } else {
@@ -204,10 +216,10 @@ function pageQuery() {
 }
 
 function formatDateToCN(s: any) {
-  if (!s) return '';
+  if (!s) return "";
   const dt = new Date(s);
-  if (isNaN(dt.getTime())) return '';
-  const pad = (n: number) => String(n).padStart(2, '0');
+  if (isNaN(dt.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
   const yyyy = dt.getFullYear();
   const mm = pad(dt.getMonth() + 1);
   const dd = pad(dt.getDate());
