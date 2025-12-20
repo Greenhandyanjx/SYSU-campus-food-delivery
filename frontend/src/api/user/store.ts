@@ -66,6 +66,14 @@ export function getDeliveryConfig(base_id: string | number) {
   })
 }
 
+export function getMealPublicById(id: string | number) {
+  return request({
+    url: '/store/meal/query',
+    method: 'get',
+    params: { id },
+  })
+}
+
 export default {
   getStoreByName,
   getStoreById,

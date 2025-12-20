@@ -290,7 +290,7 @@ function submitForm(formName: string, st: any) {
             if (res && res.data && Number(res.data.code) === 200) {
               ElMessage.success('套餐添加成功！')
               if (!st) {
-                router.push({ path: '/merchant/setmeal' })
+                router.push({ path: '/merchant/meal' })
               } else {
                 ;(ruleFormRef.value as any).resetFields()
                 dishList.value = []
@@ -319,7 +319,7 @@ function submitForm(formName: string, st: any) {
           .then((res: any) => {
             if (res.data.code === 1) {
               ElMessage.success('套餐修改成功！')
-              router.push({ path: '/merchant/setmeal' })
+              router.push({ path: '/merchant/meal' })
             }
           })
           .catch((err: any) => ElMessage.error('请求出错了：' + err.message))

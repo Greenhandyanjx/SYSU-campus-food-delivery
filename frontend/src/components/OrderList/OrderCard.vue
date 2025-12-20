@@ -77,7 +77,12 @@
 
         <!-- 已完成 -->
         <template v-else-if="status === 5">
-          <el-button type="primary" round @click.stop="$emit('review', order)">去评价</el-button>
+          <template v-if="order.reviewed || order.is_commented || order.isCommented">
+            <el-tag type="success" effect="plain">已评价</el-tag>
+          </template>
+          <template v-else>
+            <el-button type="primary" round @click.stop="$emit('review', order)">去评价</el-button>
+          </template>
           <el-button plain round @click.stop="$emit('reorder', order)">再次购买</el-button>
         </template>
 
