@@ -65,6 +65,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
+import chatClient from '@/utils/chatClient'
 import { useRoute, useRouter } from 'vue-router'
 import OrderCard from '@/components/OrderList/OrderCard.vue'
 import orderApi from '@/api/user/order'
@@ -101,10 +102,29 @@ onMounted(()=>{
   }
   window.addEventListener('order:changed', __user_orders_refresh)
   ;(window).__user_orders_refresh = __user_orders_refresh
+
+  // 监听来自后端的 websocket 订单更新推送（若后端发送 orderId/status）
+  const wsHandler = (msg) => {
+    try {
+      const m = msg || {}
+      // msg 可能是字符串（JSON）或对象
+      let payload = m
+      if (typeof m === 'string') {
+        try { payload = JSON.parse(m) } catch (e) { payload = m }
+      }
+      const orderId = payload && (payload.orderId || payload.order_id || payload.id)
+      if (orderId) {
+        try { window.dispatchEvent(new CustomEvent('order:changed', { detail: { orderId } })) } catch (e) {}
+      }
+    } catch (e) { console.warn('user order ws handler failed', e) }
+  }
+  try { chatClient.onMessage(wsHandler); chatClient.connect() } catch (e) {}
+  window.__user_order_ws_handler = wsHandler
 })
 
 onBeforeUnmount(()=>{
-  try { window.removeEventListener('order:changed', (window).__user_orders_refresh) } catch(e){}
+  try { window.removeEventListener('order:changed', window.__user_orders_refresh) } catch(e){}
+  try { chatClient.offMessage(window.__user_order_ws_handler) } catch (e) {}
 })
 
 watch(()=>route.query.oq, (v)=>{ if (v && typeof v === 'string') keyword.value = v })
@@ -230,6 +250,7 @@ async function onCancel(order) {
   try { await orderApi.cancelOrder(order.id) } catch (e) {}
   // set numeric cancelled status
   order.status = 6
+  try { window.dispatchEvent(new CustomEvent('order:changed', { detail: { orderId: order.id } })) } catch (e) {}
   alert('已取消: ' + order.id)
 }
 function onConfirm(order) { order.status='completed'; alert('确认收货: ' + order.id) }
@@ -256,6 +277,7 @@ function openStore(id) {
 async function onAutoCancel(order) {
   try { await orderApi.cancelOrder(order.id) } catch (e) {}
   order.status = 6
+  try { window.dispatchEvent(new CustomEvent('order:changed', { detail: { orderId: order.id } })) } catch (e) {}
   alert('支付超时，订单已取消：' + order.id)
 }
 function onView(order) { router.push({ path: `/user/order/${order.id}` }) }

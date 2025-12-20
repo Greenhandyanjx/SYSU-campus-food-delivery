@@ -373,7 +373,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getMerchantProfile } from '@/api/merchant/profile'
@@ -487,6 +487,12 @@ onMounted(() => {
   if (route.query.orderId && route.query.orderId !== 'undefined') {
     goDetail(route.query.orderId as string, 2)
   }
+  // 监听 route.query.orderId 的变化（通过其他组件路由跳转携带 orderId）
+  watch(() => route.query.orderId, (val) => {
+    try {
+      if (val && String(val) !== 'undefined') goDetail(String(val), 2)
+    } catch (e) { console.warn('route query orderId watch failed', e) }
+  })
   ;(async () => {
     try {
       const r: any = await getMerchantProfile()
@@ -712,10 +718,20 @@ endTime: valueTime.value[1] ? formatForApi(valueTime.value[1]) : undefined,
 }
 
 async function goDetail(id: any, status: number, r?: any) {
+  if (!id) return
+  try {
+    if (window.__merchant_open_order_lock && window.__merchant_open_order_lock === String(id)) {
+      return
+    }
+  } catch (e) {}
+  try { window.__merchant_open_order_lock = String(id) } catch (e) {}
+  // 自动在 3 秒后解锁，避免死锁
+  setTimeout(() => { try { if (window.__merchant_open_order_lock === String(id)) window.__merchant_open_order_lock = null } catch (e) {} }, 3000)
+
   diaForm.value = {}
   dialogVisible.value = true
   dialogOrderStatus.value = status
-  
+
   orderId.value = id
   try {
     const { data } = await queryOrderDetailById({ orderId: id })
@@ -771,6 +787,8 @@ async function goDetail(id: any, status: number, r?: any) {
     if (route.query.orderId) router.push('/merchant/orders')
   } catch (err: any) {
     ElMessage.error('请求出错了：' + err.message)
+  } finally {
+    try { if (window.__merchant_open_order_lock === String(id)) window.__merchant_open_order_lock = null } catch (e) {}
   }
 }
 
@@ -792,9 +810,10 @@ async function orderAcceptHandler(r: any, setTableFlag = true) {
     const res = await orderAccept({ id: orderId.value })
     if (Number(res.data.code) === 1) {
       ElMessage.success('操作成功')
+      const emittedId = orderId.value
       orderId.value = ''
       dialogVisible.value = false
-      try { emitOrderChanged({ orderId: orderId.value }) } catch (e) {}
+      try { emitOrderChanged({ orderId: emittedId }) } catch (e) {}
     } else {
       ElMessage.error(res.data.msg)
     }
@@ -843,8 +862,9 @@ async function confirmCancel() {
     if (Number(res.data.code) === 1) {
       ElMessage.success('操作成功')
       cancelDialogVisible.value = false
+      const emittedId = orderId.value
       orderId.value = ''
-      try { emitOrderChanged({ orderId: orderId.value }) } catch (e) {}
+      try { emitOrderChanged({ orderId: emittedId }) } catch (e) {}
     } else {
       ElMessage.error(res.data.msg)
     }
@@ -859,9 +879,10 @@ async function cancelOrDeliveryOrComplete(status: number, id: string) {
     const res = await (status === 3 ? deliveryOrder(params) : completeOrder(params))
     if (Number(res.data.code) === 1) {
       ElMessage.success('操作成功')
+      const emittedId = orderId.value
       orderId.value = ''
       dialogVisible.value = false
-      try { emitOrderChanged({ orderId: orderId.value }) } catch (e) {}
+      try { emitOrderChanged({ orderId: emittedId }) } catch (e) {}
     } else {
       ElMessage.error(res.data.msg)
     }

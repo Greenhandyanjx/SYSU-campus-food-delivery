@@ -47,7 +47,7 @@ import OrderStatistics from './components/orderStatistics.vue'
 import Top from './components/top10.vue'
 
 const overviewData = ref<any>({})
-const flag = ref(2)
+const flag = ref(1)
 const tateData = ref<any[]>([])
 const turnoverData = ref<any>({})
 const userData = ref<any>({})
