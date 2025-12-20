@@ -368,7 +368,7 @@ async function load() {
       logo: data.logo || data.Logo || data.logoUrl,
       desc: data.desc || data.ShopLocation || data.shop_location || data.description,
       shop_location: data.shop_location || data.ShopLocation || data.shop_location,
-      rating: data.rating || 4.8,
+      rating: data.rating ?? data.avg_score ?? data.avgScore ?? (data.merchant && (data.merchant.avg_score ?? data.merchant.AvgScore ?? data.merchant.avgScore)) ?? 4.8,
       minOrder: data.minOrder || data.min_order || data.min_order_value,
       deliveryFee: data.deliveryFee || data.delivery_fee,
       deliveryRange: data.deliveryRange || data.delivery_range,
@@ -466,6 +466,13 @@ async function load() {
     }
 
     dishes.value = dishesArr
+    // 如果后端在 dishes 接口内返回了 merchant 聚合信息，优先使用其评分字段覆盖 store.rating
+    try {
+      const maybeMerchant = dd.merchant || dd.Merchant || dd.merchant_info || dd.merchantInfo
+      if (maybeMerchant) {
+        store.value.rating = maybeMerchant.avg_score ?? maybeMerchant.avgScore ?? maybeMerchant.AvgScore ?? store.value.rating
+      }
+    } catch (e) {}
     generateCategories()
   } catch (e) {
     console.warn('加载失败，使用Demo数据:', e)

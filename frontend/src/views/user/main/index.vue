@@ -316,7 +316,7 @@ async function loadData() {
           img: s.logo || noImg,
           logo: s.logo || noImg,
           tags: s.tags || [],
-          rating: s.rating || 4.8,
+          rating: s.rating ?? s.avg_score ?? s.avgScore ?? (s.merchant && (s.merchant.avg_score ?? s.merchant.AvgScore ?? s.merchant.avgScore)) ?? 4.8,
           sales: s.sales || 0,
           minOrder: s.minOrder || 0,
           deliveryFee: s.deliveryFee || 0,
