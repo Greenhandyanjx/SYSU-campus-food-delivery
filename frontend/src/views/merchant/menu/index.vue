@@ -84,12 +84,11 @@
         <el-table-column prop="imageUrl"
                          label="图片">
           <template #default="{ row }">
-            <el-image style="width: 80px; height: 40px; border: none; cursor: pointer"
+            <el-image style="width: 60px; height: 60px; border: none; cursor: pointer"
                       :src="row.imageUrl">
               <template #error>
                 <div class="image-slot">
-                  <img src="/src/assets/noImg.png"
-                       style="width: auto; height: 40px; border: none">
+                  <img :src="noImg" style="width: auto; height: 60px; border: none" />
                 </div>
               </template>
             </el-image>
@@ -110,8 +109,11 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="updateTime"
-                         label="最后操作时间" />
+        <el-table-column label="最后操作时间">
+          <template #default="{ row }">
+            <span>{{ formatDateToCN(row.updateTime || row.UpdatedAt || row.updatedAt || row.update_time) }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="操作"
                          width="250"
                          align="center">
@@ -171,8 +173,11 @@ import {
   dishStatusByStatus,
   dishCategoryList as fetchDishCategoryList
 } from '@/api/merchant/dish'
+import { getCategoryByType } from '@/api/merchant/category'
 import { getBaseUserDetail } from '@/api/chat'
 import request from '@/api/merchant/request'
+import noImg from '@/assets/noImg.png'
+import { safeImage } from '@/utils/asset'
 
 const router = useRouter()
 const input = ref('')
@@ -219,11 +224,19 @@ async function init(isSearchFlag?: boolean) {
       // 为避免单条数据字段缺失导致渲染抛错，统一填充默认 demo 值
       function createDefaultRow(r: any) {
         const nowStr = new Date().toLocaleString()
+        // 尝试用已加载的分类列表直接映射名称，减少后续额外请求
+        const cid = r?.categoryId ?? r?.category_id ?? r?.category
+        let cname = ''
+        try {
+          const m: Record<string,string> = {}
+          dishCategoryOptions.value.forEach((c: any) => { if (c && c.value !== undefined) m[String(c.value)] = c.label })
+          cname = r?.categoryName || m[String(cid)] || ''
+        } catch(e) { cname = r?.categoryName || '' }
         return {
-          id: r?.id ?? `demo-${Math.random().toString(36).slice(2, 8)}`, // <- 使用反引号或字符串包裹
+          id: r?.id ?? `demo-${Math.random().toString(36).slice(2, 8)}`,
           name: r?.name || '示例菜名',
-          imageUrl: r?.imageUrl || '/src/assets/noImg.png',
-          categoryName: r?.categoryName || '默认分类',
+          imageUrl: r?.imageUrl || noImg,
+          categoryName: cname || r?.categoryName || '默认分类',
           price: typeof r?.price === 'number' ? r.price : (r?.price ? Number(r.price) : 0),
           status: r?.status ?? 1,
           updateTime: r?.updateTime || nowStr,
@@ -234,6 +247,8 @@ async function init(isSearchFlag?: boolean) {
 
       tableData.value = rawList.map((it: any) => createDefaultRow(it))
       counts.value = Number(d.total || d.totalCount || rawList.length || 0)
+      // 如果已经加载了分类列表，映射 categoryId -> categoryName
+      try { mapDishCategoryNames() } catch (e) {}
     } else {
       // 后端返回码不为 1，按需处理（比如显示提示，或清空列表）
       tableData.value = []
@@ -291,13 +306,79 @@ function deleteHandle(type: string, id: any) {
 
 async function getDishCategoryList() {
   try {
-    const res = await fetchDishCategoryList({ type: 1 })
+    // 优先使用通用分类接口
+    const res = await getCategoryByType({ type: 1 })
     if (res && res.data && Number(res.data.code) === 1) {
-      dishCategoryOptions.value = (res.data?.data || []).map((item: any) => ({ value: item.id, label: item.name }))
+      const arr = (res.data?.data || [])
+      dishCategoryOptions.value = arr.map((item: any) => ({ value: item.id, label: item.name || item.label }))
+      try { mapDishCategoryNames() } catch (e) {}
+      return
     }
   } catch (err) {
     // ignore
   }
+  try {
+    const res2 = await fetchDishCategoryList({ type: 1 })
+    if (res2 && res2.data && Number(res2.data.code) === 1) {
+      dishCategoryOptions.value = (res2.data?.data || []).map((item: any) => ({ value: item.id, label: item.name }))
+      try { mapDishCategoryNames() } catch (e) {}
+    }
+  } catch (err) {
+    // ignore
+  }
+}
+
+// 将 tableData 中的 categoryId 映射为 categoryName（如果缺失）
+function mapDishCategoryNames() {
+  // 首先使用已加载的分类列表进行映射
+  const map: Record<string, string> = {}
+  if (dishCategoryOptions.value && dishCategoryOptions.value.length > 0) {
+    dishCategoryOptions.value.forEach((c: any) => { if (c && c.value !== undefined) map[String(c.value)] = c.label })
+  }
+  // 找出未命中的 categoryId
+  const missingIds = new Set<string>()
+  tableData.value.forEach((row: any) => {
+    const key = String(row.categoryId || row.category_id || row.category || '')
+    if (key && !map[key]) missingIds.add(key)
+  })
+  // 如果没有未命中，直接映射并返回
+  if (missingIds.size === 0) {
+    tableData.value = tableData.value.map((row: any) => ({
+      ...row,
+      categoryName: row.categoryName || map[String(row.categoryId || row.category_id || row.category)] || row.categoryName || '默认分类'
+    }))
+    return
+  }
+  // 对于未命中的 id，尝试从后端拉取完整的分类列表（后端会返回 id/name）作为补充
+  getCategoryByType({ type: 1 }).then((res: any) => {
+    if (res && res.data && Number(res.data.code) === 1) {
+      const fetched = (res.data.data || [])
+      fetched.forEach((c: any) => { if (c && c.id !== undefined) map[String(c.id)] = c.name || c.label || '' })
+    }
+    tableData.value = tableData.value.map((row: any) => ({
+      ...row,
+      categoryName: row.categoryName || map[String(row.categoryId || row.category_id || row.category)] || row.categoryName || '默认分类'
+    }))
+  }).catch(() => {
+    // 网络错误则退回到已有 map
+    tableData.value = tableData.value.map((row: any) => ({
+      ...row,
+      categoryName: row.categoryName || map[String(row.categoryId || row.category_id || row.category)] || row.categoryName || '默认分类'
+    }))
+  })
+}
+
+function formatDateToCN(s: any) {
+  if (!s) return ''
+  const dt = new Date(s)
+  if (isNaN(dt.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const yyyy = dt.getFullYear()
+  const mm = pad(dt.getMonth() + 1)
+  const dd = pad(dt.getDate())
+  const HH = pad(dt.getHours())
+  const MM = pad(dt.getMinutes())
+  return `${yyyy}年${mm}月${dd}日 ${HH}:${MM}`
 }
 
 function statusHandle(row: any) {
@@ -364,8 +445,9 @@ onMounted(() => {
     } catch (e) {
       // ignore, merchantId will stay null and backend will still enforce auth filtering
     }
+    // 先加载分类列表以便后续用 categoryId 映射名称
+    await getDishCategoryList()
     init()
-    getDishCategoryList()
   })()
 })
 onBeforeUnmount(() => {

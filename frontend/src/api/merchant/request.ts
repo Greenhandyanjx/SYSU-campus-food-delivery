@@ -27,6 +27,24 @@ service.interceptors.request.use(
       // Avoid duplicating 'Bearer ' (which would produce 'Bearer Bearer ...').
       config.headers.Authorization = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
     }
+    // 临时埋点：记录 /merchant/orders/page 请求的调用栈与时间，便于定位重复触发源
+    try {
+      const url = String(config.url || '')
+      if (url.includes('/merchant/orders/page')) {
+        const info = {
+          tag: 'ORDERS_PAGE_REQUEST',
+          time: new Date().toISOString(),
+          url: config.url,
+          params: config.params,
+          method: config.method,
+        }
+        // Print stack to help find which code path triggered the request
+        // eslint-disable-next-line no-console
+        console.warn('ORDERS_PAGE_REQUEST - request', info, new Error().stack)
+      }
+    } catch (e) {
+      // ignore
+    }
     return config;
   },
   (error) => Promise.reject(error)

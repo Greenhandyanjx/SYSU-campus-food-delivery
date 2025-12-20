@@ -1,7 +1,8 @@
 <template>
   <div class="container">
     <h2 class="homeTitle">
-      订单管理<i>{{ days[1] }}</i
+      <img src="/JDlogo.png" class="jd-logo" alt="嘉递外卖" />
+      订单管理<i>{{ days[1] }}</i>
       ><span><router-link to="/merchant/orders">订单明细</router-link></span>
     </h2>
     <div class="orderviewBox">
@@ -67,3 +68,7 @@ const orderviewData = computed(() => {
   )
 })
 </script>
+
+<style scoped>
+.jd-logo { width:36px; height:36px; object-fit:contain; vertical-align:middle; margin-right:8px; }
+</style>

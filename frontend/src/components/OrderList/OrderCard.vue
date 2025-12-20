@@ -77,7 +77,12 @@
 
         <!-- 已完成 -->
         <template v-else-if="status === 5">
-          <el-button type="primary" round @click.stop="$emit('review', order)">去评价</el-button>
+          <template v-if="order.reviewed || order.is_commented || order.isCommented">
+            <el-tag type="success" effect="plain">已评价</el-tag>
+          </template>
+          <template v-else>
+            <el-button type="primary" round @click.stop="$emit('review', order)">去评价</el-button>
+          </template>
           <el-button plain round @click.stop="$emit('reorder', order)">再次购买</el-button>
         </template>
 
@@ -99,6 +104,8 @@
 <script setup>
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import ChatLauncher from '@/components/Chat/ChatLauncher.vue'
+import noImg from '@/assets/noImg.png'
+import { safeImage } from '@/utils/asset'
 
 const props = defineProps({
   order: { type: Object, required: true }
@@ -177,11 +184,10 @@ onBeforeUnmount(() => {
 
 // 图片错误兜底
 const onImgError = (e) => {
-  if (e.target) e.target.src = '/src/assets/noImg.png'
+  if (e && e.target) e.target.src = noImg
 }
 
-const itemImage = (it) =>
-  it.img || it.image || it.picture || it.pic || it.thumb || it.imgUrl || '/src/assets/noImg.png'
+const itemImage = (it) => safeImage(it.img || it.image || it.picture || it.pic || it.thumb || it.imgUrl || '', noImg)
 </script>
 
 <style scoped>

@@ -1,13 +1,24 @@
 <!DOCTYPE html>
 <html lang="">
-  <head>
-    <meta charset="UTF-8">
-    <link rel="icon" href="/favicon.ico">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vite App</title>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.js"></script>
-  </body>
+
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" href="/JDlogo.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>
+    window._AMapSecurityConfig = {
+      securityJsCode: '%VITE_AMAP_SECURITY_CODE%'
+    }
+  </script>
+
+  <!-- ② 再加载高德 JS API -->
+  <script src="https://webapi.amap.com/maps?v=2.0&key=%VITE_AMAP_KEY%"></script>
+  <title>嘉递 · 中珠校园外卖</title>
+</head>
+
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+
 </html>

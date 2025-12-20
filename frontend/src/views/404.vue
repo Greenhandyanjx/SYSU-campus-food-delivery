@@ -42,8 +42,9 @@
           Please check that the URL you entered is correct, or click the button below to return to the homepage.
         </div>
         <a
-          href=""
+          href="javascript:void(0)"
           class="text-404__return-home"
+          @click.prevent="goHome"
         >Back to home</a>
       </div>
     </div>
@@ -58,8 +59,17 @@ const router = useRouter()
 const message = ref('页面未找到，可能已被移除或路径错误。')
 
 const goHome = () => {
-  router.push('/')
+  router.push('/merchant/login')
 }
+
+// 自动短延迟跳转到商家登录页，避免用户停留在空白 404 页面
+setTimeout(() => {
+  try {
+    router.push('/merchant/login')
+  } catch (e) {
+    // ignore
+  }
+}, 1200)
 </script>
 
 <style lang="scss" scoped>

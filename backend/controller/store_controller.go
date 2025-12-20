@@ -24,7 +24,9 @@ func GetStores(c *gin.Context) {
 	}
 
 	var merchants []models.Merchant
-	if err := global.Db.Find(&merchants).Error; err != nil {
+	// limit number of merchants returned to avoid heavy full-table scans
+	// (frontend displays a page of stores; returning too many merchants will slow queries)
+	if err := global.Db.Limit(50).Find(&merchants).Error; err != nil {
 		log.Printf("GetStores: failed to query merchants: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "msg": "query merchants failed", "err": err.Error()})
 		return
@@ -33,17 +35,36 @@ func GetStores(c *gin.Context) {
 	log.Printf("GetStores: merchants found=%d", len(merchants))
 
 	stores := make([]map[string]interface{}, 0, len(merchants))
+
+	// collect base_ids to batch query dishes
+	baseIDs := make([]uint, 0, len(merchants))
 	for _, m := range merchants {
-		log.Printf("GetStores: processing merchant: id=%d base_id=%d shop_name=%s", m.ID, m.BaseID, m.ShopName)
-		// Dish.MerchantID 存储的是 base_user id（即 merchants.base_id）
-		var dishes []models.Dish
-		if err := global.Db.Where("merchant_id = ? AND status = 1", m.BaseID).Limit(6).Find(&dishes).Error; err != nil {
-			// 记录具体错误以便调试，但仍继续返回其他商家
-			log.Printf("GetStores: failed to query dishes for merchant base_id=%d: %v", m.BaseID, err)
-			dishes = []models.Dish{}
+		baseIDs = append(baseIDs, m.BaseID)
+	}
+
+	// batch load dishes for all merchants (status = 1)
+	var allDishes []models.Dish
+	if len(baseIDs) > 0 {
+		if err := global.Db.Where("merchant_id IN ? AND status = 1", baseIDs).Find(&allDishes).Error; err != nil {
+			log.Printf("GetStores: failed to batch query dishes: %v", err)
+			allDishes = []models.Dish{}
 		}
-		dishItems := make([]map[string]interface{}, 0, len(dishes))
-		for _, d := range dishes {
+	}
+
+	// group dishes by merchant_id (which stores base_id)
+	dishesByBase := make(map[uint][]models.Dish)
+	for _, d := range allDishes {
+		dishesByBase[d.MerchantID] = append(dishesByBase[d.MerchantID], d)
+	}
+
+	// assemble stores with up to 6 dishes each
+	for _, m := range merchants {
+		ds := dishesByBase[m.BaseID]
+		if len(ds) > 6 {
+			ds = ds[:6]
+		}
+		dishItems := make([]map[string]interface{}, 0, len(ds))
+		for _, d := range ds {
 			dishItems = append(dishItems, map[string]interface{}{
 				"id":         d.ID,
 				"name":       d.DishName,
@@ -60,7 +81,9 @@ func GetStores(c *gin.Context) {
 			"desc":        m.ShopLocation,
 			"logo":        m.Logo,
 			"tags":        []string{},
-			"rating":      4.8,
+			"rating":      m.AvgScore,
+			"avg_score":   m.AvgScore,
+			"score_count": m.ScoreCount,
 			"sales":       m.MenuCount,
 			"minOrder":    0,
 			"deliveryFee": 0,
@@ -131,6 +154,8 @@ func GetStoreByQuery(c *gin.Context) {
 		"logo":          m.Logo,
 		"phone":         m.Phone,
 		"menu_count":    m.MenuCount,
+		"avg_score":     m.AvgScore,
+		"score_count":   m.ScoreCount,
 	}
 
 	// cache for 60s
@@ -191,10 +216,78 @@ func GetStoreDishes(c *gin.Context) {
 		meals = []models.Meal{}
 	}
 
+	// 为每个 meal 加载其关联的 meal_dish 及对应的菜品信息，便于前端在无鉴权情况下展示套餐内容
+	// 收集所有 meal ids
+	mealIDs := make([]int, 0, len(meals))
+	for _, mm := range meals {
+		mealIDs = append(mealIDs, mm.ID)
+	}
+
+	var mealDishes []models.MealDish
+	if len(mealIDs) > 0 {
+		if err := global.Db.Where("meal_id IN ?", mealIDs).Find(&mealDishes).Error; err != nil {
+			log.Printf("GetStoreDishes: meal_dish query failed: %v", err)
+			mealDishes = []models.MealDish{}
+		}
+	}
+
+	// 收集所有 dish ids 出来一次性查询
+	dishIDsMap := make(map[int]struct{})
+	for _, md := range mealDishes {
+		dishIDsMap[md.DishID] = struct{}{}
+	}
+	dishIDs := make([]int, 0, len(dishIDsMap))
+	for id := range dishIDsMap {
+		dishIDs = append(dishIDs, id)
+	}
+
+	var referencedDishes []models.Dish
+	if len(dishIDs) > 0 {
+		if err := global.Db.Where("id IN ?", dishIDs).Find(&referencedDishes).Error; err != nil {
+			log.Printf("GetStoreDishes: referenced dishes query failed: %v", err)
+			referencedDishes = []models.Dish{}
+		}
+	}
+
+	// build a map from dish id to dish
+	dishByID := make(map[int]models.Dish)
+	for _, dd := range referencedDishes {
+		dishByID[dd.ID] = dd
+	}
+
+	// compose meals with setmealDishes
+	mealsOut := make([]map[string]interface{}, 0, len(meals))
+	for _, mm := range meals {
+		// find meal_dish entries for this meal
+		entries := make([]map[string]interface{}, 0)
+		for _, md := range mealDishes {
+			if md.MealID == mm.ID {
+				dish := dishByID[md.DishID]
+				entries = append(entries, map[string]interface{}{
+					"dishId": md.DishID,
+					"name":   dish.DishName,
+					"price":  dish.Price,
+					"image":  dish.ImagePath,
+					"copies": md.Num,
+				})
+			}
+		}
+		mealsOut = append(mealsOut, map[string]interface{}{
+			"id":            mm.ID,
+			"name":          mm.Mealname,
+			"price":         mm.Price,
+			"description":   mm.Description,
+			"image":         mm.ImagePath,
+			"category":      mm.Category,
+			"status":        mm.Status,
+			"setmealDishes": entries,
+		})
+	}
+
 	resp := map[string]interface{}{
-		"merchant": map[string]interface{}{"id": m.ID, "base_id": m.BaseID, "name": m.ShopName, "logo": m.Logo, "phone": m.Phone, "shop_location": m.ShopLocation},
+		"merchant": map[string]interface{}{"id": m.ID, "base_id": m.BaseID, "name": m.ShopName, "logo": m.Logo, "phone": m.Phone, "shop_location": m.ShopLocation, "avg_score": m.AvgScore, "score_count": m.ScoreCount},
 		"dishes":   dishes,
-		"meals":    meals,
+		"meals":    mealsOut,
 	}
 
 	go utils.SetJSON(context.Background(), key, resp, 60*time.Second)

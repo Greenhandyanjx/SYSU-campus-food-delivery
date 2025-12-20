@@ -271,3 +271,46 @@ func DebugConnections(c *gin.Context) {
 	connMu.RUnlock()
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": ids})
 }
+
+// DebugSendWS 接收 JSON: { base_id: <number>, payload: { ... } }
+// 用于开发时向指定 base_id 的连接推送测试消息
+func DebugSendWS(c *gin.Context) {
+	var body map[string]interface{}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid json body"})
+		return
+	}
+	var baseID uint64
+	if v, ok := body["base_id"]; ok {
+		switch t := v.(type) {
+		case float64:
+			baseID = uint64(t)
+		case string:
+			if n, err := strconv.ParseUint(t, 10, 64); err == nil {
+				baseID = n
+			}
+		}
+	}
+	if baseID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "base_id required"})
+		return
+	}
+	payload := body["payload"]
+	if payload == nil {
+		// fallback: use entire body as payload
+		payload = body
+	}
+
+	connMu.RLock()
+	conn, ok := connStore[uint(baseID)]
+	connMu.RUnlock()
+	if !ok || conn == nil {
+		c.JSON(http.StatusNotFound, gin.H{"code": 0, "message": "connection not found for base_id"})
+		return
+	}
+	if err := conn.WriteJSON(payload); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "write failed", "error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 1, "message": "sent"})
+}

@@ -1,9 +1,9 @@
 <template>
-  <div class="order-detail-bg">
+  <div class="order-detail-bg" :style="{ backgroundImage: `url(${bgImg})` }">
     <div class="order-detail-page">
       <div class="header">
         <el-button type="text" @click="$router.back()" class="back-btn" size="large">
-          <img src="/src/assets/icons/leftarrow.svg" style="width: 20px;height: 20px;"> 返回
+          <img :src="leftArrow" style="width: 20px;height: 20px;"> 返回
         </el-button>
         <h2>订单详情 #{{ order?.id || id }}</h2>
         <div class="status-badge" :class="statusClass(order?.status)">{{ order?.statusText }}</div>
@@ -15,12 +15,12 @@
             <h3>基本信息</h3>
           </div>
           <div class="store-info" @click="openStore(order.storeId)">
-            <img :src="order.storeLogo || '/src/assets/noImg.png'" @error="onImgError" class="store-logo" />
+            <img :src="order.storeLogo || noImg" @error="onImgError" class="store-logo" />
             <div class="store-detail">
               <div class="store-name">{{ order.storeName }}</div>
               <div class="order-time">下单时间：{{ order.time }}</div>
             </div>
-            <img src="/src/assets/icons/rightarrow.svg" style="width: 20px;height: 20px;" class="goto-icon" />
+            <img :src="rightArrow" style="width: 20px;height: 20px;" class="goto-icon" />
           </div>
         </div>
 
@@ -30,7 +30,7 @@
           </div>
           <div class="goods">
             <div v-for="(it, i) in order.items" :key="i" class="goods-item">
-              <img :src="it.image || '/src/assets/noImg.png'" @error="onImgError" class="goods-img" />
+              <img :src="it.image || noImg" @error="onImgError" class="goods-img" />
               <div class="goods-info">
                 <div class="goods-name">{{ it.name }}</div>
                 <div class="goods-price">¥{{ it.price.toFixed(2) }}</div>
@@ -58,15 +58,15 @@
           </div>
           <div class="delivery-info">
             <div class="delivery-status">
-              <img src="/src/assets/icons/delivery.svg" style="width: 20px ;height: 20px;">
+              <img :src="deliveryIcon" style="width: 20px ;height: 20px;">
               <div class="status-text">{{ getDeliveryStatus(order.status) }}</div>
             </div>
             <div class="address-info">
-              <img src="/src/assets/icons/address.svg" style="width: 15px ;height: 15px;">
+              <img :src="addressIcon" style="width: 15px ;height: 15px;">
               <span>{{ order.address }}</span>
             </div>
             <div v-if="order.rider" class="rider-info">
-              <img :src="order.rider.avatar || '/src/assets/noImg.png'" @error="onImgError" class="rider-avatar" />
+              <img :src="order.rider.avatar || userPng" @error="onImgError" class="rider-avatar" />
               <div class="rider-detail">
                 <div class="rider-name">{{ order.rider.name }}</div>
                 <div class="rider-phone">{{ order.rider.phone }}</div>
@@ -97,7 +97,12 @@
           <template v-if="order.status === 5">
             <el-button @click="contactRider" plain>联系骑手</el-button>
             <el-button @click="onReorder" plain>再次购买</el-button>
-            <el-button type="warning" v-if="!order.reviewed" @click="onReview">评价晒单</el-button>
+            <template v-if="order.reviewed || order.is_commented || order.isCommented">
+              <el-tag type="success" effect="plain">已评价</el-tag>
+            </template>
+            <template v-else>
+              <el-button type="warning" @click="onReview">评价晒单</el-button>
+            </template>
           </template>
 
           <!-- 退款/售后 -->
@@ -118,6 +123,14 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import orderApi from '@/api/user/order'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import noImg from '@/assets/noImg.png'
+import userPng from '@/assets/user.png'
+import { safeImage } from '@/utils/asset'
+import leftArrow from '@/assets/icons/leftarrow.svg'
+import rightArrow from '@/assets/icons/rightarrow.svg'
+import deliveryIcon from '@/assets/icons/delivery.svg'
+import addressIcon from '@/assets/icons/address.svg'
+import bgImg from '@/assets/login/img_denglu_bj.jpg'
 
 const route = useRoute()
 const router = useRouter()
@@ -276,7 +289,17 @@ function openStore(id) {
 }
 
 function onImgError(e) {
-  try { e.target.src = '/src/assets/noImg.png' } catch (err) {}
+  try {
+    const t = e && e.target
+    if (!t) return
+    // If it's a rider avatar, use user default; otherwise use generic noImg
+    const cls = (t.className || '')
+    if (cls && cls.toString().indexOf('rider-avatar') !== -1) {
+      t.src = userPng
+    } else {
+      t.src = noImg
+    }
+  } catch (err) {}
 }
 
 // 更新倒计时
@@ -333,14 +356,17 @@ async function fetch() {
           id: payload.id || payload.order_no || payload.orderNo || id,
           storeId: payload.store_id || payload.storeId || payload.merchant_id || payload.merchantId || null,
           storeName: payload.store_name || payload.storeName || payload.shop_name || '',
-          storeLogo: payload.store_logo || payload.logo || '/src/assets/noImg.png',
+          storeLogo: safeImage(payload.store_logo || payload.logo || '', noImg),
           items,
           status: statusNum,
           statusText: payload.statusText || payload.status_text || mapStatusText(statusNum),
           time: formatFriendlyTime(rawTime),
           delivery_fee: deliveryFeeValue,
           deliveryAmount: deliveryFeeValue,
-          deliveryFee: deliveryFeeValue
+          deliveryFee: deliveryFeeValue,
+          // review flags compatibility
+          is_commented: payload.is_commented ?? payload.isCommented ?? false,
+          reviewed: payload.reviewed ?? payload.is_commented ?? payload.isCommented ?? false
         }
       } else {
         order.value = null

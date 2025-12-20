@@ -54,20 +54,47 @@ func GetUserCart(c *gin.Context) {
 		var merchant models.Merchant
 		global.Db.Where("id = ?", uint(merchantID)).First(&merchant)
 
-		// 构建items响应，关联 dishes 表以补全 category/categoryId/image/name
+		// 批量查询菜品和分类以避免循环中逐条查询
+		dishIDs := make([]uint, 0, len(items))
+		for _, it := range items {
+			dishIDs = append(dishIDs, it.DishID)
+		}
+		var dishes []models.Dish
+		if len(dishIDs) > 0 {
+			if err := global.Db.Where("id IN ?", dishIDs).Find(&dishes).Error; err != nil {
+				dishes = []models.Dish{}
+			}
+		}
+		dishMap := make(map[uint]models.Dish)
+		categoryIDs := make([]uint, 0)
+		for _, d := range dishes {
+			dishMap[uint(d.ID)] = d
+			if d.Category != 0 {
+				categoryIDs = append(categoryIDs, uint(d.Category))
+			}
+		}
+		// 批量查询分类
+		catMap := make(map[uint]models.Category)
+		if len(categoryIDs) > 0 {
+			var cats []models.Category
+			if err := global.Db.Where("id IN ?", categoryIDs).Find(&cats).Error; err == nil {
+				for _, c := range cats {
+					catMap[uint(c.ID)] = c
+				}
+			}
+		}
+
+		// 构建items响应
 		respItems := make([]gin.H, 0, len(items))
 		for _, it := range items {
-			var dish models.Dish
 			var categoryName string = ""
 			var categoryId int = 0
 			var imagePath string = ""
-			if err := global.Db.Where("id = ?", it.DishID).First(&dish).Error; err == nil {
-				categoryId = dish.Category
-				imagePath = dish.ImagePath
-				// 尝试查 category 名称
-				var cat models.Category
-				if dish.Category != 0 {
-					if err := global.Db.Where("id = ?", dish.Category).First(&cat).Error; err == nil {
+			if d, ok := dishMap[it.DishID]; ok {
+				categoryId = d.Category
+				imagePath = d.ImagePath
+				if d.Category != 0 {
+					if cat, ok2 := catMap[uint(d.Category)]; ok2 {
 						categoryName = cat.Name
 					}
 				}
@@ -80,7 +107,10 @@ func GetUserCart(c *gin.Context) {
 				"selected":   it.Selected,
 				"categoryId": categoryId,
 				"category":   categoryName,
-				"image":      imagePath,
+				// provide multiple keys for compatibility with frontend variants
+				"image":    imagePath,
+				"img":      imagePath,
+				"imageUrl": imagePath,
 			})
 		}
 
@@ -91,37 +121,88 @@ func GetUserCart(c *gin.Context) {
 		})
 		return
 	}
-	// 按商家分组
+	// 按商家分组：批量查询商家、菜品、分类以避免 N+1
 	shopsMap := make(map[uint]gin.H)
+	// 收集 merchantIds 与 dishIds
+	merchantIDs := make([]uint, 0)
+	dishIDs := make([]uint, 0)
+	merchantSet := make(map[uint]struct{})
+	dishSet := make(map[uint]struct{})
+	for _, item := range items {
+		if _, ok := merchantSet[item.MerchantID]; !ok {
+			merchantSet[item.MerchantID] = struct{}{}
+			merchantIDs = append(merchantIDs, item.MerchantID)
+		}
+		if _, ok := dishSet[item.DishID]; !ok {
+			dishSet[item.DishID] = struct{}{}
+			dishIDs = append(dishIDs, item.DishID)
+		}
+	}
+
+	// 批量查询商家
+	var merchants []models.Merchant
+	if len(merchantIDs) > 0 {
+		if err := global.Db.Where("id IN ?", merchantIDs).Find(&merchants).Error; err != nil {
+			merchants = []models.Merchant{}
+		}
+	}
+	merchantMap := make(map[uint]models.Merchant)
+	for _, m := range merchants {
+		merchantMap[m.ID] = m
+	}
+
+	// 批量查询菜品
+	var dishes []models.Dish
+	if len(dishIDs) > 0 {
+		if err := global.Db.Where("id IN ?", dishIDs).Find(&dishes).Error; err != nil {
+			dishes = []models.Dish{}
+		}
+	}
+	dishMap := make(map[uint]models.Dish)
+	categoryIDs := make([]uint, 0)
+	for _, d := range dishes {
+		dishMap[uint(d.ID)] = d
+		if d.Category != 0 {
+			categoryIDs = append(categoryIDs, uint(d.Category))
+		}
+	}
+
+	// 批量查询分类
+	catMap := make(map[uint]models.Category)
+	if len(categoryIDs) > 0 {
+		var cats []models.Category
+		if err := global.Db.Where("id IN ?", categoryIDs).Find(&cats).Error; err == nil {
+			for _, c := range cats {
+				catMap[uint(c.ID)] = c
+			}
+		}
+	}
+
+	// 组装 shopsMap
 	for _, item := range items {
 		merchantID := item.MerchantID
 		if _, exists := shopsMap[merchantID]; !exists {
-			// 查询商家信息：Merchant 主键 id
-			var merchant models.Merchant
-			global.Db.Where("id = ?", merchantID).First(&merchant)
-
+			m := merchantMap[merchantID]
 			shopsMap[merchantID] = gin.H{
 				"merchant_id":   merchantID,
-				"merchant_name": merchant.ShopName,
-				"shop_location": merchant.ShopLocation,
-				"owner":         merchant.Owner,
-				"phone":         merchant.Phone,
-				"logo":          merchant.Logo,
-				"status":        merchant.Status,
+				"merchant_name": m.ShopName,
+				"shop_location": m.ShopLocation,
+				"owner":         m.Owner,
+				"phone":         m.Phone,
+				"logo":          m.Logo,
+				"status":        m.Status,
 				"items":         []gin.H{},
 			}
 		}
-		// enrich item with dish metadata
-		var dish models.Dish
+
 		var categoryName string = ""
 		var categoryId int = 0
 		var imagePath string = ""
-		if err := global.Db.Where("id = ?", item.DishID).First(&dish).Error; err == nil {
-			categoryId = dish.Category
-			imagePath = dish.ImagePath
-			var cat models.Category
-			if dish.Category != 0 {
-				if err := global.Db.Where("id = ?", dish.Category).First(&cat).Error; err == nil {
+		if d, ok := dishMap[item.DishID]; ok {
+			categoryId = d.Category
+			imagePath = d.ImagePath
+			if d.Category != 0 {
+				if cat, ok2 := catMap[uint(d.Category)]; ok2 {
 					categoryName = cat.Name
 				}
 			}
@@ -135,6 +216,8 @@ func GetUserCart(c *gin.Context) {
 			"categoryId": categoryId,
 			"category":   categoryName,
 			"image":      imagePath,
+			"img":        imagePath,
+			"imageUrl":   imagePath,
 		}
 		shop := shopsMap[merchantID]
 		shop["items"] = append(shop["items"].([]gin.H), respItem)
@@ -323,9 +406,9 @@ func UpdateCartItem(c *gin.Context) {
 	userID := c.MustGet("baseUserID").(uint)
 	// 解析请求参数
 	var req struct {
-		StoreID string `json:"storeId" binding:"required"`
-		DishID  int    `json:"dishId" binding:"required"`
-		Qty     int    `json:"qty" binding:"required,min=0"`
+		StoreID interface{} `json:"storeId" binding:"required"`
+		DishID  int         `json:"dishId" binding:"required"`
+		Qty     int         `json:"qty" binding:"required,min=0"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.Error(c, err)
@@ -347,8 +430,26 @@ func UpdateCartItem(c *gin.Context) {
 		}
 	}
 
-	// 转换 storeID 为 uint
-	merchantID, err := strconv.ParseUint(req.StoreID, 10, 32)
+	// 将 storeId 支持数字或字符串形式，先归一为字符串
+	var storeIDStr string
+	switch v := req.StoreID.(type) {
+	case float64:
+		storeIDStr = strconv.FormatInt(int64(v), 10)
+	case int:
+		storeIDStr = strconv.Itoa(v)
+	case int64:
+		storeIDStr = strconv.FormatInt(v, 10)
+	case uint:
+		storeIDStr = strconv.FormatUint(uint64(v), 10)
+	case string:
+		storeIDStr = v
+	default:
+		utils.Error(c, fmt.Errorf("invalid storeId type"))
+		return
+	}
+
+	// 转换为 uint
+	merchantID, err := strconv.ParseUint(storeIDStr, 10, 32)
 	if err != nil {
 		utils.Error(c, err)
 		return

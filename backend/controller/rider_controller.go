@@ -808,6 +808,8 @@ func AcceptOrder(c *gin.Context) {
 		"rider_id":    riderID,
 		"pickup_code": pickupCode,
 		"accepted_at": &now,
+		// 分配骑手成功后，设置预计送达时间（示例：当前时间 + 30 分钟）
+		"expected_time": now.Add(30 * time.Minute),
 	})
 
 	c.JSON(200, gin.H{

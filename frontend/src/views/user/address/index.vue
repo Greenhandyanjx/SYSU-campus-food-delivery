@@ -196,7 +196,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { listAddresses, addAddress, editAddress as apiEditAddress, setDefaultAddress, deleteAddress } from '@/api/common/address'
 (window as any)._AMapSecurityConfig = {
-  securityJsCode: import.meta.env.VITE_AMAP_SECURITY_CODE || ''
+  securityJsCode: '4bf89c4e16d60340e676f6cc39beff32'
 }
 const activeTab = ref('mine')
 const route = useRoute()

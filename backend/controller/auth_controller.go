@@ -142,7 +142,15 @@ func Register(ctx *gin.Context) {
 		return
 	}
 
-	token, err := utils.GenerateJWTWithRole(base.Username, base.Role)
+	// 如果为商家，附带 merchantId 到 token 中
+	merchantIdStr := ""
+	if base.Role == "merchant" {
+		var createdMerchant models.Merchant
+		if err := global.Db.Where("base_id = ?", base.ID).First(&createdMerchant).Error; err == nil {
+			merchantIdStr = fmt.Sprintf("%d", createdMerchant.ID)
+		}
+	}
+	token, err := utils.GenerateJWTWithRole(base.Username, base.Role, merchantIdStr)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"code": "0", "msg": "token error"})
 		return
@@ -189,7 +197,15 @@ func Login(ctx *gin.Context) {
 		return
 	}
 
-	token, err := utils.GenerateJWTWithRole(user.Username, user.Role)
+	// 如果登录的是商家，尝试查找对应 merchant 并把 merchantId 放入 token
+	merchantIdStr := ""
+	if user.Role == "merchant" {
+		var m models.Merchant
+		if err := global.Db.Where("base_id = ?", user.ID).First(&m).Error; err == nil {
+			merchantIdStr = fmt.Sprintf("%d", m.ID)
+		}
+	}
+	token, err := utils.GenerateJWTWithRole(user.Username, user.Role, merchantIdStr)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"code": "0",
@@ -208,65 +224,64 @@ func Login(ctx *gin.Context) {
 }
 
 func ChangePassword(c *gin.Context) {
-	tokenUsername := c.MustGet("username").(string)
-	// 解析请求体
+	// 从中间件获取 baseUserID（中间件会把 base_users 的 ID 存入上下文）
+	baseIDIf, ok := c.Get("baseUserID")
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": "401", "msg": "no user in context"})
+		return
+	}
+
+	// 处理可能的底层类型（uint 或数值类型）
+	var baseID uint
+	switch v := baseIDIf.(type) {
+	case uint:
+		baseID = v
+	case int:
+		baseID = uint(v)
+	case int64:
+		baseID = uint(v)
+	case float64:
+		baseID = uint(v)
+	default:
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"code": "500", "msg": "invalid user id type"})
+		return
+	}
+
+	// 解析请求体（只需要旧密码和新密码）
 	var request struct {
-		Username    string `json:"username"`
 		OldPassword string `json:"oldpassword"`
 		NewPassword string `json:"newpassword"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-			"code": "400",
-			"msg":  "Invalid request body",
-		})
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"code": "400", "msg": "Invalid request body"})
 		return
 	}
-	// 检查请求体中的 username 是否与解析出的用户名一致
-	if request.Username != "" && request.Username != tokenUsername {
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-			"code": "401",
-			"msg":  "Username mismatch",
-		})
+
+	// 从数据库读取 base_users 当前哈希
+	var baseUser models.BaseUser
+	if err := global.Db.First(&baseUser, baseID).Error; err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"code": "500", "msg": "Failed to load user"})
 		return
 	}
-	// 获取用户的真实用户名
-	//获取用户的密码哈希
-	hash, err := utils.GetUserHashByUsernameuser(tokenUsername)
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"code": "500",
-			"msg":  "Failed to get user hash",
-		})
-		return
-	}
+
 	// 验证旧密码
-	if !utils.CheckPassword(request.OldPassword, hash) {
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-			"cdoe": "401",
-			"msg":  "Old password is incorrect",
-		})
+	if !utils.CheckPassword(request.OldPassword, baseUser.Password) {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": "401", "msg": "Old password is incorrect"})
 		return
 	}
-	// 更新新密码
+
+	// 计算新密码哈希
 	newHash, err := utils.Hpwd(request.NewPassword)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"code": "500",
-			"msg":  "Failed to hash new password",
-		})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"code": "500", "msg": "Failed to hash new password"})
 		return
 	}
-	// 假设这里有一个函数 `updateUserPasswordHash` 来更新用户的密码哈希
-	if err := utils.UpdateUserPasswordHash(tokenUsername, newHash); err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"code": "500",
-			"msg":  "Failed to update password",
-		})
+
+	// 更新数据库
+	if err := global.Db.Model(&models.BaseUser{}).Where("id = ?", baseID).Update("password", newHash).Error; err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"code": "500", "msg": "Failed to update password"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"code": "0",
-		"msg":  "Password updated successfully",
-	})
+
+	c.JSON(http.StatusOK, gin.H{"code": "0", "msg": "Password updated successfully"})
 }

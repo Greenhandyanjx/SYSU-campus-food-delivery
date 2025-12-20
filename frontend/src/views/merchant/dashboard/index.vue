@@ -18,18 +18,7 @@
       :order-statics="orderStatics"
       @getOrderListBy3Status="getOrderListBy3Status"
     />
-    <div class="merchant-chat-area">
-      <MerchantChatList />
-    </div>
-
-    <!-- 使用 teleport 在 body 上弹出商家聊天窗口（移除原先页面内联的小窗口） -->
-    <teleport to="body">
-      <div v-if="showChat" class="merchant-chat-overlay" @click.self="showChat=false">
-        <div class="merchant-chat-modal">
-          <MerchantChatWindow :merchantId="chatMerchantId" :userBaseId="chatUserBaseId" @close="showChat=false" />
-        </div>
-      </div>
-    </teleport>
+    <!-- 消息中心已迁移到全局导航栏（Navbar） -->
   </div>
 </template>
 
@@ -52,8 +41,7 @@ import Orderview from './components/orderview.vue'
 import CuisineStatistics from './components/cuisineStatistics.vue'
 import SetMealStatistics from './components/setMealStatistics.vue'
 import OrderList from './components/orderList.vue'
-import MerchantChatList from '@/components/Chat/MerchantChatList.vue'
-import MerchantChatWindow from '@/components/Chat/MerchantChatWindow.vue'
+// Merchant chat moved to Navbar as a global module
 
 const overviewData = ref<any>({})
 const orderviewData = ref<any>({})
@@ -73,7 +61,7 @@ const init = async () => {
   await getOrderStatisticsData()
   await getOverStatisticsData()
   await getSetMealStatisticsData()
-  await getOrderListBy3Status()
+  // dashboard relies on child OrderList to emit getOrderListBy3Status when ready
 }
 
 // 获取营业数据
@@ -133,19 +121,7 @@ const getOrderListBy3Status = async () => {
 
 onMounted(() => {
   init()
-  window.addEventListener('chat:open', (e: Event) => {
-    const ev = e as CustomEvent
-    const d = (ev && ev.detail) || {}
-    if (!d.userBaseId) return
-    chatMerchantId.value = d.merchantId || null
-    chatUserBaseId.value = d.userBaseId || null
-    showChat.value = true
-  })
 })
-
-const showChat = ref(false)
-const chatMerchantId = ref<number | null>(null)
-const chatUserBaseId = ref<number | null>(null)
 </script>
 
 <style lang="scss" scoped>

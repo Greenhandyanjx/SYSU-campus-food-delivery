@@ -2,6 +2,7 @@
   <div>
     <div class="container homecon">
       <h2 class="homeTitle homeTitleBtn">
+        <img src="/JDlogo.png" class="jd-logo" alt="嘉递外卖" />
         订单信息
         <ul class="conTab">
           <li
@@ -71,6 +72,9 @@
               class-name="orderTime"
               min-width="130"
             >
+              <template v-slot="{ row }">
+                <span>{{ formatDateToCN(row.expected_time) }}</span>
+              </template>
             </el-table-column>
             <el-table-column prop="totalprice" label="实收金额"> </el-table-column>
             <el-table-column label="备注">
@@ -150,7 +154,7 @@
                   <el-button
                     type="text"
                     class="blueBug non"
-                    @click="goDetail(row.id || row.orderId || row.orderid, row.status, row)"
+                    @click="goDetail(row.id || row.orderId || row.orderid, row.status, row, $event)"
                   >
                     查看
                   </el-button>
@@ -185,7 +189,7 @@
 
         <div class="modal-body">
           <div class="order-top">
-            <p><label>下单时间：</label>{{ diaForm.orderTime }}</p>
+            <p><label>下单时间：</label>{{ formatDateToCN(diaForm.orderTime) }}</p>
           </div>
 
           <div class="order-middle">
@@ -195,7 +199,7 @@
                 <div class="user-phone"><label>手机号：</label><span>{{ diaForm.phone }}</span></div>
                 <div v-if="[2,3,4,5].includes(dialogOrderStatus)" class="user-getTime">
                   <label>{{ dialogOrderStatus === 5 ? '送达时间：' : '预计送达时间：' }}</label>
-                  <span>{{ dialogOrderStatus === 5 ? diaForm.deliveryTime : diaForm.estimatedDeliveryTime }}</span>
+                  <span>{{ dialogOrderStatus === 5 ? formatDateToCN(diaForm.deliveryTime) : formatDateToCN(diaForm.estimatedDeliveryTime) }}</span>
                 </div>
                 <div class="user-address"><label>地址：</label><span>{{ diaForm.address }}</span></div>
               </div>
@@ -210,9 +214,9 @@
               <div class="dish-label">菜品</div>
               <div class="dish-list">
                 <div v-for="(item, index) in diaForm.orderDetailList || []" :key="index" class="dish-item">
-                  <span class="dish-name">{{ item.orderDishes }}</span>
+                  <span class="dish-name">{{ item.name }}</span>
                   <span class="dish-num">x{{ item.number || item.qty || item.quantity }}</span>
-                  <span class="dish-price">￥{{ item.amount ? (Number(item.amount).toFixed(2)) : '' }}</span>
+                  <span class="dish-price">￥{{item.price ? (Number(item.price).toFixed(2)) : '' }}</span>
                 </div>
               </div>
               <div class="dish-all-amount"><label>菜品小计</label><span>￥{{ dishSubtotal }}</span></div>
@@ -224,11 +228,11 @@
               <div class="amount-label">费用</div>
               <div class="amount-list">
                 <div class="dish-amount"><span class="amount-name">菜品小计：</span><span class="amount-price">￥{{ dishSubtotalRaw }}</span></div>
-                <div class="send-amount"><span class="amount-name">派送费：</span><span class="amount-price">￥6</span></div>
+                <div class="send-amount"><span class="amount-name">派送费：</span><span class="amount-price">￥{{ deliveryAmountDisplay }}</span></div>
                 <div class="package-amount"><span class="amount-name">打包费：</span><span class="amount-price">￥{{ packAmountDisplay }}</span></div>
                 <div class="all-amount"><span class="amount-name">合计：</span><span class="amount-price">￥{{ amountDisplay }}</span></div>
                 <div class="pay-type"><span class="pay-name">支付渠道：</span><span class="pay-value">{{ diaForm.payMethod === 1 ? '微信支付' : '支付宝支付' }}</span></div>
-                <div class="pay-time"><span class="pay-name">支付时间：</span><span class="pay-value">{{ diaForm.checkoutTime }}</span></div>
+                <div class="pay-time"><span class="pay-name">支付时间：</span><span class="pay-value">{{ formatDateToCN(diaForm.checkoutTime) }}</span></div>
               </div>
             </div>
           </div>
@@ -291,8 +295,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, getCurrentInstance } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, getCurrentInstance } from 'vue'
 import Empty from '@/components/Empty/index.vue'
+import { getMerchantProfile } from '@/api/merchant/profile'
 import {
   getOrderDetailPage,
   queryOrderDetailById,
@@ -303,6 +308,8 @@ import {
   orderAccept,
   getOrderListBy,
 } from '@/api/merchant/order'
+import { getOrderDetailPageCoalesced } from '@/api/merchant/order'
+import { emitOrderChanged } from '@/utils/orderEvents'
 
 const props = defineProps<{ orderStatics?: any }>()
 const emit = defineEmits(['getOrderListBy3Status'])
@@ -328,6 +335,7 @@ const page = ref(1)
 const pageSize = ref(10)
 const status = ref(2)
 const orderData = ref<any[]>([])
+const currentMerchantId = ref<any>(null)
 const isTableOperateBtn = ref(true)
 
 const cancelOrderReasonList = ref([
@@ -405,21 +413,43 @@ const orderList = ref([
 
 const dishSubtotal = computed(() => {
   const a = diaForm.value?.amount
-  const pack = diaForm.value?.packAmount || 0
+  const pack = Number(diaForm.value?.packAmount || 0)
+  const delivery = Number(diaForm.value?.deliveryAmount || diaForm.value?.delivery_amount || diaForm.value?.deliveryFee || diaForm.value?.delivery_fee || 0)
   if (typeof a === 'number') {
-    return (a - 6 - pack).toFixed(2)
+    return (a - delivery - pack).toFixed(2)
   }
   return ''
 })
 
 const dishSubtotalRaw = computed(() => {
   const a = diaForm.value?.amount
-  const pack = diaForm.value?.packAmount || 0
+  const pack = Number(diaForm.value?.packAmount || 0)
+  const delivery = Number(diaForm.value?.deliveryAmount || diaForm.value?.delivery_amount || diaForm.value?.deliveryFee || diaForm.value?.delivery_fee || 0)
   if (typeof a === 'number') {
-    return ((a - 6 - pack) * 100) / 100
+    return ((a - delivery - pack) * 100) / 100
   }
   return ''
 })
+
+const deliveryAmountDisplay = computed(() => {
+  const v = diaForm.value?.deliveryAmount || diaForm.value?.delivery_amount || diaForm.value?.deliveryFee || diaForm.value?.delivery_fee || 0
+  const n = Number(v || 0)
+  return Number.isFinite(n) ? n.toFixed(2) : '0.00'
+})
+
+// 将时间格式化为：YYYY年MM月DD日 HH:mm
+function formatDateToCN(s: any) {
+  if (!s) return ''
+  const dt = new Date(s)
+  if (isNaN(dt.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const yyyy = dt.getFullYear()
+  const mm = pad(dt.getMonth() + 1)
+  const dd = pad(dt.getDate())
+  const HH = pad(dt.getHours())
+  const MM = pad(dt.getMinutes())
+  return `${yyyy}年${mm}月${dd}日 ${HH}:${MM}`
+}
 
 const packAmountDisplay = computed(() => {
   const p = diaForm.value?.packAmount
@@ -446,9 +476,51 @@ const tabList = computed(() => {
   ]
 })
 
+
 onMounted(() => {
   getOrderListData(status.value)
+  // 监听来自其他组件（如聊天）的打开订单详情事件
+  window.addEventListener('merchant:open_order_detail', (ev: any) => {
+    try {
+      const id = ev && ev.detail && (ev.detail.orderId || ev.detail.id)
+      if (!id) return
+      // 打开 modal 并加载详情
+      goDetail(id, 2, {})
+    } catch (e) { console.warn('open_order_detail handler failed', e) }
+  })
+
+  // 监听 order:changed 事件，去抖刷新列表，避免频繁刷新导致卡顿
+  let refreshTimer: any = null
+  const refreshHandler = (ev: any) => {
+    try {
+      clearTimeout(refreshTimer)
+      refreshTimer = setTimeout(() => {
+        getOrderListData(status.value)
+      }, 500)
+    } catch (e) { console.warn('order:changed handler failed', e) }
+  }
+  window.addEventListener('order:changed', refreshHandler)
+
+  // 清理监听
+  ;(window as any).____orderList_refreshHandler = refreshHandler
 })
+
+onBeforeUnmount(() => {
+  const h = (window as any).____orderList_refreshHandler
+  if (h) window.removeEventListener('order:changed', h)
+})
+
+// 获取当前商家 id（用于前端二次防御过滤）
+;(async () => {
+  try {
+    const r: any = await getMerchantProfile()
+    if (r && r.data && Number(r.data.code) === 1 && r.data.data) {
+      currentMerchantId.value = r.data.data.id || r.data.data.ID || r.data.data.merchant_id || r.data.data.merchantId || null
+    }
+  } catch (e) {
+    // 忽略：后端应已在服务端进行过滤
+  }
+})()
 
 // 获取订单数据
 async function getOrderListData(s: number) {
@@ -458,9 +530,21 @@ async function getOrderListData(s: number) {
     status: s,
   }
   try {
-    const data = await getOrderDetailPage(params)
-    // 保持原始响应结构的使用方式（和之前一致）
-    orderData.value = data?.data?.data?.items || []
+    const data = await getOrderDetailPageCoalesced(params)
+    // 保持原始响应结构的使用方式（并做一次字段规范化，确保每条都有 id/orderId/orderid）
+    const rawItems = data?.data?.data?.items || []
+    orderData.value = rawItems.map((it: any) => {
+      const idVal = Number(it.id ?? it.ID ?? it.orderId ?? it.orderID ?? it.orderid ?? it.order_id ?? 0)
+      const orderIdVal = it.orderId ?? it.orderid ?? it.orderID ?? it.id ?? idVal
+      const deliveryAmount = it.deliveryAmount ?? it.delivery_amount ?? it.deliveryFee ?? it.delivery_fee ?? it.deliveryFee
+      return Object.assign({}, it, {
+        id: idVal,
+        orderId: orderIdVal,
+        orderid: orderIdVal,
+        amount: (it.amount ?? it.totalPrice ?? it.total_price ?? 0),
+        deliveryAmount: deliveryAmount,
+      })
+    })
     console.log("表格数据 =", orderData.value)
     counts.value = data?.data?.data?.total || 0
     emit('getOrderListBy3Status')
@@ -490,11 +574,13 @@ function orderAcceptFn(rowItem: any, event?: Event) {
   dialogOrderStatus.value = rowItem.status
   orderAccept({ id: orderId.value })
     .then((res: any) => {
-      if (res.data.code === 1) {
+        if (Number(res.data.code) === 1) {
         proxy.$message.success('操作成功')
+        const emittedId = orderId.value
         orderId.value = ''
         dialogVisible.value = false
-        getOrderListData(status.value)
+        // 广播变化，使用统一去抖 helper 刷新列表（避免重复请求）
+        try { emitOrderChanged({ orderId: emittedId }) } catch (e) {}
       } else {
         proxy.$message.error(res.data.msg)
       }
@@ -544,11 +630,12 @@ function confirmCancel() {
 
   fn(payload)
     .then((res: any) => {
-      if (res.data.code === 1) {
+        if (Number(res.data.code) === 1) {
         proxy.$message.success('操作成功')
         cancelDialogVisible.value = false
+        const emittedId = orderId.value
         orderId.value = ''
-        getOrderListData(status.value)
+        try { emitOrderChanged({ orderId: emittedId }) } catch (e) {}
       } else {
         proxy.$message.error(res.data.msg)
       }
@@ -568,11 +655,12 @@ function cancelOrDeliveryOrComplete(s: number, id: string, event?: Event) {
   const fn = s === 3 ? deliveryOrder : completeOrder
   fn(params)
     .then((res: any) => {
-      if (res.data.code === 1) {
+        if (Number(res.data.code) === 1) {
         proxy.$message.success('操作成功')
+        const emittedId = orderId.value
         orderId.value = ''
         dialogVisible.value = false
-        getOrderListData(status.value)
+        try { emitOrderChanged({ orderId: emittedId }) } catch (e) {}
       } else {
         proxy.$message.error(res.data.msg)
       }
@@ -592,8 +680,30 @@ async function goDetail(id: any, s: number, r: any, event?: Event) {
   console.log("rowItem.id =", id)
   try {
     const { data } = await queryOrderDetailById({ orderId: id })
-    diaForm.value = data.data
-    row.value = r
+    const raw = data.data || {}
+    // Normalize returned payload to modal fields
+    const idVal = raw.id ?? raw.ID ?? raw.orderId ?? raw.orderID ?? raw.orderid ?? raw.orderNo ?? raw.number
+    const numberVal = raw.number ?? raw.orderNo ?? raw.orderNumber ?? raw.orderId ?? idVal
+    const amountVal = Number(raw.amount ?? raw.totalPrice ?? raw.totalprice ?? raw.total_price ?? 0)
+    const orderDetailListVal = raw.orderDetailList ?? raw.orderDetails ?? raw.items ?? raw.details ?? []
+    const packAmount = Number(raw.packAmount ?? raw.pack_amount ?? raw.packamount ?? 0)
+    const deliveryAmount = Number(raw.deliveryAmount ?? raw.delivery_amount ?? raw.deliveryFee ?? raw.delivery_fee ?? raw.delivery ?? 0)
+    const checkoutTime = raw.checkoutTime ?? raw.payTime ?? raw.pay_time ?? raw.pay_at ?? raw.PayAt
+    const expected = raw.expected_time ?? raw.expectedTime ?? raw.estimatedDeliveryTime ?? raw.expectedtime
+    const deliveryTime = raw.deliveryTime ?? raw.deliverAt ?? raw.finishAt
+    diaForm.value = Object.assign({}, raw, {
+      id: idVal,
+      orderid: numberVal,
+      number: numberVal,
+      amount: amountVal,
+      orderDetailList: orderDetailListVal,
+      packAmount: packAmount,
+      deliveryAmount: deliveryAmount,
+      checkoutTime: checkoutTime,
+      expectedDeliveryTime: expected,
+      deliveryTime: deliveryTime,
+    })
+    row.value = r || { id: idVal, status: s }
   } catch (err: any) {
     proxy.$message.error('请求出错了：' + err.message)
   }
@@ -673,6 +783,14 @@ function handleCurrentChange(val: any) {
     font-weight: bold;
     display: inline-block;
   }
+}
+
+.jd-logo {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  vertical-align: middle;
+  margin-right: 8px;
 }
 
 .order-middle {
@@ -928,18 +1046,35 @@ function handleCurrentChange(val: any) {
     padding-left: 30px;
   }
   td.operate .cell {
-    .before,
-    .middle,
-    .after {
-      height: 39px;
-      width: 48px;
-    }
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
   }
-  td.operate .cell,
   td.otherOperate .cell {
     display: flex;
     flex-wrap: nowrap;
     justify-content: center;
+    align-items: center;
+    gap: 8px;
+  }
+  td.operate .cell .before,
+  td.operate .cell .middle,
+  td.operate .cell .after,
+  td.otherOperate .cell .before,
+  td.otherOperate .cell .middle,
+  td.otherOperate .cell .after {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+  /* Ensure buttons don't wrap into multiple lines */
+  td.operate .cell button,
+  td.otherOperate .cell button {
+    white-space: nowrap;
+    padding: 0 6px;
   }
 }
 </style>

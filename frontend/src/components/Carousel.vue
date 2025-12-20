@@ -322,10 +322,10 @@ watch(() => props.images.length, () => {
 
 <style scoped>
 .carousel-wrapper {
-    align-items: center;
+  align-items: center;
   position: relative;
   width: 100%;
-  height: 400px;
+  height: 450px;
   overflow: hidden;
   display: block;
 }
@@ -344,7 +344,7 @@ watch(() => props.images.length, () => {
   transition: all 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   cursor: pointer;
   user-select: none;
-  border-radius: 28px;
+  border-radius: 32px;
   overflow: hidden;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
 }

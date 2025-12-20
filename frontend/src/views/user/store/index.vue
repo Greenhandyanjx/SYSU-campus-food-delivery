@@ -4,7 +4,7 @@
     <div class="hero">
       <div class="hero-inner">
         <div class="logo">
-          <img :src="store.logo || '/src/assets/noImg.png'" alt="logo" />
+          <img :src="safeImage(store.logo || '', noImg)" alt="logo" />
         </div>
         <div class="hero-meta">
           <h1 class="store-name">{{ store.name || '店铺名称' }}</h1>
@@ -16,6 +16,48 @@
             <span>{{ store.minOrder ? `起送 ¥${store.minOrder}` : '无起送' }}</span>
           </div>
         </div>
+        <el-dialog v-model="showPreview" width="640px">
+          <template #title>
+            <span v-if="previewType === 'dish'">菜品详情</span>
+            <span v-else>套餐详情</span>
+          </template>
+          <div v-if="previewType === 'dish' && previewItem">
+            <div style="display:flex;gap:16px;align-items:flex-start">
+              <img :src="safeImage(previewItem.image || '', noImg)" style="width:160px;height:120px;object-fit:cover;border-radius:6px" />
+              <div>
+                <h3>{{ previewItem.name }}</h3>
+                <div style="color:#d97706;font-weight:700">¥{{ previewItem.price }}</div>
+                <p style="margin-top:8px">{{ previewItem.desc }}</p>
+                <div style="margin-top:8px">标签：<span v-for="t in previewItem.tags||[]" :key="t" style="margin-right:8px">{{ t }}</span></div>
+              </div>
+            </div>
+          </div>
+          <div v-else-if="previewType === 'meal' && previewItem">
+            <div style="display:flex;gap:16px;align-items:flex-start">
+              <img :src="safeImage(previewItem.image || '', noImg)" style="width:160px;height:120px;object-fit:cover;border-radius:6px" />
+              <div>
+                <h3>{{ previewItem.name }}</h3>
+                <div style="color:#d97706;font-weight:700">¥{{ previewItem.price }}</div>
+                <p style="margin-top:8px">{{ previewItem.desc }}</p>
+              </div>
+            </div>
+            <div style="margin-top:12px">
+              <h4>包含菜品</h4>
+              <ul>
+                <li v-for="(it, i) in previewItem.setmealDishes || []" :key="i" style="display:flex;gap:12px;align-items:center;margin:8px 0">
+                  <img :src="safeImage(it.image || '', noImg)" style="width:60px;height:44px;object-fit:cover;border-radius:4px" />
+                  <div>
+                    <div>{{ it.name }}</div>
+                    <div style="color:#666">数量：{{ it.copies }} · ¥{{ it.price }}</div>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <span slot="footer">
+            <el-button @click="showPreview = false">关闭</el-button>
+          </span>
+        </el-dialog>
       </div>
     </div>
 
@@ -63,8 +105,9 @@
             class="dish-card"
             v-for="(d, idx) in dishesFiltered"
             :key="d.id || idx"
+            @click="openPreview(d)"
           >
-            <img class="thumb" :src="d.image || '/src/assets/noImg.png'" />
+            <img class="thumb" :src="safeImage(d.image || '', noImg)" />
             <div class="dish-info">
               <div class="dish-top">
                 <div class="name">{{ d.name }}</div>
@@ -80,13 +123,13 @@
                     size="mini"
                     circle
                     type="warning"
-                    @click="dec(d)"
+                    @click.stop="dec(d)"
                     :disabled="(d.count || 0) <= 0"
                   >
                     -
                   </el-button>
                   <span class="count">{{ d.count || 0 }}</span>
-                  <el-button size="mini" circle type="warning" @click="add(d)">
+                  <el-button size="mini" circle type="warning" @click.stop="add(d)">
                     +
                   </el-button>
                 </div>
@@ -205,11 +248,15 @@
 <script setup lang="ts">
 import { reactive, ref, computed, onMounted,onBeforeUnmount } from 'vue'
 import qrImg from '@/assets/qrcode.png'
+import noImg from '@/assets/noImg.png'
+import { safeImage } from '@/utils/asset'
+import bgImg from '@/assets/login/img_denglu_bj.jpg'
 import ChatLauncher from '@/components/Chat/ChatLauncher.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getStoreByName, getStoreById, getDishesByStore, addToCart, removeFromCart, getCart, getDeliveryConfig } from '@/api/user/store'
 import * as cartApi from '@/api/user/cart'
+import { ref as vueRef } from 'vue'
 
 /* ------------------ 核心数据定义 ------------------ */
 
@@ -222,6 +269,10 @@ const selectedCategory = ref('all')
 const query = ref('')
 const route = useRoute()
 const router = useRouter()
+// 预览对话状态
+const showPreview = vueRef(false)
+const previewItem = vueRef<any>(null)
+const previewType = vueRef<'dish' | 'meal'>('dish')
 /* ------------------ Demo 数据备用 ------------------ */
 const demoStore = {
   id: 1,
@@ -317,7 +368,7 @@ async function load() {
       logo: data.logo || data.Logo || data.logoUrl,
       desc: data.desc || data.ShopLocation || data.shop_location || data.description,
       shop_location: data.shop_location || data.ShopLocation || data.shop_location,
-      rating: data.rating || 4.8,
+      rating: data.rating ?? data.avg_score ?? data.avgScore ?? (data.merchant && (data.merchant.avg_score ?? data.merchant.AvgScore ?? data.merchant.avgScore)) ?? 4.8,
       minOrder: data.minOrder || data.min_order || data.min_order_value,
       deliveryFee: data.deliveryFee || data.delivery_fee,
       deliveryRange: data.deliveryRange || data.delivery_range,
@@ -363,7 +414,7 @@ async function load() {
           name: d.DishName || d.name,
           price: Number(d.Price || d.price) || 0,
           desc: d.Description || d.desc || '',
-          image: d.ImagePath || d.image || '/src/assets/noImg.png',
+          image: safeImage(d.ImagePath || d.image || noImg, noImg),
           categoryId: cid,
           category: label,
           tags: d.Tags || d.tags || [],
@@ -381,7 +432,7 @@ async function load() {
             name: d.DishName || d.name,
             price: Number(d.Price || d.price) || 0,
             desc: d.Description || d.desc || '',
-            image: d.ImagePath || d.image || '/src/assets/noImg.png',
+            image: safeImage(d.ImagePath || d.image || noImg, noImg),
             categoryId: cid,
             category: label,
             tags: d.Tags || d.tags || [],
@@ -392,14 +443,17 @@ async function load() {
       }
       if (Array.isArray(dd.meals)) {
         const mealsMapped = dd.meals.map((m: any) => {
-          const cid = Number(m.Category || m.category) || undefined
+          // support different backend field names: Category / category / categoryId
+          const cid = Number(m.Category || m.category || m.categoryId) || undefined
           const label = cid && categoryLabels[cid] ? categoryLabels[cid] : (m.Category || m.category || '套餐')
           return {
             id: 'm-' + (m.ID || m.id),
             name: m.Mealname || m.name,
             price: Number(m.Price || m.price) || 0,
             desc: m.Description || m.desc || '',
-            image: m.ImagePath || m.image || '/src/assets/noImg.png',
+            image: safeImage(m.ImagePath || m.image || noImg, noImg),
+            // include setmeal dishes returned by backend (dishId, name, price, image, copies)
+            setmealDishes: Array.isArray(m.setmealDishes) ? m.setmealDishes : (m.setmeal_dishes || []),
             categoryId: cid,
             category: label,
             tags: m.Tags || ['套餐'],
@@ -412,12 +466,50 @@ async function load() {
     }
 
     dishes.value = dishesArr
+    // 如果后端在 dishes 接口内返回了 merchant 聚合信息，优先使用其评分字段覆盖 store.rating
+    try {
+      const maybeMerchant = dd.merchant || dd.Merchant || dd.merchant_info || dd.merchantInfo
+      if (maybeMerchant) {
+        store.value.rating = maybeMerchant.avg_score ?? maybeMerchant.avgScore ?? maybeMerchant.AvgScore ?? store.value.rating
+      }
+    } catch (e) {}
     generateCategories()
   } catch (e) {
     console.warn('加载失败，使用Demo数据:', e)
     useDemoData()
     cart.value = []
   }
+}
+
+import { getMealPublicById } from '@/api/user/store'
+
+async function openPreview(d: any) {
+  // 如果是套餐（我们在映射时给套餐 id 前缀 m-），或者有 setmealDishes 字段，则当作套餐
+  const isMeal = String(d.id).startsWith('m-') || Array.isArray(d.setmealDishes)
+  previewType.value = isMeal ? 'meal' : 'dish'
+
+  // 若为套餐且没有包含菜品信息，则调用公共接口按 meal id 拉取套餐包含的菜品
+  if (isMeal) {
+    // 如果 id 带前缀 m-，去掉前缀
+    let mid = String(d.id)
+    if (mid.startsWith('m-')) mid = mid.replace(/^m-/, '')
+    if (!d.setmealDishes || !Array.isArray(d.setmealDishes) || d.setmealDishes.length === 0) {
+      try {
+        const res = await getMealPublicById(mid)
+        const data = res && res.data ? res.data.data || res.data : res
+        if (data) {
+          // 兼容字段名
+          d.setmealDishes = data.setmealDishes || data.setmeal_dishes || []
+        }
+      } catch (e) {
+        console.warn('fetch meal detail failed', e)
+        d.setmealDishes = d.setmealDishes || []
+      }
+    }
+  }
+
+  previewItem.value = d
+  showPreview.value = true
 }
 
 /* ------------------ 辅助函数 ------------------ */
@@ -440,13 +532,25 @@ function generateCategories() {
   }
 
   const cats: any[] = [{ id: 'all', name: '全部', count: dishes.value.length }]
-  // 按固定 1..15 顺序，只有存在菜品的分类才显示
-  for (let i = 1; i <= 15; i++) {
-    const label = categoryLabels[i]
-    const cnt = counts[i] || 0
-    if (cnt > 0) {
-      cats.push({ id: i, name: label, count: cnt })
-    }
+  // 动态基于 counts 生成分类，优先显示 categoryLabels 中已定义的序号
+  const keys = Object.keys(counts)
+    .map(k => (isNaN(Number(k)) ? k : Number(k)))
+    .sort((a, b) => {
+      // numbers first ascending, then strings
+      const na = typeof a === 'number'
+      const nb = typeof b === 'number'
+      if (na && nb) return (a as number) - (b as number)
+      if (na) return -1
+      if (nb) return 1
+      return String(a).localeCompare(String(b))
+    })
+
+  for (const k of keys) {
+    const cnt = counts[k]
+    if (!cnt || cnt <= 0) continue
+    const id = k
+    const label = (typeof k === 'number' && categoryLabels[k]) ? categoryLabels[k] : String(k)
+    cats.push({ id, name: label, count: cnt })
   }
   categories.value = cats
   console.log('aaa:> ', categories)
@@ -722,7 +826,7 @@ function closePayModal() {
 
 /* ------------------ 背景与挂载 ------------------ */
 
-const visualBgUrl = ref('/src/assets/login/img_denglu_bj.jpg')
+const visualBgUrl = ref(bgImg)
 const visualBgStyle = computed(() => ({
   backgroundImage: `url(${visualBgUrl.value})`
 }))

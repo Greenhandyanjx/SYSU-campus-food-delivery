@@ -64,11 +64,15 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
+import { ElMessage } from 'element-plus'
+import chatClient from '@/utils/chatClient'
 import { useRoute, useRouter } from 'vue-router'
 import OrderCard from '@/components/OrderList/OrderCard.vue'
 import orderApi from '@/api/user/order'
 import storeApi from '@/api/user/store'
+import noImg from '@/assets/noImg.png'
+import { safeImage } from '@/utils/asset'
 // Chat handled inside OrderCard via ChatLauncher component
 
 const route = useRoute()
@@ -87,6 +91,41 @@ onMounted(()=>{
   const oq = route.query.oq
   if (oq && typeof oq === 'string') keyword.value = oq
   loadOrders()
+  // 监听全局订单变更，去抖刷新
+  let __user_orders_refresh_timer = null
+  const __user_orders_refresh = (ev) => {
+    try {
+      clearTimeout(__user_orders_refresh_timer)
+      __user_orders_refresh_timer = setTimeout(()=>{
+        loadOrders()
+      }, 500)
+    } catch (e) { console.warn('user order changed handler failed', e) }
+  }
+  window.addEventListener('order:changed', __user_orders_refresh)
+  ;(window).__user_orders_refresh = __user_orders_refresh
+
+  // 监听来自后端的 websocket 订单更新推送（若后端发送 orderId/status）
+  const wsHandler = (msg) => {
+    try {
+      const m = msg || {}
+      // msg 可能是字符串（JSON）或对象
+      let payload = m
+      if (typeof m === 'string') {
+        try { payload = JSON.parse(m) } catch (e) { payload = m }
+      }
+      const orderId = payload && (payload.orderId || payload.order_id || payload.id)
+      if (orderId) {
+        try { window.dispatchEvent(new CustomEvent('order:changed', { detail: { orderId } })) } catch (e) {}
+      }
+    } catch (e) { console.warn('user order ws handler failed', e) }
+  }
+  try { chatClient.onMessage(wsHandler); chatClient.connect() } catch (e) {}
+  window.__user_order_ws_handler = wsHandler
+})
+
+onBeforeUnmount(()=>{
+  try { window.removeEventListener('order:changed', window.__user_orders_refresh) } catch(e){}
+  try { chatClient.offMessage(window.__user_order_ws_handler) } catch (e) {}
 })
 
 watch(()=>route.query.oq, (v)=>{ if (v && typeof v === 'string') keyword.value = v })
@@ -138,7 +177,7 @@ function mapBackendOrder(o) {
         name: it.name || it.dish_name || it.title || '',
         price: it.price || it.unit_price || it.amount || 0,
         count: it.qty || it.count || it.quantity || 1,
-        img: it.image || it.img || it.picture || ''
+        img: safeImage(it.image || it.img || it.picture || '', noImg)
       })
     }
   }
@@ -160,7 +199,7 @@ function mapBackendOrder(o) {
     id: o.id || o.order_no || o.orderNo || '',
     storeId: o.store_id || o.storeId || o.merchant_id || o.merchantId || '',
     storeName: o.store_name || o.storeName || o.shop_name || '',
-    storeLogo: o.store_logo || o.logo || '/src/assets/noImg.png',
+    storeLogo: safeImage(o.store_logo || o.logo, noImg),
     status: statusNum,
     statusText: o.status_text || o.statusText || mapStatusText(statusNum),
     time: formatFriendlyTime(rawTime),
@@ -170,6 +209,12 @@ function mapBackendOrder(o) {
     // keep legacy aliases for safety
     deliveryFee: o.delivery_fee ?? o.deliveryFee ?? o.deliveryAmount ?? o.delivery ?? o.fee ?? 0,
     items
+    ,
+    is_commented: o.is_commented ?? o.isCommented ?? false,
+    reviewed: o.reviewed ?? o.is_commented ?? o.isCommented ?? false,
+    // optional review summary if backend provides
+    merchant_score: o.merchant_score ?? o.merchantScore ?? o.merchant?.avg_score ?? o.merchant?.avgScore ?? null,
+    rider_score: o.rider_score ?? o.riderScore ?? null
   }
 }
 
@@ -212,6 +257,7 @@ async function onCancel(order) {
   try { await orderApi.cancelOrder(order.id) } catch (e) {}
   // set numeric cancelled status
   order.status = 6
+  try { window.dispatchEvent(new CustomEvent('order:changed', { detail: { orderId: order.id } })) } catch (e) {}
   alert('已取消: ' + order.id)
 }
 function onConfirm(order) { order.status='completed'; alert('确认收货: ' + order.id) }
@@ -224,7 +270,14 @@ async function onReorder(order) {
   alert('已加入购物车，前往购物车结算')
   router.push('/user/cart')
 }
-function onReview(order) { alert('去评价: ' + order.id) }
+function onReview(order) {
+  if (!order) return
+  if (order.is_commented || order.isCommented || order.reviewed) {
+    ElMessage.info('该订单已评价')
+    return
+  }
+  router.push(`/user/review/${order.id}`)
+}
 function onViewRefund(order) { alert('查看退款详情: ' + order.id) }
 function openStore(id) { 
   // prefer path-based navigation using numeric id to avoid relying on 'name' param
@@ -238,6 +291,7 @@ function openStore(id) {
 async function onAutoCancel(order) {
   try { await orderApi.cancelOrder(order.id) } catch (e) {}
   order.status = 6
+  try { window.dispatchEvent(new CustomEvent('order:changed', { detail: { orderId: order.id } })) } catch (e) {}
   alert('支付超时，订单已取消：' + order.id)
 }
 function onView(order) { router.push({ path: `/user/order/${order.id}` }) }

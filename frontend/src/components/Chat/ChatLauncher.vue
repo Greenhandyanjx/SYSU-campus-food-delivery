@@ -1,6 +1,9 @@
 <template>
   <div>
-    <button class="chat-launcher" @click.stop="openChat">{{ triggerText }}</button>
+    <button class="chat-launcher" @click.stop="openChat">
+      <img src="/JDlogo.png" alt="嘉递" class="chat-launcher-logo" />
+      <span class="chat-launcher-text">{{ triggerText }}</span>
+    </button>
 
     <teleport to="body">
       <div v-if="showChat" class="chat-overlay" @click.self="closeChat">
@@ -27,7 +30,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import ChatWindow from '@/components/Chat/ChatWindow.vue'
 import { getMerchantDetail, getBaseUserDetail } from '@/api/chat'
 import { ElMessage } from 'element-plus'
@@ -43,6 +46,10 @@ const showChat = ref(false)
 const merchantIdLocal = ref(props.merchantId)
 const merchantNameLocal = ref(props.merchantName)
 const merchantAvatarLocal = ref(props.merchantAvatar)
+
+watch(() => props.merchantId, (v) => { merchantIdLocal.value = v })
+watch(() => props.merchantName, (v) => { merchantNameLocal.value = v })
+watch(() => props.merchantAvatar, (v) => { merchantAvatarLocal.value = v })
 
 const userBaseId = ref(null)
 const userAvatar = ref('')
@@ -94,6 +101,14 @@ function closeChat() {
   cursor: pointer;
   font-size: 10px;
 }
+.chat-launcher-logo {
+  width: 18px;
+  height: 18px;
+  vertical-align: middle;
+  margin-right: 6px;
+  border-radius: 3px;
+}
+.chat-launcher-text { vertical-align: middle }
 .chat-overlay {
   position: fixed;
   inset: 0;

@@ -45,6 +45,26 @@ func ParsePaginationAndTime(c *gin.Context, pageStr, sizeStr, beginStr, endStr s
 func FetchOrders(c *gin.Context, page, size int, beginTime, endTime time.Time, phonestr, numberstr, status string) ([]models.Order, int64, error) {
 	// 构建查询条件
 	query := global.Db.Model(&models.Order{})
+	// 如果请求来自已认证的商家用户（中间件设置了 baseUserID），则根据 merchant.base_id 解析对应 merchant.id 并加入 merchant_id 过滤
+	if baseIf, ok := c.Get("baseUserID"); ok {
+		var baseID uint
+		switch v := baseIf.(type) {
+		case uint:
+			baseID = v
+		case int:
+			baseID = uint(v)
+		case int64:
+			baseID = uint(v)
+		case float64:
+			baseID = uint(v)
+		}
+		if baseID != 0 {
+			var m models.Merchant
+			if err := global.Db.Where("base_id = ?", baseID).First(&m).Error; err == nil {
+				query = query.Where("merchant_id = ?", m.ID)
+			}
+		}
+	}
 	if !beginTime.IsZero() {
 		query = query.Where("created_at >= ?", beginTime)
 	}
@@ -87,13 +107,53 @@ func FetchOrders(c *gin.Context, page, size int, beginTime, endTime time.Time, p
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get order page", "data": nil})
 		return nil, 0, result.Error
 	}
-	// 查询总订单数
+	// 查询总订单数 -- 保持和列表查询一致的过滤条件
 	countQuery := global.Db.Model(&models.Order{})
+	// 复制与上面相同的过滤器
+	if baseIf, ok := c.Get("baseUserID"); ok {
+		var baseID uint
+		switch v := baseIf.(type) {
+		case uint:
+			baseID = v
+		case int:
+			baseID = uint(v)
+		case int64:
+			baseID = uint(v)
+		case float64:
+			baseID = uint(v)
+		}
+		if baseID != 0 {
+			var m models.Merchant
+			if err := global.Db.Where("base_id = ?", baseID).First(&m).Error; err == nil {
+				countQuery = countQuery.Where("merchant_id = ?", m.ID)
+			}
+		}
+	}
 	if !beginTime.IsZero() {
 		countQuery = countQuery.Where("created_at >= ?", beginTime)
 	}
 	if !endTime.IsZero() {
 		countQuery = countQuery.Where("created_at <= ?", endTime)
+	}
+	if numberstr != "" {
+		if num, err := strconv.Atoi(numberstr); err == nil {
+			countQuery = countQuery.Where("ID = ?", num)
+		}
+	}
+	if phonestr != "" {
+		countQuery = countQuery.Where("phone = ?", phonestr)
+	}
+	if status != "" {
+		if stat, err := strconv.Atoi(status); err == nil {
+			// merchant/rider pending handling already done above for query; here mirror the same exclusion
+			path := c.Request.URL.Path
+			if stat == 0 && (strings.Contains(path, "/merchant/") || strings.Contains(path, "/rider/")) {
+				// ensure count is zero as well
+				count = 0
+				return orders, count, nil
+			}
+			countQuery = countQuery.Where("status = ?", stat)
+		}
 	}
 	countQuery.Count(&count)
 	return orders, count, nil
@@ -142,6 +202,8 @@ func CopyOrdersToOrderWithDishnames(orders []models.Order, consigneeMap map[uint
 	for _, srcOrder := range orders {
 		var dstOrder models.OrderWithDishnames
 		dstOrder.ID = srcOrder.ID
+		// ensure merchant id is preserved in the response for frontend secondary filtering
+		dstOrder.MerchantID = srcOrder.MerchantID
 		dstOrder.Ordertime = srcOrder.PickupPoint
 		dstOrder.Dropofpoint = srcOrder.DropofPoint
 		dstOrder.ExpectedTime = srcOrder.ExpectedTime
