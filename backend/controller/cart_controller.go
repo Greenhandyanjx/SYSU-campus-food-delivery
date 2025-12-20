@@ -266,7 +266,7 @@ func AddToCart(c *gin.Context) {
 
 	// 从 map 中读取前端实际传的字段
 	// 解析前端传入的商家标识（兼容多种字段名与类型）
-	var merchantBaseID uint = 0
+	var merchantID uint = 0
 	// 使用文件级别的 resolveUint 帮助函数进行类型解析（保持变量名与逻辑不变）
 
 	var dishID uint
