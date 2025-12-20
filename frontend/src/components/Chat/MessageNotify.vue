@@ -1,14 +1,17 @@
 <template>
-  <div />
-
-  <!-- 全局订单弹窗（商家端） -->
-  <div v-if="orderNotify" class="order-notify">
+  <div>
+    <!-- 全局订单弹窗（商家端） -->
+    <div v-if="orderNotify" class="order-notify">
     <div class="order-notify-card">
-      <div class="order-header">订单提醒 · #{{ orderNotify.orderId }}</div>
+      <div class="order-header">
+        <span>订单提醒 · #{{ orderNotify.orderId }}</span>
+        <span v-if="unacceptedCount > 0" class="pending-inline">未接单：{{ unacceptedCount }}</span>
+      </div>
       <div class="order-body">
-        <div class="row">{{ orderNotify.pickupPoint || '取餐点未知' }} ｜ {{ orderNotify.amount ? '￥' + orderNotify.amount : '' }} ｜ 共 {{ orderNotify.itemCount || 0 }} 件</div>
+        <div class="row">下单时间：{{ formatOrText(orderNotify.pickupPoint) }} ｜ {{ orderNotify.amount ? '￥' + orderNotify.amount : '' }} ｜ 共 {{ orderNotify.itemCount || 0 }} 件</div>
         <div class="row">商品：{{ orderNotify.itemsText || '（详情稍后加载）' }}</div>
         <div class="row">状态：{{ orderNotify.status || '待接单' }}</div>
+        <!-- <div class="row">下单时间：{{ formatOrText(orderNotify.raw && (orderNotify.raw.created_at || orderNotify.raw.createdAt || orderNotify.raw.last_at || orderNotify.raw.lastAt)) }}</div> -->
       </div>
       <div class="order-actions">
         <button class="btn accept" @click="acceptOrder(orderNotify)">接单</button>
@@ -16,21 +19,58 @@
       </div>
     </div>
   </div>
+  </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 import chatClient from '@/utils/chatClient'
 import { ElNotification } from 'element-plus'
 import { getBaseUserDetail } from '@/api/chat'
 import request from '@/api/merchant/request'
 import { useChatStore } from '@/stores/chatStore'
-import { orderAccept } from '@/api/merchant/order'
+import { orderAccept, getOrderListBy } from '@/api/merchant/order'
 
 let currentMerchantId = null
 let currentBaseUserId = null
 const chatStore = useChatStore()
 const orderNotify = ref(null)
+const unacceptedCount = ref(0)
+
+function formatDateToCN(s) {
+  if (!s) return ''
+  const dt = new Date(s)
+  if (isNaN(dt.getTime())) return ''
+  const pad = (n) => String(n).padStart(2, '0')
+  const yyyy = dt.getFullYear()
+  const mm = pad(dt.getMonth() + 1)
+  const dd = pad(dt.getDate())
+  const HH = pad(dt.getHours())
+  const MM = pad(dt.getMinutes())
+  return `${yyyy}年${mm}月${dd}日 ${HH}:${MM}`
+}
+
+function formatOrText(s) {
+  if (s === null || s === undefined) return ''
+  try {
+    if (typeof s === 'string' && (s.includes('T') || /\d{4}-\d{2}-\d{2}/.test(s))) {
+      const dt = new Date(s)
+      if (!isNaN(dt.getTime())) return formatDateToCN(s)
+    }
+    return String(s)
+  } catch (e) { return String(s) }
+}
+
+async function refreshUnacceptedCount() {
+  try {
+    const res = await getOrderListBy({ status: 2, page: 1, size: 1 })
+    if (res && res.data && Number(res.data.code) === 1) {
+      const d = res.data.data || {}
+      unacceptedCount.value = Number(d.total || d.totalCount || 0)
+    }
+  } catch (e) { console.warn('refreshUnacceptedCount failed', e) }
+}
 
 async function handleIncoming(msg) {
   // Expect msg to include merchant_id and content and from_base_id
@@ -119,6 +159,8 @@ async function handleIncoming(msg) {
         try { window.dispatchEvent(new CustomEvent('merchant:order:notify', { detail })) } catch(e) {}
         // 同时在此组件显示全局弹窗（以防原先负责弹窗的组件未挂载）
         try { orderNotify.value = detail } catch(e) {}
+        // 立即本地 +1 未接单（避免延迟刷新）；后续不再自动刷新
+        try { unacceptedCount.value = (Number(unacceptedCount.value) || 0) + 1 } catch (e) {}
         return
       } catch(e) { console.warn('order notify dispatch failed', e) }
     }
@@ -201,6 +243,9 @@ onMounted(() => {
       } catch (e) {}
     }
   }).catch(() => {})
+
+  // 初始化未接单数量
+  try { refreshUnacceptedCount() } catch (e) {}
 })
 
 onBeforeUnmount(() => {
@@ -212,6 +257,7 @@ async function acceptOrder(o) {
   try {
     await orderAccept({ id: Number(o.orderId) || o.orderId })
     orderNotify.value = null
+    try { unacceptedCount.value = Math.max(0, (Number(unacceptedCount.value) || 0) - 1) } catch (e) {}
     try { alert('接单成功: ' + o.orderId) } catch (e) {}
     try { window.dispatchEvent(new CustomEvent('merchant:order:accepted', { detail: { orderId: o.orderId } })) } catch (e) {}
   } catch (e) {
@@ -220,12 +266,44 @@ async function acceptOrder(o) {
   }
 }
 
-function viewOrderDetail(o) {
+const router = useRouter()
+
+async function viewOrderDetail(o) {
   if (!o || !o.orderId) return
+  const orderId = o.orderId
+
+  // 防止短时间内重复派发打开事件（导致重复请求）
   try {
-    window.dispatchEvent(new CustomEvent('merchant:open_order_detail', { detail: { orderId: o.orderId } }))
+    if (window.__merchant_open_order_lock && window.__merchant_open_order_lock === String(orderId)) {
+      return
+    }
+  } catch (e) {}
+    try { window.__merchant_open_order_lock = String(orderId) } catch (e) {}
+  // 自动在 3 秒后解锁，避免死锁
+  setTimeout(() => { try { if (window.__merchant_open_order_lock === String(orderId)) window.__merchant_open_order_lock = null } catch (e) {} }, 3000)
+
+  try {
+    const path = (window.location && window.location.pathname) ? window.location.pathname : ''
+    const isOrdersPage = path.includes('/merchant/order') || path.includes('/merchant/orders')
+    // 使用路由携带参数以便订单页可根据 query 打开对应详情，减少依赖全局事件导致的重复请求
+    const queryPayload = { orderId: orderId, _t: String(Date.now()) }
+    if (!isOrdersPage) {
+      try { await router.push({ path: '/merchant/orders', query: queryPayload }) } catch (e) {}
+      // 给订单页组件短等待时间以保证 mounted 完成
+      await new Promise(res => setTimeout(res, 220))
+    } else {
+      // 在当前订单页仅更新 query，触发页面内部监听
+      try { await router.replace({ path: '/merchant/orders', query: queryPayload }) } catch (e) {}
+      await new Promise(res => setTimeout(res, 120))
+    }
+
+    // 使用路由携带 orderId 打开详情页，避免派发全局事件导致多个组件同时处理
+    try {
+      // 已经通过路由打开，页面会根据 route.query.orderId 打开详情
+      return
+    } catch (e) { console.warn('open_detail_routing failed', e) }
   } catch (e) {
-    try { window.open(`/merchant/order/${o.orderId}`, '_blank') } catch (e) {}
+    try { window.open(`/merchant/orders/${orderId}`, '_blank') } catch (e) {}
   }
 }
 </script>
@@ -254,4 +332,6 @@ function viewOrderDetail(o) {
 .btn { padding: 8px 12px; border-radius:6px; border: none; cursor:pointer }
 .btn.accept { background: #4caf50; color: #fff }
 .btn.view { background:#fff; border:1px solid #ddd }
+
+.pending-inline { margin-left:8px; background:#fff6f6; border:1px solid #ffd6d6; color:#e60000; padding:4px 8px; border-radius:6px; font-weight:600; font-size:12px }
 </style>

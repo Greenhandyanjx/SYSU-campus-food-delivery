@@ -16,9 +16,14 @@
     <!-- 订单通知弹窗（由 WebSocket 推送触发） -->
     <div v-if="orderNotify" class="order-notify">
       <div class="order-notify-card">
-        <div class="order-header">订单提醒 · #{{ orderNotify.orderId }}</div>
+            <div class="order-header">
+              订单提醒 · #{{ orderNotify.orderId }}
+              <span v-if="unacceptedCount" class="pending-count">（未接单：{{ unacceptedCount }}）</span>
+            </div>
         <div class="order-body">
-          <div class="row">{{ orderNotify.pickupPoint || '取餐点未知' }} ｜ {{ orderNotify.amount ? '￥' + orderNotify.amount : '' }} ｜ 共 {{ orderNotify.itemCount || 0 }} 件</div>
+          <div class="row pending-row">未接单数量： <span class="pending-num">{{ unacceptedCount }}</span></div>
+          <div class="row">{{ formatOrText(orderNotify.pickupPoint) }} ｜ {{ orderNotify.amount ? '￥' + orderNotify.amount : '' }} ｜ 共 {{ orderNotify.itemCount || 0 }} 件</div>
+          <div class="row">时间：{{ formatDateToCN(orderNotify.raw && (orderNotify.raw.created_at || orderNotify.raw.createdAt) || orderNotify.last_at || new Date().toISOString()) }}</div>
           <div class="row">商品：{{ orderNotify.itemsText || '（详情稍后加载）' }}</div>
           <div class="row">状态：{{ orderNotify.status || '待接单' }}</div>
         </div>
@@ -55,7 +60,7 @@ import MerchantChatWindow from '@/components/Chat/MerchantChatWindow.vue'
 import { useRouter } from 'vue-router'
 import noImg from '@/assets/noImg.png'
 import request from '@/api/merchant/request'
-import { orderAccept } from '@/api/merchant/order'
+import { orderAccept, getOrderListBy } from '@/api/merchant/order'
 import { getBaseUserDetail } from '@/api/chat'
 import chatClient from '@/utils/chatClient'
 import { useChatStore } from '@/stores/chatStore'
@@ -70,6 +75,7 @@ const merchantAvatarLocal = ref('')
 const isLoading = ref(false) // 添加加载标志，防止重复加载
 const currentMerchantId = ref(null) // 缓存当前商家ID
 const orderNotify = ref(null) // { orderId, amount, pickupPoint, itemsText, itemCount, status, raw }
+const unacceptedCount = ref(0)
 const userNameCache = ref({}) // 缓存用户名称，避免重复请求
 const chatStore = useChatStore()
 const router = useRouter()
@@ -93,6 +99,20 @@ function formatDateToCN(s) {
   const HH = pad(dt.getHours())
   const MM = pad(dt.getMinutes())
   return `${yyyy}年${mm}月${dd}日 ${HH}:${MM}`
+}
+
+function formatOrText(s) {
+  if (s === null || s === undefined) return ''
+  // 如果看起来是 ISO 时间字符串，使用格式化；否则原样返回
+  try {
+    if (typeof s === 'string' && (s.includes('T') || /\d{4}-\d{2}-\d{2}/.test(s))) {
+      const dt = new Date(s)
+      if (!isNaN(dt.getTime())) return formatDateToCN(s)
+    }
+    return String(s)
+  } catch (e) {
+    return String(s)
+  }
 }
 
 async function fetchUserName(userBaseId) {
@@ -169,6 +189,21 @@ async function loadCurrentMerchantId() {
     }
   } catch (e) {
     console.warn('loadCurrentMerchantId failed', e)
+  }
+}
+
+// 刷新未接单数量（使用订单按状态查询接口）
+async function refreshUnacceptedCount() {
+  try {
+    // 使用状态 2 表示“待接单”（与其他页面约定一致）
+    const res = await getOrderListBy({ status: 2, page: 1, size: 1 })
+    if (res && res.data && Number(res.data.code) === 1) {
+      // 支持返回 { data: { total } } 或 { data: { items, total } }
+      const d = res.data.data || {}
+      unacceptedCount.value = Number(d.total || d.totalCount || 0)
+    }
+  } catch (e) {
+    console.warn('refreshUnacceptedCount failed', e)
   }
 }
 
@@ -258,6 +293,8 @@ onMounted(async () => {
   await loadCurrentMerchantId()
   // 初始加载chats（只一次）
   await load()
+  // 初始刷新未接单数量
+  try { await refreshUnacceptedCount() } catch (e) {}
 
   const wrappedHandler = (msg) => {
     // 如果是订单推送（只包含最必要字段）则展示订单弹窗
@@ -281,6 +318,8 @@ onMounted(async () => {
             }
           } catch(e) {}
           orderNotify.value = { orderId, amount, pickupPoint, itemsText, itemCount, status, raw: msg }
+          // 立即本地 +1 未接单，避免延迟刷新带来的异步加 1 问题
+          try { unacceptedCount.value = (Number(unacceptedCount.value) || 0) + 1 } catch (e) {}
         }
       }
     } catch (e) { console.warn('order notify parse failed', e) }
@@ -355,6 +394,7 @@ async function acceptOrder(o) {
     orderNotify.value = null
     try { alert('接单成功: ' + o.orderId) } catch(e){}
     try { emitOrderChanged({ orderId: o.orderId }) } catch (e) {}
+    try { unacceptedCount.value = Math.max(0, (Number(unacceptedCount.value) || 0) - 1) } catch(e) {}
   } catch (e) {
     console.warn('acceptOrder failed', e)
     try { alert('接单失败，请重试') } catch(e){}
@@ -364,11 +404,20 @@ async function acceptOrder(o) {
 function viewOrderDetail(o) {
   if (!o || !o.orderId) return
   try {
-    const ev = new CustomEvent('merchant:open_order_detail', { detail: { orderId: o.orderId } })
-    window.dispatchEvent(ev)
+    // 统一使用路由 query 打开详情（避免全局事件引发多处重复请求）
+    try {
+      const orderId = o.orderId
+      const currentPath = (router && router.currentRoute && router.currentRoute.value && router.currentRoute.value.path) || window.location.pathname
+      const isOrdersPage = currentPath && (currentPath.includes('/merchant/orders') || currentPath.includes('/merchant/order'))
+      const queryPayload = { orderId: orderId, _t: String(Date.now()) }
+      if (!isOrdersPage) {
+        router.push({ path: '/merchant/orders', query: queryPayload }).catch(() => {})
+      } else {
+        router.replace({ path: '/merchant/orders', query: queryPayload }).catch(() => {})
+      }
+    } catch (e) { console.warn('viewOrderDetail routing failed', e) }
   } catch (e) {
-    // fallback to route if dispatching event fails
-    try { router.push({ path: `/merchant/order/${o.orderId}` }) } catch (e) { window.open(`/merchant/order/${o.orderId}`, '_blank') }
+    try { router.push({ path: `/merchant/orders` }) } catch (e) { window.open(`/merchant/orders`, '_blank') }
   }
 }
 
@@ -442,7 +491,10 @@ function viewOrderDetail(o) {
   padding: 12px;
 }
 .order-header { font-weight: 700; margin-bottom: 8px }
+.order-header .pending-count { margin-left: 8px; color: #f56c6c; font-weight: 600 }
 .order-body .row { margin-bottom: 6px; color: #333; font-size: 13px }
+.pending-row { color: #f56c6c; font-weight: 700; margin-bottom: 8px }
+.pending-row .pending-num { color: #f56c6c; }
 .order-actions { display:flex; gap:8px; justify-content:flex-end }
 .btn { padding: 8px 12px; border-radius:6px; border: none; cursor:pointer }
 .btn.accept { background: #4caf50; color: #fff }

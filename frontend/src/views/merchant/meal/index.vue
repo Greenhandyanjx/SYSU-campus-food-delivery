@@ -10,7 +10,7 @@
         />
 
         <label style="margin-right: 5px; margin-left: 15px"> 套餐分类: </label>
-        <el-select v-model="categoryId" placeholder="请选择" style="width: 20%">
+        <el-select v-model="categoryId" placeholder="请选择" style="width: 15%">
           <el-option
             v-for="item in options"
             :key="item.id"
@@ -57,14 +57,14 @@
         <el-table-column label="图片">
           <template #default="{ row }">
             <el-image
-              style="width: 80px; height: 40px; border: none"
+              style="width: 60px; height: 60px; border: none"
               :src="safeImage(row.image, noImg)"
               @error="(e) => imageErrorHandler(e, row)"
             ></el-image>
           </template>
         </el-table-column>
         <el-table-column prop="categoryName" label="套餐分类" />
-        <el-table-column prop="price" label="套餐价" />
+        <el-table-column prop="price" label="套餐价" style="width: 50px;" />
         <el-table-column label="售卖状态">
           <template #default="{ row }">
             <div
@@ -75,7 +75,11 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="UpdatedAt" label="最后操作时间" />
+        <el-table-column label="最后操作时间">
+          <template #default="{ row }">
+            <span>{{ formatDateToCN(row.UpdatedAt || row.updateTime || row.updatedAt || row.updated_at) }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" align="center" width="250px">
           <template #default="{ row }">
             <el-button type="text" size="small" @click="handleEdit(row)">
@@ -161,8 +165,7 @@ function pageQuery() {
   if (merchantId.value) (params as any).merchantId = merchantId.value;
   getSetmealPage(params).then((res: any) => {
     if (Number(res.data.code) === 1) {
-      console.log("套餐列表：", res.data.data);
-      total.value = res.data.data.total || res.data.data.items.length;
+      total.value = res.data.data.total || (res.data.data.items || []).length || 0;
       // Normalize image field names to ensure UI always reads `image`
       const items = (res.data.data.items || []).map((it: any) => ({
         ...it,
@@ -174,10 +177,43 @@ function pageQuery() {
           it.img ||
           "",
       }));
-      records.value = items;
+
+      // Try to fetch category names and map categoryId -> categoryName
+      getCategoryByType({ type: 2 })
+        .then((catRes: any) => {
+          if (Number(catRes.data.code) === 1) {
+            const map: Record<string, string> = {};
+            (catRes.data.data || []).forEach((c: any) => {
+              if (c && c.id !== undefined) map[String(c.id)] = c.name || '';
+            });
+            const normalized = items.map((it: any) => ({
+              ...it,
+              categoryName:
+                it.categoryName || it.category_name || it.category || map[String(it.categoryId || it.category_id || it.category)] || '',
+            }));
+            records.value = normalized;
+          } else {
+            records.value = items;
+          }
+        })
+        .catch(() => {
+          records.value = items;
+        });
     }
-    // 检查每个元素是否有 id 字段
   });
+}
+
+function formatDateToCN(s: any) {
+  if (!s) return '';
+  const dt = new Date(s);
+  if (isNaN(dt.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const yyyy = dt.getFullYear();
+  const mm = pad(dt.getMonth() + 1);
+  const dd = pad(dt.getDate());
+  const HH = pad(dt.getHours());
+  const MM = pad(dt.getMinutes());
+  return `${yyyy}年${mm}月${dd}日 ${HH}:${MM}`;
 }
 
 function handleSizeChange(pSize: number) {
