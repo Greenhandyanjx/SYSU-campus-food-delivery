@@ -9,15 +9,18 @@ import (
 type Order struct {
 	gorm.Model
 
-	Consigneeid int `json:"consigneeid" gorm:"not null"`
+	Consigneeid int  `json:"consigneeid" gorm:"not null"`
+	Userid      uint `json:"userid" gorm:"not null; default:1"`
 
 	PickupPoint  time.Time `json:"pickuppoint" gorm:"type:datetime;not null;default:current_timestamp"`
 	DropofPoint  time.Time `json:"dropofpoint" gorm:"type:datetime;not null;default:current_timestamp"`
 	ExpectedTime time.Time `json:"expectedtime" gorm:"type:datetime;not null;default:current_timestamp"`
 	Status       int       `json:"status" gorm:"not null default:'1'"`
 	TotalPrice   float64   `json:"totalprice" gorm:"not null"`
-	MerchantID   uint      `json:"merchantid" gorm:"not null"`
-	Notes        string    `json:"notes"`
+	// 配送费（订单级别），单位: 元
+	DeliveryFee float64 `json:"delivery_fee" gorm:"type:decimal(8,2);default:2"`
+	MerchantID  uint    `json:"merchantid" gorm:"not null"`
+	Notes       string  `json:"notes"`
 
 	Numberoftableware int `json:"numberoftableware" gorm:"not null default:'0'"`
 
@@ -34,4 +37,6 @@ type Order struct {
 	DeliverAt  *time.Time `json:"deliverAt"`  // 开始配送时间
 	FinishAt   *time.Time `json:"finishAt"`   // 完成时间 （已派送）
 
+	// 是否已评价（用户完成后可对商家/骑手评分），默认 false
+	IsCommented bool `json:"is_commented" gorm:"default:false"`
 }

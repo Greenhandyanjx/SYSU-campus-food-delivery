@@ -20,12 +20,12 @@
     </section>
 
 			<!-- 轮播 banner -->
-<div class="banner-container">
+  <div class="banner-container">
     <Carousel :images="images" :interval="4000" @banner-click="onCategoryClick(images)" />
   </div>
 
 			<!-- 活动卡片 -->
-				<section class="activities">
+				<!-- <section class="activities">
 					<div class="activity" v-for="(a, i) in activities" :key="i">
 						<div class="act-icon" :style="{ backgroundImage: `linear-gradient(135deg, ${a.gradient[0]}, ${a.gradient[1]})` }">
 							<img :src="a.icon" alt="" />
@@ -35,7 +35,7 @@
 							<div class="sub">{{ a.sub }}</div>
 						</div>
 					</div>
-				</section>
+				</section> -->
 
             <!-- 推荐店铺（瀑布流） -->
             <section class="recommend" id="meals">
@@ -126,6 +126,7 @@ import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { addToCart, removeFromCart } from '@/api/user/store'
+import { getCart } from '@/api/user/cart'
 import Carousel from '@/components/Carousel.vue'
 import SearchSuggest from '@/components/SearchSuggest.vue'
 import { Search } from '@element-plus/icons-vue'
@@ -136,7 +137,24 @@ import banner3 from '@/assets/banners/images/banner3.png'
 import banner4 from '@/assets/banners/images/banner4.png'
 import banner5 from '@/assets/banners/images/banner5.png'
 import axios from 'axios'
+import { getDeliveryConfig } from '@/api/user/store'
 import noImg from '@/assets/noImg.png'
+import iconAll from '@/assets/icons/all.svg'
+import iconSetmeal from '@/assets/icons/setmeal.svg'
+import iconNoodle from '@/assets/icons/noodle.svg'
+import iconBurger from '@/assets/icons/burger.svg'
+import iconMilktea from '@/assets/icons/milktea.svg'
+import iconBento from '@/assets/icons/bento.svg'
+import iconBbq from '@/assets/icons/bbq.svg'
+import iconFruit from '@/assets/icons/fruit.svg'
+import iconDessert from '@/assets/icons/dessert.svg'
+import iconStirfry from '@/assets/icons/stirfry.svg'
+import iconRice from '@/assets/icons/rice.svg'
+import iconDelivery from '@/assets/icons/delivery.svg'
+import iconLunch from '@/assets/icons/lunch.svg'
+import iconDiscount from '@/assets/icons/discount.svg'
+import iconSalad from '@/assets/icons/salad.svg'
+import iconAfternoon from '@/assets/icons/afternoon.svg'
 const images = [
   {
     src: banner1,
@@ -187,22 +205,22 @@ const categories = ref([])
 
 // 本地图标映射（以 id 为 key），用于将后端返回的分类 id 映射到前端图标
 const iconMap: Record<number, string> = {
-  0: '/src/assets/icons/all.svg',
-  1: '/src/assets/icons/setmeal.svg',
-  2: '/src/assets/icons/noodle.svg',
-  3: '/src/assets/icons/burger.svg',
-  4: '/src/assets/icons/milktea.svg',
-  5: '/src/assets/icons/bento.svg',
-  6: '/src/assets/icons/bbq.svg',
-  7: '/src/assets/icons/fruit.svg',
-  8: '/src/assets/icons/dessert.svg',
-  9: '/src/assets/icons/stirfry.svg',
-  10: '/src/assets/icons/rice.svg',
-  11: '/src/assets/icons/delivery.svg',
-  12: '/src/assets/icons/lunch.svg',
-  13: '/src/assets/icons/discount.svg',
-  14: '/src/assets/icons/salad.svg',
-  15: '/src/assets/icons/afternoon.svg',
+  0: iconAll,
+  1: iconSetmeal,
+  2: iconNoodle,
+  3: iconBurger,
+  4: iconMilktea,
+  5: iconBento,
+  6: iconBbq,
+  7: iconFruit,
+  8: iconDessert,
+  9: iconStirfry,
+  10: iconRice,
+  11: iconDelivery,
+  12: iconLunch,
+  13: iconDiscount,
+  14: iconSalad,
+  15: iconAfternoon,
 }
 
 // 计算当前激活的分类：优先使用 route.query.cat，其次如果 q 与某个分类 label 相同也视作激活
@@ -295,16 +313,45 @@ async function loadData() {
           id: s.id,
           name: s.name || s.shop_name,
           desc: s.desc || s.shop_location,
-          img: s.logo || '/src/assets/noImg.png',
-          logo: s.logo || '/src/assets/noImg.png',
+          img: s.logo || noImg,
+          logo: s.logo || noImg,
           tags: s.tags || [],
-          rating: s.rating || 4.8,
+          rating: s.rating ?? s.avg_score ?? s.avgScore ?? (s.merchant && (s.merchant.avg_score ?? s.merchant.AvgScore ?? s.merchant.avgScore)) ?? 4.8,
           sales: s.sales || 0,
           minOrder: s.minOrder || 0,
           deliveryFee: s.deliveryFee || 0,
           dishes,
         }
       })
+      // 补充每个商家的配送配置（避免首页显示为 0）
+      try {
+        await Promise.all(stores.value.map(async (st: any) => {
+          const bid = st.id || st.base_id || st.baseId
+          if (!bid) return
+          const r = await getDeliveryConfig(bid)
+          const cfg = r && r.data ? r.data.data || r.data : r
+          st.minOrder = cfg?.min_price ?? cfg?.minPrice ?? st.minOrder ?? 15
+          st.deliveryFee = cfg?.delivery_fee ?? cfg?.deliveryFee ?? st.deliveryFee ?? 2
+        }))
+      } catch (e) { console.warn('fetch delivery configs for stores failed', e) }
+      // 同步用户购物车到首页，用于展示菜品已加入数量
+      try {
+        const cartData = await getCart()
+        const shops = cartData && (cartData.shops || cartData.data || cartData) || []
+        // 重置计数
+        stores.value.forEach((st: any) => st.dishes.forEach((d: any) => (d.count = 0)))
+        for (const sh of (shops || [])) {
+          const sid = sh.storeId || sh.store_id || sh.merchantId || sh.merchant_id || sh.id || sh.base_id
+          const storeMatch = stores.value.find((st: any) => String(st.id) === String(sid) || String(st.base_id) === String(sid) || String(st.id) === String(sh.storeId))
+          if (!storeMatch) continue
+          const items = sh.items || []
+          for (const it of items) {
+            const did = it.dishId || it.dish_id || it.id
+            const dish = storeMatch.dishes.find((x: any) => String(x.id) === String(did))
+            if (dish) dish.count = Number(it.qty || it.Qty || it.qty || 0)
+          }
+        }
+      } catch (e) { console.warn('sync cart to homepage failed', e) }
     } else {
       // 如果返回结构不正确，保持空 stores（不会抛）
       stores.value = []
@@ -335,12 +382,15 @@ const filteredStores = computed(() => {
 
 const addDish = async (store: any, dish: any) => {
   try {
-    // first navigate to store page
-    await router.push('/user/store/' + encodeURIComponent(store.name))
-    // then call addToCart API
+    // First call addToCart so backend/cart is up-to-date, then navigate to store page.
     await addToCart({ storeId: store.id, dishId: dish.id, name: dish.name, price: dish.price, qty: 1 })
+    // optimistic update local UI count
     dish.count = (dish.count || 0) + 1
     ElMessage.success('已加入购物车')
+    // navigate using store id/base_id when available
+    const sid = store.id || store.base_id || store.baseId || store.shop_id || store.shopId
+    if (sid) await router.push('/user/store/' + encodeURIComponent(String(sid)))
+    else await router.push('/user/store/' + encodeURIComponent(store.name))
   } catch (e: any) {
     ElMessage.error('加入购物车失败：' + (e.message || ''))
   }
@@ -349,10 +399,13 @@ const addDish = async (store: any, dish: any) => {
 const decDish = async (store: any, dish: any) => {
   if (!dish.count || dish.count <= 0) return
   try {
-    await router.push('/user/store/' + encodeURIComponent(store.name))
+    // call remove API first, update local count, then navigate
     await removeFromCart({ storeId: store.id, dishId: dish.id, qty: 1 })
-    dish.count--
+    dish.count = Math.max(0, (dish.count || 0) - 1)
     ElMessage.success('已从购物车移除')
+    const sid = store.id || store.base_id || store.baseId || store.shop_id || store.shopId
+    if (sid) await router.push('/user/store/' + encodeURIComponent(String(sid)))
+    else await router.push('/user/store/' + encodeURIComponent(store.name))
   } catch (e: any) {
     ElMessage.error('移除失败：' + (e.message || ''))
   }
@@ -383,8 +436,10 @@ function onSearch() {
 }
 
 function goToStore(s: any) {
-	// 进入店铺详情页（占位）
-	router.push('/user/store/' + encodeURIComponent(s.name))
+  // Prefer numeric id/base_id when available to avoid name-based lookups
+  const sid = s.id || s.base_id || s.baseId || s.shop_id || s.shopId
+  if (sid) router.push('/user/store/' + encodeURIComponent(String(sid)))
+  else router.push('/user/store/' + encodeURIComponent(s.name || s.shop_name || ''))
 }
 
 const scrollToMeals = (smooth = true) => {

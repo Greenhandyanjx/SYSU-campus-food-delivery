@@ -140,3 +140,4 @@ vite.config.ts.timestamp-*
 backend/config/config.yaml
 backend/config/config.yaml
 backend/backend.exe
+backend/backend.exe

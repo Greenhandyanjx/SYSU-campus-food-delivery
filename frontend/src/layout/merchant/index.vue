@@ -66,7 +66,7 @@ export default {
 }
 .page-center-wrapper {
   width: 100%;
-  max-width: 1100px;
+  max-width: 1300px;
   background: #ffffff;
   border-radius: 12px;
   padding: 24px;

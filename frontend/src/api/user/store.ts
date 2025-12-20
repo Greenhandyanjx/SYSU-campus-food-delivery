@@ -20,7 +20,8 @@ export function getStoreById(id: string | number) {
   return request({
     url: '/store/query',
     method: 'get',
-    params: { id },
+    // 兼容后端：同时传递 id 与 base_id（有些后端以 base_id 查找商家）
+    params: { id, base_id: id },
   })
 }
 
@@ -54,6 +55,22 @@ export function getCart(params: any) {
     url: '/user/cart',
     method: 'get',
     params,
+  })
+}
+
+export function getDeliveryConfig(base_id: string | number) {
+  return request({
+    url: '/merchant/delivery_config',
+    method: 'get',
+    params: { base_id },
+  })
+}
+
+export function getMealPublicById(id: string | number) {
+  return request({
+    url: '/store/meal/query',
+    method: 'get',
+    params: { id },
   })
 }
 

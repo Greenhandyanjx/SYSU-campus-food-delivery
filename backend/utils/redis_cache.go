@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"backend/global"
@@ -37,6 +38,7 @@ func GetJSON(ctx context.Context, key string, dest interface{}) (bool, error) {
 	if err := json.Unmarshal([]byte(s), dest); err != nil {
 		return false, err
 	}
+	fmt.Println("Getting key: "+key);
 	return true, nil
 }
 
@@ -50,6 +52,7 @@ func SetJSON(ctx context.Context, key string, value interface{}, ttl time.Durati
 	if err != nil {
 		return err
 	}
+	fmt.Println("Setting key: "+key);
 	return c.Set(ctx, key, b, ttl).Err()
 }
 
@@ -60,4 +63,25 @@ func Del(ctx context.Context, key string) error {
 		return nil
 	}
 	return c.Del(ctx, key).Err()
+}
+
+func ScanAndDeleteKeys(ctx context.Context, pattern string) error {
+    c := redisClient()
+    if c == nil {
+        return nil
+    }
+    fmt.Println("Scanning and deleting keys with pattern: ", pattern)
+    iter := c.Scan(ctx, 0, pattern, 0).Iterator()
+    for iter.Next(ctx) {
+        key := iter.Val()
+		fmt.Println(key);
+        if err := c.Del(ctx, key).Err(); err != nil {
+            return err
+        }
+		
+    }
+    if err := iter.Err(); err != nil {
+        return err
+    }
+    return nil
 }

@@ -4,7 +4,7 @@
     <div class="hero">
       <div class="hero-inner">
         <div class="logo">
-          <img :src="store.logo || '/src/assets/noImg.png'" alt="logo" />
+          <img :src="safeImage(store.logo || '', noImg)" alt="logo" />
         </div>
         <div class="hero-meta">
           <h1 class="store-name">{{ store.name || '店铺名称' }}</h1>
@@ -16,6 +16,48 @@
             <span>{{ store.minOrder ? `起送 ¥${store.minOrder}` : '无起送' }}</span>
           </div>
         </div>
+        <el-dialog v-model="showPreview" width="640px">
+          <template #title>
+            <span v-if="previewType === 'dish'">菜品详情</span>
+            <span v-else>套餐详情</span>
+          </template>
+          <div v-if="previewType === 'dish' && previewItem">
+            <div style="display:flex;gap:16px;align-items:flex-start">
+              <img :src="safeImage(previewItem.image || '', noImg)" style="width:160px;height:120px;object-fit:cover;border-radius:6px" />
+              <div>
+                <h3>{{ previewItem.name }}</h3>
+                <div style="color:#d97706;font-weight:700">¥{{ previewItem.price }}</div>
+                <p style="margin-top:8px">{{ previewItem.desc }}</p>
+                <div style="margin-top:8px">标签：<span v-for="t in previewItem.tags||[]" :key="t" style="margin-right:8px">{{ t }}</span></div>
+              </div>
+            </div>
+          </div>
+          <div v-else-if="previewType === 'meal' && previewItem">
+            <div style="display:flex;gap:16px;align-items:flex-start">
+              <img :src="safeImage(previewItem.image || '', noImg)" style="width:160px;height:120px;object-fit:cover;border-radius:6px" />
+              <div>
+                <h3>{{ previewItem.name }}</h3>
+                <div style="color:#d97706;font-weight:700">¥{{ previewItem.price }}</div>
+                <p style="margin-top:8px">{{ previewItem.desc }}</p>
+              </div>
+            </div>
+            <div style="margin-top:12px">
+              <h4>包含菜品</h4>
+              <ul>
+                <li v-for="(it, i) in previewItem.setmealDishes || []" :key="i" style="display:flex;gap:12px;align-items:center;margin:8px 0">
+                  <img :src="safeImage(it.image || '', noImg)" style="width:60px;height:44px;object-fit:cover;border-radius:4px" />
+                  <div>
+                    <div>{{ it.name }}</div>
+                    <div style="color:#666">数量：{{ it.copies }} · ¥{{ it.price }}</div>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <span slot="footer">
+            <el-button @click="showPreview = false">关闭</el-button>
+          </span>
+        </el-dialog>
       </div>
     </div>
 
@@ -63,8 +105,9 @@
             class="dish-card"
             v-for="(d, idx) in dishesFiltered"
             :key="d.id || idx"
+            @click="openPreview(d)"
           >
-            <img class="thumb" :src="d.image || '/src/assets/noImg.png'" />
+            <img class="thumb" :src="safeImage(d.image || '', noImg)" />
             <div class="dish-info">
               <div class="dish-top">
                 <div class="name">{{ d.name }}</div>
@@ -80,13 +123,13 @@
                     size="mini"
                     circle
                     type="warning"
-                    @click="dec(d)"
+                    @click.stop="dec(d)"
                     :disabled="(d.count || 0) <= 0"
                   >
                     -
                   </el-button>
                   <span class="count">{{ d.count || 0 }}</span>
-                  <el-button size="mini" circle type="warning" @click="add(d)">
+                  <el-button size="mini" circle type="warning" @click.stop="add(d)">
                     +
                   </el-button>
                 </div>
@@ -141,8 +184,9 @@
         <span v-if="store.minOrder && cartTotal > 0" class="gap">还差 ¥{{ (store.minOrder - cartTotal).toFixed(2) }}</span>
       </div>
       <div class="text-top" v-else>
-        <strong>共 ¥{{ cartTotal.toFixed(2) }}</strong>
-      </div>
+            <strong>共 ¥{{ (cartTotal + (store.deliveryFee || 0)).toFixed(2) }}</strong>
+            <span>{{store.deliveryFee?`  配送费 ¥${store.deliveryFee}`:'免配送费'}}</span>
+          </div>
     </div>
   </div>
 
@@ -204,11 +248,15 @@
 <script setup lang="ts">
 import { reactive, ref, computed, onMounted,onBeforeUnmount } from 'vue'
 import qrImg from '@/assets/qrcode.png'
+import noImg from '@/assets/noImg.png'
+import { safeImage } from '@/utils/asset'
+import bgImg from '@/assets/login/img_denglu_bj.jpg'
 import ChatLauncher from '@/components/Chat/ChatLauncher.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getStoreByName, getDishesByStore, addToCart, removeFromCart, getCart } from '@/api/user/store'
+import { getStoreByName, getStoreById, getDishesByStore, addToCart, removeFromCart, getCart, getDeliveryConfig } from '@/api/user/store'
 import * as cartApi from '@/api/user/cart'
+import { ref as vueRef } from 'vue'
 
 /* ------------------ 核心数据定义 ------------------ */
 
@@ -221,6 +269,10 @@ const selectedCategory = ref('all')
 const query = ref('')
 const route = useRoute()
 const router = useRouter()
+// 预览对话状态
+const showPreview = vueRef(false)
+const previewItem = vueRef<any>(null)
+const previewType = vueRef<'dish' | 'meal'>('dish')
 /* ------------------ Demo 数据备用 ------------------ */
 const demoStore = {
   id: 1,
@@ -230,6 +282,7 @@ const demoStore = {
   rating: 4.9,
   deliveryTime: '25~35 分钟',
   minOrder: 15,
+  deliveryFee: 2,
   openTime: '10:30 - 21:00',
   phone: '138-8888-6666',
   bg: '/src/assets/demo/store_bg.jpg'
@@ -290,13 +343,20 @@ const categoryLabels: Record<number, string> = {
 }
 /* ------------------ 页面加载与接口请求 ------------------ */
 async function load() {
-  const name = decodeURIComponent(String(route.params.name || ''))
+  const rawParam = String(route.params.name || '')
+  const name = decodeURIComponent(rawParam)
   if (!name) {
     useDemoData()
     return
   }
   try {
-    const res = await getStoreByName(name)
+    // 如果参数看起来像 numeric id，优先按 id 查询；否则按 name 查询
+    let res: any
+    if (/^\d+$/.test(rawParam)) {
+      res = await getStoreById(rawParam)
+    } else {
+      res = await getStoreByName(name)
+    }
     const data = res && res.data ? res.data.data || res.data : res
     if (!data) throw new Error('无返回数据')
 
@@ -308,12 +368,31 @@ async function load() {
       logo: data.logo || data.Logo || data.logoUrl,
       desc: data.desc || data.ShopLocation || data.shop_location || data.description,
       shop_location: data.shop_location || data.ShopLocation || data.shop_location,
-      rating: data.rating || 4.8,
+      rating: data.rating ?? data.avg_score ?? data.avgScore ?? (data.merchant && (data.merchant.avg_score ?? data.merchant.AvgScore ?? data.merchant.avgScore)) ?? 4.8,
       minOrder: data.minOrder || data.min_order || data.min_order_value,
+      deliveryFee: data.deliveryFee || data.delivery_fee,
+      deliveryRange: data.deliveryRange || data.delivery_range,
       deliveryTime: data.deliveryTime || data.delivery_time,
       openTime: data.openTime || data.open_time,
       phone: data.phone || data.Phone || (data.merchant && (data.merchant.phone || data.merchant.Phone)),
       bg: data.bg || data.background,
+    }
+
+    // 尝试从后端获取商家配送配置（minOrder / deliveryFee / deliveryRange），覆盖可能存在的后端字段
+    try {
+      const b = store.value.id || store.value.base_id || store.value.baseId
+      if (b) {
+        const cfgRes = await getDeliveryConfig(b)
+        const cfg = cfgRes && cfgRes.data ? cfgRes.data.data || cfgRes.data : cfgRes
+        store.value.minOrder = cfg?.min_price ?? cfg?.minPrice ?? store.value.minOrder ?? 15
+        store.value.deliveryFee = cfg?.delivery_fee ?? cfg?.deliveryFee ?? 2
+        store.value.deliveryRange = cfg?.delivery_range ?? cfg?.deliveryRange ?? 2000
+      }
+    } catch (e) {
+      console.warn('fetch delivery config failed', e)
+      store.value.minOrder = store.value.minOrder || 15
+      store.value.deliveryFee = store.value.deliveryFee || 2
+      store.value.deliveryRange = store.value.deliveryRange || 2000
     }
 
     const id = store.value.id
@@ -335,7 +414,7 @@ async function load() {
           name: d.DishName || d.name,
           price: Number(d.Price || d.price) || 0,
           desc: d.Description || d.desc || '',
-          image: d.ImagePath || d.image || '/src/assets/noImg.png',
+          image: safeImage(d.ImagePath || d.image || noImg, noImg),
           categoryId: cid,
           category: label,
           tags: d.Tags || d.tags || [],
@@ -353,7 +432,7 @@ async function load() {
             name: d.DishName || d.name,
             price: Number(d.Price || d.price) || 0,
             desc: d.Description || d.desc || '',
-            image: d.ImagePath || d.image || '/src/assets/noImg.png',
+            image: safeImage(d.ImagePath || d.image || noImg, noImg),
             categoryId: cid,
             category: label,
             tags: d.Tags || d.tags || [],
@@ -364,14 +443,17 @@ async function load() {
       }
       if (Array.isArray(dd.meals)) {
         const mealsMapped = dd.meals.map((m: any) => {
-          const cid = Number(m.Category || m.category) || undefined
+          // support different backend field names: Category / category / categoryId
+          const cid = Number(m.Category || m.category || m.categoryId) || undefined
           const label = cid && categoryLabels[cid] ? categoryLabels[cid] : (m.Category || m.category || '套餐')
           return {
             id: 'm-' + (m.ID || m.id),
             name: m.Mealname || m.name,
             price: Number(m.Price || m.price) || 0,
             desc: m.Description || m.desc || '',
-            image: m.ImagePath || m.image || '/src/assets/noImg.png',
+            image: safeImage(m.ImagePath || m.image || noImg, noImg),
+            // include setmeal dishes returned by backend (dishId, name, price, image, copies)
+            setmealDishes: Array.isArray(m.setmealDishes) ? m.setmealDishes : (m.setmeal_dishes || []),
             categoryId: cid,
             category: label,
             tags: m.Tags || ['套餐'],
@@ -384,12 +466,50 @@ async function load() {
     }
 
     dishes.value = dishesArr
+    // 如果后端在 dishes 接口内返回了 merchant 聚合信息，优先使用其评分字段覆盖 store.rating
+    try {
+      const maybeMerchant = dd.merchant || dd.Merchant || dd.merchant_info || dd.merchantInfo
+      if (maybeMerchant) {
+        store.value.rating = maybeMerchant.avg_score ?? maybeMerchant.avgScore ?? maybeMerchant.AvgScore ?? store.value.rating
+      }
+    } catch (e) {}
     generateCategories()
   } catch (e) {
     console.warn('加载失败，使用Demo数据:', e)
     useDemoData()
     cart.value = []
   }
+}
+
+import { getMealPublicById } from '@/api/user/store'
+
+async function openPreview(d: any) {
+  // 如果是套餐（我们在映射时给套餐 id 前缀 m-），或者有 setmealDishes 字段，则当作套餐
+  const isMeal = String(d.id).startsWith('m-') || Array.isArray(d.setmealDishes)
+  previewType.value = isMeal ? 'meal' : 'dish'
+
+  // 若为套餐且没有包含菜品信息，则调用公共接口按 meal id 拉取套餐包含的菜品
+  if (isMeal) {
+    // 如果 id 带前缀 m-，去掉前缀
+    let mid = String(d.id)
+    if (mid.startsWith('m-')) mid = mid.replace(/^m-/, '')
+    if (!d.setmealDishes || !Array.isArray(d.setmealDishes) || d.setmealDishes.length === 0) {
+      try {
+        const res = await getMealPublicById(mid)
+        const data = res && res.data ? res.data.data || res.data : res
+        if (data) {
+          // 兼容字段名
+          d.setmealDishes = data.setmealDishes || data.setmeal_dishes || []
+        }
+      } catch (e) {
+        console.warn('fetch meal detail failed', e)
+        d.setmealDishes = d.setmealDishes || []
+      }
+    }
+  }
+
+  previewItem.value = d
+  showPreview.value = true
 }
 
 /* ------------------ 辅助函数 ------------------ */
@@ -412,13 +532,25 @@ function generateCategories() {
   }
 
   const cats: any[] = [{ id: 'all', name: '全部', count: dishes.value.length }]
-  // 按固定 1..15 顺序，只有存在菜品的分类才显示
-  for (let i = 1; i <= 15; i++) {
-    const label = categoryLabels[i]
-    const cnt = counts[i] || 0
-    if (cnt > 0) {
-      cats.push({ id: i, name: label, count: cnt })
-    }
+  // 动态基于 counts 生成分类，优先显示 categoryLabels 中已定义的序号
+  const keys = Object.keys(counts)
+    .map(k => (isNaN(Number(k)) ? k : Number(k)))
+    .sort((a, b) => {
+      // numbers first ascending, then strings
+      const na = typeof a === 'number'
+      const nb = typeof b === 'number'
+      if (na && nb) return (a as number) - (b as number)
+      if (na) return -1
+      if (nb) return 1
+      return String(a).localeCompare(String(b))
+    })
+
+  for (const k of keys) {
+    const cnt = counts[k]
+    if (!cnt || cnt <= 0) continue
+    const id = k
+    const label = (typeof k === 'number' && categoryLabels[k]) ? categoryLabels[k] : String(k)
+    cats.push({ id, name: label, count: cnt })
   }
   categories.value = cats
   console.log('aaa:> ', categories)
@@ -429,7 +561,7 @@ function generateCategories() {
 // 刷新购物车（仅加载当前店铺相关项并同步到菜品）
 async function refreshCart() {
   try {
-    const storeIdToSend = store.value.base_id || store.value.id
+    const storeIdToSend = store.value.id || store.value.base_id
     const r = await getCart({ storeId: storeIdToSend })
     const data = r && r.data ? r.data.data || r.data : r
     let items: any[] = []
@@ -493,7 +625,8 @@ async function refreshCart() {
 // }
 async function add(d: any) {
   try {
-    const storeIdToSend = store.value.base_id || store.value.id
+    // prefer primary key id when sending to backend
+    const storeIdToSend = store.value.id || store.value.base_id || store.value.baseId
     await addToCart({ storeId: storeIdToSend, dishId: d.id, name: d.name, price: d.price, qty: 1 })
     // 本地乐观更新并刷新购物车以保持一致
     d.count = (d.count || 0) + 1
@@ -507,7 +640,7 @@ async function add(d: any) {
 async function dec(d: any) {
   if ((d.count || 0) <= 0) return
   try {
-    const storeIdToSend = store.value.base_id || store.value.id
+    const storeIdToSend = store.value.id || store.value.base_id || store.value.baseId
     await removeFromCart({ storeId: storeIdToSend, dishId: d.id, qty: 1 })
     d.count = Math.max(0, (d.count || 0) - 1)
     await refreshCart()
@@ -544,6 +677,11 @@ const cartTotal = computed(() => {
   return cart.value.reduce((sum, item) => sum + item.qty * item.price, 0)
 })
 
+// 显示用总价（含配送费）
+const cartTotalWithDelivery = computed(() => {
+  return Number(cartTotal.value || 0) + Number(store.value.deliveryFee || 0)
+})
+
 /* ------------------ 其他UI事件 ------------------ */
 
 function selectCategory(id: string) {
@@ -564,11 +702,85 @@ function openShop() {
 
 async function checkout() {
   if (!(cart.value || []).some((it: any) => !!it.selected)) { ElMessage.warning('请选择要结算的商品'); return }
-  // 将当前店铺被选中的商品存入 sessionStorage，支付页读取并展示
+    try {
+      // Build shops payload from current cart (this view shows single store's cart)
+      const items = (cart.value || []).map((it: any) => ({
+        dishId: it.dishId || it.id || it.dish_id,
+        qty: it.qty || it.count || it.originalQty || 1,
+        price: Number(it.price || it.unitPrice || 0),
+      }))
+
+      if (!items || items.length === 0) {
+        ElMessage.warning('购物车为空，无法结算')
+        return
+      }
+
+      const payload = {
+        shops: [
+          {
+            merchantId: store.value.id || store.value.storeId || store.value.merchant_id,
+            // totalPrice should be items total (exclude delivery), deliveryAmount sent separately
+            totalPrice: Number(cartTotal.value || 0),
+            deliveryAmount: Number(store.value.deliveryFee || store.value.delivery_amount || 0),
+            items,
+          },
+        ],
+      }
+
+      // Call createPending to persist pending orders (same behavior as cart 页面)
+      const res = await cartApi.createPending(payload)
+      const data = res && res.data ? (res.data.data || res.data) : res
+      // Expect returned shape like { orders: [{ id, ... }] } or array of ids
+      // Extract primitive ids robustly from various possible backend shapes
+      const extractId = (o: any) => {
+        if (o == null) return null
+        if (typeof o === 'number') return String(o)
+        if (typeof o === 'string') return o
+        // common fields
+        const candidates = [o.orderId, o.id, o.OrderID, o.order_id, o.OrderId, o.ID]
+        for (const c of candidates) {
+          if (c !== undefined && c !== null) return String(c)
+        }
+        // nested shapes
+        if (o.data && (o.data.id || o.data.orderId)) return String(o.data.id || o.data.orderId)
+        if (o.order && (o.order.id || o.order.orderId)) return String(o.order.id || o.order.orderId)
+        return null
+      }
+
+      const pendingIds: string[] = []
+      if (data) {
+        if (Array.isArray(data)) {
+          for (const o of data) {
+            const id = extractId(o)
+            if (id) pendingIds.push(id)
+          }
+        } else if (Array.isArray(data.orders)) {
+          for (const o of data.orders) {
+            const id = extractId(o)
+            if (id) pendingIds.push(id)
+          }
+        } else {
+          const id = extractId(data) || extractId(data.data)
+          if (id) pendingIds.push(id)
+        }
+      }
+
+      if (pendingIds.length > 0) {
+        try { sessionStorage.setItem('pending_orders', JSON.stringify(pendingIds)) } catch (e) {}
+      }
+
+      // Backend may have removed cart items; refresh local cart
+      await refreshCart()
+
+      // Navigate to checkout/confirm page
+      router.push({ path: '/user/payment/confirm' })
+    } catch (e: any) {
+      ElMessage.error('创建待支付订单失败: ' + (e && e.message ? e.message : '请重试'))
+    }
   const selectedItems = (cart.value || []).filter((it: any) => !!it.selected)
   const payload = [{
-    merchantId: store.value.base_id || store.value.id,
-    storeId: store.value.base_id || store.value.id,
+    merchantId: store.value.id || store.value.base_id,
+    storeId: store.value.id || store.value.base_id,
     name: store.value.name || '',
     items: selectedItems.map((it: any) => ({
       dishId: it.dishId || it.id || it.dish_id,
@@ -614,7 +826,7 @@ function closePayModal() {
 
 /* ------------------ 背景与挂载 ------------------ */
 
-const visualBgUrl = ref('/src/assets/login/img_denglu_bj.jpg')
+const visualBgUrl = ref(bgImg)
 const visualBgStyle = computed(() => ({
   backgroundImage: `url(${visualBgUrl.value})`
 }))

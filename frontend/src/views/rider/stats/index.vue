@@ -1,128 +1,127 @@
 <template>
   <div class="rider-stats">
-    <!-- 顶部导航栏 -->
-    <div class="header-bar">
-      <div class="back-btn" @click="$router.go(-1)">
-        <i class="css-icon back"></i>
+    <!-- 顶部导航 -->
+    <div class="header-nav">
+      <div class="nav-left">
+        <el-button type="text" @click="$router.back()">
+          <i class="css-icon arrow-left"></i>
+        </el-button>
       </div>
-      <h1 class="page-title">数据统计</h1>
-      <div class="export-btn" @click="exportStats">
-        <i class="css-icon download"></i>
-      </div>
-    </div>
-
-    <!-- 时间选择器 -->
-    <div class="time-selector">
-      <div class="time-tabs">
-        <div
-          v-for="tab in timeTabs"
-          :key="tab.value"
-          class="time-tab"
-          :class="{ active: activeTimeTab === tab.value }"
-          @click="switchTimeTab(tab.value)"
-        >
-          {{ tab.label }}
-        </div>
-      </div>
-      <div class="custom-date" v-if="activeTimeTab === 'custom'">
-        <el-date-picker
-          v-model="customDateRange"
-          type="daterange"
-          range-separator="至"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
-          format="YYYY-MM-DD"
-          value-format="YYYY-MM-DD"
-          @change="onCustomDateChange"
-        />
+      <div class="nav-title">数据统计</div>
+      <div class="nav-right">
+        <el-button type="text" @click="refreshData" :loading="refreshing">
+          <i class="css-icon refresh"></i>
+        </el-button>
       </div>
     </div>
 
-    <!-- 核心指标卡片 -->
-    <div class="metrics-cards">
-      <div class="metric-card income">
-        <div class="metric-icon">💰</div>
-        <div class="metric-content">
-          <div class="metric-value">¥{{ statsData.totalIncome.toFixed(2) }}</div>
-          <div class="metric-label">总收入</div>
-          <div class="metric-change" :class="getChangeClass(statsData.incomeChange)">
-            {{ formatChange(statsData.incomeChange) }}
+    <!-- 时间筛选 -->
+    <div class="time-filter">
+      <el-radio-group v-model="timeRange" @change="handleTimeChange">
+        <el-radio-button label="today">今天</el-radio-button>
+        <el-radio-button label="week">本周</el-radio-button>
+        <el-radio-button label="month">本月</el-radio-button>
+      </el-radio-group>
+    </div>
+
+    <!-- 核心数据 -->
+    <div class="core-stats">
+      <div class="stat-card income">
+        <div class="stat-icon">
+          <i class="css-icon wallet"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">¥{{ coreData.totalIncome.toFixed(2) }}</div>
+          <div class="stat-label">总收入</div>
+          <div class="stat-change" :class="{ positive: coreData.incomeChange >= 0 }">
+            {{ coreData.incomeChange >= 0 ? '+' : '' }}{{ coreData.incomeChange }}%
           </div>
         </div>
       </div>
 
-      <div class="metric-card orders">
-        <div class="metric-icon">📦</div>
-        <div class="metric-content">
-          <div class="metric-value">{{ statsData.totalOrders }}</div>
-          <div class="metric-label">完成订单</div>
-          <div class="metric-change" :class="getChangeClass(statsData.ordersChange)">
-            {{ formatChange(statsData.ordersChange) }}
+      <div class="stat-card orders">
+        <div class="stat-icon">
+          <i class="css-icon document"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ coreData.totalOrders }}</div>
+          <div class="stat-label">总订单</div>
+          <div class="stat-change" :class="{ positive: coreData.ordersChange >= 0 }">
+            {{ coreData.ordersChange >= 0 ? '+' : '' }}{{ coreData.ordersChange }}%
           </div>
         </div>
       </div>
 
-      <div class="metric-card time">
-        <div class="metric-icon">⏱️</div>
-        <div class="metric-content">
-          <div class="metric-value">{{ statsData.totalHours }}h</div>
-          <div class="metric-label">工作时长</div>
-          <div class="metric-change" :class="getChangeClass(statsData.hoursChange)">
-            {{ formatChange(statsData.hoursChange) }}
+      <div class="stat-card efficiency">
+        <div class="stat-icon">
+          <i class="css-icon data-analysis"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ coreData.efficiency.toFixed(1) }}单/时</div>
+          <div class="stat-label">配送效率</div>
+          <div class="stat-change" :class="{ positive: coreData.efficiencyChange >= 0 }">
+            {{ coreData.efficiencyChange >= 0 ? '+' : '' }}{{ coreData.efficiencyChange }}%
           </div>
         </div>
       </div>
 
-      <div class="metric-card rating">
-        <div class="metric-icon">⭐</div>
-        <div class="metric-content">
-          <div class="metric-value">{{ statsData.avgRating }}</div>
-          <div class="metric-label">平均评分</div>
-          <div class="metric-change" :class="getChangeClass(statsData.ratingChange)">
-            {{ formatChange(statsData.ratingChange) }}
+      <div class="stat-card rating">
+        <div class="stat-icon">
+          <i class="css-icon star"></i>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ coreData.rating.toFixed(1) }}</div>
+          <div class="stat-label">评分</div>
+          <div class="stat-change" :class="{ positive: coreData.ratingChange >= 0 }">
+            {{ coreData.ratingChange >= 0 ? '+' : '' }}{{ coreData.ratingChange.toFixed(1) }}
           </div>
         </div>
       </div>
     </div>
 
-    <!-- 收入趋势图表 -->
-    <div class="chart-section">
-      <div class="section-header">
-        <h3>收入趋势</h3>
-        <div class="chart-legend">
-          <span class="legend-item">
-            <span class="legend-color order-income"></span>
-            订单收入
-          </span>
-          <span class="legend-item">
-            <span class="legend-color bonus-income"></span>
-            奖励收入
-          </span>
+    <!-- 图表区域 -->
+    <div class="charts-section">
+      <!-- 收入趋势图 -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <h3>收入趋势</h3>
+          <el-radio-group v-model="chartType" size="small">
+            <el-radio-button label="daily">日</el-radio-button>
+            <el-radio-button label="weekly">周</el-radio-button>
+            <el-radio-button label="monthly">月</el-radio-button>
+          </el-radio-group>
         </div>
-      </div>
-      <div class="income-chart">
-        <div class="chart-placeholder">
-          <div class="chart-content">
+        <div class="chart-content">
+          <div class="simple-chart">
             <div class="chart-bars">
               <div
-                v-for="(item, index) in chartData"
+                v-for="(item, index) in incomeData"
                 :key="index"
                 class="chart-bar"
-                :style="{ height: `${(item.total / maxChartValue) * 100}%` }"
+                :style="{ height: `${(item.value / Math.max(...incomeData.map(d => d.value))) * 100}%` }"
               >
-                <div class="bar-tooltip">
-                  <div class="tooltip-content">
-                    <div>{{ item.date }}</div>
-                    <div>收入: ¥{{ item.total.toFixed(2) }}</div>
-                    <div>订单: {{ item.orders }}单</div>
-                  </div>
-                </div>
+                <div class="bar-value">¥{{ item.value }}</div>
+                <div class="bar-label">{{ item.label }}</div>
               </div>
             </div>
-            <div class="chart-labels">
-              <span v-for="(item, index) in chartData" :key="index" class="chart-label">
-                {{ formatChartLabel(item.date) }}
-              </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 订单分布图 -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <h3>订单分布</h3>
+        </div>
+        <div class="chart-content">
+          <div class="distribution-chart">
+            <div class="pie-segment completed" :style="{ width: `${orderDistribution.completed}%` }">
+              <div class="segment-label">已完成</div>
+              <div class="segment-value">{{ orderDistribution.completed }}%</div>
+            </div>
+            <div class="pie-segment cancelled" :style="{ width: `${orderDistribution.cancelled}%` }">
+              <div class="segment-label">已取消</div>
+              <div class="segment-value">{{ orderDistribution.cancelled }}%</div>
             </div>
           </div>
         </div>
@@ -130,133 +129,99 @@
     </div>
 
     <!-- 详细统计 -->
-    <div class="detail-stats">
-      <div class="stats-grid">
-        <!-- 订单统计 -->
-        <div class="stats-card">
-          <h4>订单统计</h4>
-          <div class="stats-list">
-            <div class="stat-item">
-              <span class="stat-label">平均配送时间</span>
-              <span class="stat-value">{{ statsData.avgDeliveryTime }}分钟</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">平均配送距离</span>
-              <span class="stat-value">{{ statsData.avgDistance }}km</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">准时率</span>
-              <span class="stat-value">{{ statsData.onTimeRate }}%</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">好评率</span>
-              <span class="stat-value">{{ statsData.positiveRate }}%</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">接单率</span>
-              <span class="stat-value">{{ statsData.acceptRate }}%</span>
-            </div>
+    <div class="detailed-stats">
+      <div class="stats-group">
+        <h3>工作统计</h3>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <div class="stat-label">在线时长</div>
+            <div class="stat-value">{{ workStats.onlineHours }}h</div>
           </div>
-        </div>
-
-        <!-- 收入分析 -->
-        <div class="stats-card">
-          <h4>收入分析</h4>
-          <div class="stats-list">
-            <div class="stat-item">
-              <span class="stat-label">订单收入</span>
-              <span class="stat-value">¥{{ statsData.orderIncome.toFixed(2) }}</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">奖励收入</span>
-              <span class="stat-value">¥{{ statsData.bonusIncome.toFixed(2) }}</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">平均单收入</span>
-              <span class="stat-value">¥{{ statsData.avgOrderIncome.toFixed(2) }}</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">时收入</span>
-              <span class="stat-value">¥{{ statsData.hourlyIncome.toFixed(2) }}</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">日均收入</span>
-              <span class="stat-value">¥{{ statsData.dailyAvgIncome.toFixed(2) }}</span>
-            </div>
+          <div class="stat-item">
+            <div class="stat-label">工作天数</div>
+            <div class="stat-value">{{ workStats.workDays }}</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">平均配送时间</div>
+            <div class="stat-value">{{ workStats.avgDeliveryTime }}分钟</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">平均配送距离</div>
+            <div class="stat-value">{{ workStats.avgDistance }}km</div>
           </div>
         </div>
       </div>
 
-      <!-- 工作效率 -->
-      <div class="efficiency-section">
-        <h4>工作效率</h4>
-        <div class="efficiency-grid">
-          <div class="efficiency-item">
-            <div class="efficiency-label">在线时长</div>
-            <div class="efficiency-value">{{ statsData.onlineHours }}小时</div>
-            <div class="efficiency-progress">
-              <div class="progress-bar">
-                <div class="progress-fill" :style="{ width: `${(statsData.onlineHours / 12) * 100}%` }"></div>
-              </div>
-              <span class="progress-text">{{ Math.round((statsData.onlineHours / 12) * 100) }}%</span>
+      <div class="stats-group">
+        <h3>评分统计</h3>
+        <div class="rating-breakdown">
+          <div class="rating-item">
+            <span class="rating-label">5星</span>
+            <div class="rating-bar">
+              <div class="rating-fill" :style="{ width: `${ratingStats.fiveStar}%` }"></div>
             </div>
+            <span class="rating-count">{{ ratingStats.fiveStarCount }}</span>
           </div>
-
-          <div class="efficiency-item">
-            <div class="efficiency-label">配送效率</div>
-            <div class="efficiency-value">{{ statsData.deliveryEfficiency }}%</div>
-            <div class="efficiency-progress">
-              <div class="progress-bar">
-                <div class="progress-fill" :style="{ width: `${statsData.deliveryEfficiency}%` }"></div>
-              </div>
-              <span class="progress-text">{{ statsData.deliveryEfficiency }}%</span>
+          <div class="rating-item">
+            <span class="rating-label">4星</span>
+            <div class="rating-bar">
+              <div class="rating-fill" :style="{ width: `${ratingStats.fourStar}%` }"></div>
             </div>
+            <span class="rating-count">{{ ratingStats.fourStarCount }}</span>
           </div>
-
-          <div class="efficiency-item">
-            <div class="efficiency-label">客户满意度</div>
-            <div class="efficiency-value">{{ statsData.customerSatisfaction }}%</div>
-            <div class="efficiency-progress">
-              <div class="progress-bar">
-                <div class="progress-fill" :style="{ width: `${statsData.customerSatisfaction}%` }"></div>
-              </div>
-              <span class="progress-text">{{ statsData.customerSatisfaction }}%</span>
+          <div class="rating-item">
+            <span class="rating-label">3星</span>
+            <div class="rating-bar">
+              <div class="rating-fill" :style="{ width: `${ratingStats.threeStar}%` }"></div>
             </div>
+            <span class="rating-count">{{ ratingStats.threeStarCount }}</span>
+          </div>
+          <div class="rating-item">
+            <span class="rating-label">2星</span>
+            <div class="rating-bar">
+              <div class="rating-fill" :style="{ width: `${ratingStats.twoStar}%` }"></div>
+            </div>
+            <span class="rating-count">{{ ratingStats.twoStarCount }}</span>
+          </div>
+          <div class="rating-item">
+            <span class="rating-label">1星</span>
+            <div class="rating-bar">
+              <div class="rating-fill" :style="{ width: `${ratingStats.oneStar}%` }"></div>
+            </div>
+            <span class="rating-count">{{ ratingStats.oneStarCount }}</span>
           </div>
         </div>
       </div>
 
-      <!-- 排行榜 -->
-      <div class="ranking-section">
-        <h4>排行榜</h4>
-        <div class="ranking-tabs">
-          <div
-            v-for="tab in rankingTabs"
-            :key="tab.value"
-            class="ranking-tab"
-            :class="{ active: activeRankingTab === tab.value }"
-            @click="switchRankingTab(tab.value)"
-          >
-            {{ tab.label }}
+      <div class="stats-group">
+        <h3>效率分析</h3>
+        <div class="efficiency-stats">
+          <div class="efficiency-item">
+            <div class="efficiency-icon">
+              <i class="css-icon timer"></i>
+            </div>
+            <div class="efficiency-content">
+              <div class="efficiency-title">准时率</div>
+              <div class="efficiency-value">{{ efficiencyStats.onTimeRate }}%</div>
+            </div>
           </div>
-        </div>
-
-        <div class="ranking-list">
-          <div
-            v-for="(item, index) in rankingData"
-            :key="item.id"
-            class="ranking-item"
-            :class="{ self: item.isSelf }"
-          >
-            <div class="rank-number" :class="getRankClass(index)">
-              {{ index + 1 }}
+          <div class="efficiency-item">
+            <div class="efficiency-icon">
+              <i class="css-icon map"></i>
             </div>
-            <el-avatar :size="40" :src="item.avatar" />
-            <div class="rider-info">
-              <div class="rider-name">{{ item.name }}</div>
-              <div class="rider-stats">{{ formatRankingValue(item) }}</div>
+            <div class="efficiency-content">
+              <div class="efficiency-title">准时配送数</div>
+              <div class="efficiency-value">{{ efficiencyStats.onTimeCount }}</div>
             </div>
-            <div class="rank-value">{{ formatRankingDisplay(item) }}</div>
+          </div>
+          <div class="efficiency-item">
+            <div class="efficiency-icon">
+              <i class="css-icon award"></i>
+            </div>
+            <div class="efficiency-content">
+              <div class="efficiency-title">好评率</div>
+              <div class="efficiency-value">{{ efficiencyStats.positiveRate }}%</div>
+            </div>
           </div>
         </div>
       </div>
@@ -268,13 +233,13 @@
         <i class="css-icon house"></i>
         <span>首页</span>
       </div>
-      <div class="nav-item" @click="$router.push('/rider/dashboard')">
-        <i class="css-icon data-analysis"></i>
-        <span>工作台</span>
-      </div>
       <div class="nav-item" @click="$router.push('/rider/orders')">
         <i class="css-icon list"></i>
         <span>订单</span>
+      </div>
+      <div class="nav-item active" @click="$router.push('/rider/stats')">
+        <i class="css-icon data-analysis"></i>
+        <span>统计</span>
       </div>
       <div class="nav-item" @click="$router.push('/rider/profile')">
         <i class="css-icon user"></i>
@@ -286,355 +251,258 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import riderApi from '@/api/rider'
 
-// 状态管理
+const router = useRouter()
+
+// 状态数据
 const loading = ref(false)
-const activeTimeTab = ref('week')
-const activeRankingTab = ref('income')
-const customDateRange = ref([])
+const refreshing = ref(false)
+const timeRange = ref('today')
+const chartType = ref('daily')
 
-// 时间选择标签
-const timeTabs = [
-  { label: '今日', value: 'today' },
-  { label: '本周', value: 'week' },
-  { label: '本月', value: 'month' },
-  { label: '自定义', value: 'custom' }
-]
-
-// 排行榜标签
-const rankingTabs = [
-  { label: '收入榜', value: 'income' },
-  { label: '订单榜', value: 'orders' },
-  { label: '效率榜', value: 'efficiency' },
-  { label: '好评榜', value: 'rating' }
-]
-
-// 统计数据
-const statsData = ref({
-  totalIncome: 1280.50,
-  incomeChange: 0.15,
-  totalOrders: 68,
-  ordersChange: 0.08,
-  totalHours: 45,
-  hoursChange: -0.05,
-  avgRating: 4.8,
-  ratingChange: 0.02,
-
-  // 订单统计
-  avgDeliveryTime: 18,
-  avgDistance: 1.2,
-  onTimeRate: 95,
-  positiveRate: 98,
-  acceptRate: 85,
-
-  // 收入分析
-  orderIncome: 1200.00,
-  bonusIncome: 80.50,
-  avgOrderIncome: 18.83,
-  hourlyIncome: 28.46,
-  dailyAvgIncome: 256.10,
-
-  // 工作效率
-  onlineHours: 6.5,
-  deliveryEfficiency: 88,
-  customerSatisfaction: 96
+// 核心数据
+const coreData = ref({
+  totalIncome: 0,
+  totalOrders: 0,
+  efficiency: 0,
+  rating: 0,
+  incomeChange: 0,
+  ordersChange: 0,
+  efficiencyChange: 0,
+  ratingChange: 0
 })
 
-// 图表数据
-const chartData = ref([
-  { date: '11-11', orders: 8, total: 142.50 },
-  { date: '11-12', orders: 10, total: 188.00 },
-  { date: '11-13', orders: 7, total: 125.50 },
-  { date: '11-14', orders: 12, total: 225.00 },
-  { date: '11-15', orders: 9, total: 162.00 },
-  { date: '11-16', orders: 11, total: 198.50 },
-  { date: '11-17', orders: 11, total: 239.00 }
-])
+// 收入数据
+const incomeData = ref([])
 
-// 排行榜数据
-const rankingData = ref([
-  {
-    id: 1,
-    name: '王骑手',
-    avatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
-    income: 3580.50,
-    orders: 186,
-    efficiency: 95,
-    rating: 4.9
-  },
-  {
-    id: 2,
-    name: '李骑手',
-    avatar: 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png',
-    income: 3420.00,
-    orders: 175,
-    efficiency: 92,
-    rating: 4.8,
-    isSelf: true
-  },
-  {
-    id: 3,
-    name: '张骑手',
-    avatar: 'https://cube.elemecdn.com/6/94/4d3ea53c4e4c9b5cc8b5c0b2e3e7dpng.png',
-    income: 3280.75,
-    orders: 168,
-    efficiency: 90,
-    rating: 4.7
+// 订单分布
+const orderDistribution = computed(() => {
+  const total = (orderStats.value.completed || 0) + (orderStats.value.cancelled || 0)
+  if (total === 0) {
+    return { completed: 70, cancelled: 30 } // 默认值
   }
-])
-
-// 计算属性
-const maxChartValue = computed(() => {
-  return Math.max(...chartData.value.map(item => item.total))
+  return {
+    completed: Math.round(((orderStats.value.completed || 0) / total) * 100),
+    cancelled: Math.round(((orderStats.value.cancelled || 0) / total) * 100)
+  }
 })
 
-// 方法定义
-const getChangeClass = (change) => {
-  if (change > 0) return 'positive'
-  if (change < 0) return 'negative'
-  return 'neutral'
-}
+// 工作统计
+const workStats = ref({
+  onlineHours: 0,
+  workDays: 0,
+  avgDeliveryTime: 0,
+  avgDistance: 0
+})
 
-const formatChange = (change) => {
-  if (change > 0) return `↑ ${Math.abs(change * 100).toFixed(1)}%`
-  if (change < 0) return `↓ ${Math.abs(change * 100).toFixed(1)}%`
-  return '持平'
-}
+// 订单统计
+const orderStats = ref({
+  completed: 0,
+  cancelled: 0
+})
 
-const formatChartLabel = (date) => {
-  return date.slice(-2)
-}
+// 评分统计
+const ratingStats = ref({
+  fiveStar: 0,
+  fourStar: 0,
+  threeStar: 0,
+  twoStar: 0,
+  oneStar: 0,
+  fiveStarCount: 0,
+  fourStarCount: 0,
+  threeStarCount: 0,
+  twoStarCount: 0,
+  oneStarCount: 0
+})
 
-const getRankClass = (index) => {
-  if (index === 0) return 'gold'
-  if (index === 1) return 'silver'
-  if (index === 2) return 'bronze'
-  return ''
-}
+// 效率统计
+const efficiencyStats = ref({
+  onTimeRate: 0,
+  onTimeCount: 0,
+  positiveRate: 0
+})
 
-const formatRankingValue = (item) => {
-  switch (activeRankingTab.value) {
-    case 'income':
-      return `${item.orders}单`
-    case 'orders':
-      return `¥${item.income.toFixed(2)}`
-    case 'efficiency':
-      return `${item.rating}分`
-    case 'rating':
-      return `${item.orders}单`
-    default:
-      return ''
-  }
-}
-
-const formatRankingDisplay = (item) => {
-  switch (activeRankingTab.value) {
-    case 'income':
-      return `¥${item.income.toFixed(2)}`
-    case 'orders':
-      return `${item.orders}单`
-    case 'efficiency':
-      return `${item.efficiency}%`
-    case 'rating':
-      return `${item.rating}分`
-    default:
-      return ''
-  }
-}
-
-// 切换时间标签
-const switchTimeTab = (tab) => {
-  activeTimeTab.value = tab
-  loadStatsData()
-}
-
-// 切换排行榜标签
-const switchRankingTab = (tab) => {
-  activeRankingTab.value = tab
-  loadRankingData()
-}
-
-// 自定义日期变化
-const onCustomDateChange = (dates) => {
-  if (dates && dates.length === 2) {
-    loadStatsData()
-  }
-}
-
-// 加载统计数据
-const loadStatsData = async () => {
+// 初始化数据
+const initData = async () => {
   try {
     loading.value = true
 
-    // 根据时间范围设置参数
-    let period = activeTimeTab.value
-    if (period === 'custom') {
-      period = 'week' // 自定义日期暂时使用week参数
+    // 获取月度统计
+    const monthlyResponse = await riderApi.getMonthlyStats()
+    if (monthlyResponse.code === 1 && monthlyResponse.data) {
+      const data = monthlyResponse.data
+
+      coreData.value.totalIncome = data.totalIncome || 0
+      coreData.value.totalOrders = data.totalOrders || 0
+      coreData.value.efficiency = data.efficiency || 0
+      coreData.value.rating = data.rating || 0
+      coreData.value.incomeChange = data.incomeChange || 0
+      coreData.value.ordersChange = data.ordersChange || 0
+      coreData.value.efficiencyChange = data.efficiencyChange || 0
+      coreData.value.ratingChange = data.ratingChange || 0
+    }
+
+    // 获取工作统计
+    const workResponse = await riderApi.getWorkStats({
+      timeRange: timeRange.value
+    })
+    if (workResponse.code === 1 && workResponse.data) {
+      workStats.value = workResponse.data
     }
 
     // 获取收入统计
-    const incomeResponse = await riderApi.getIncomeStats({ period })
+    const incomeResponse = await riderApi.getIncomeStats({
+      timeRange: timeRange.value,
+      chartType: chartType.value
+    })
     if (incomeResponse.code === 1 && incomeResponse.data) {
-      const data = incomeResponse.data
-
-      // 更新核心统计数据
-      statsData.value.totalIncome = data.dailyIncome || data.weeklyIncome || data.monthlyIncome || 0
-      statsData.value.totalOrders = data.completedOrders || 0
+      incomeData.value = incomeResponse.data.chartData || []
     }
 
-    // 获取本周统计数据
-    try {
-      const weeklyResponse = await riderApi.getWeeklyStats()
-      if (weeklyResponse.code === 1 && weeklyResponse.data) {
-        const weekData = weeklyResponse.data
-        statsData.value.weekIncome = weekData.weekIncome || 0
-        statsData.value.weekOrders = weekData.weekOrders || 0
-        statsData.value.totalHours = weekData.onlineHours || 8
-        statsData.value.avgRating = weekData.avgRating || 4.8
-
-        // 计算衍生数据
-        statsData.value.hourlyIncome = statsData.value.weekIncome / (statsData.value.totalHours || 1)
-        statsData.value.avgOrderIncome = statsData.value.weekIncome / (statsData.value.weekOrders || 1)
-        statsData.value.dailyAvgIncome = statsData.value.weekIncome / 7
-      }
-    } catch (e) {
-      console.warn('获取本周统计失败，使用默认值')
+    // 获取订单统计
+    const orderResponse = await riderApi.getOrderHistory({
+      timeRange: timeRange.value,
+      stats: true
+    })
+    if (orderResponse.code === 1 && orderResponse.data) {
+      orderStats.value = orderResponse.data.stats || { completed: 0, cancelled: 0, total: 0 }
     }
 
-    // 获取收入明细用于图表
-    try {
-      const incomeHistoryResponse = await riderApi.getIncomeHistory({
-        page: 1,
-        size: 30,
-        startDate: customDateRange.value[0] || '',
-        endDate: customDateRange.value[1] || ''
-      })
-
-      if (incomeHistoryResponse.code === 1 && incomeHistoryResponse.data?.items) {
-        chartData.value = processChartData(incomeHistoryResponse.data.items)
-      }
-    } catch (e) {
-      console.warn('获取图表数据失败，生成模拟数据')
-      generateMockChartData()
+    // 获取评分统计
+    const ratingResponse = await riderApi.getReviews({
+      timeRange: timeRange.value
+    })
+    if (ratingResponse.code === 1 && ratingResponse.data) {
+      ratingStats.value = ratingResponse.data
     }
 
-    // 更新工作统计数据
-    updateWorkStats()
+    // 获取效率统计
+    const efficiencyResponse = await riderApi.getWeeklyStats()
+    if (efficiencyResponse.code === 1 && efficiencyResponse.data) {
+      efficiencyStats.value = efficiencyResponse.data
+    }
 
   } catch (error) {
-    console.error('加载统计数据失败:', error)
-    ElMessage.error('加载统计数据失败')
-    // 使用Demo数据兜底
-    generateDemoData()
+    console.error('初始化统计数据失败:', error)
+    // 使用Demo数据
+    loadDemoData()
   } finally {
     loading.value = false
   }
 }
 
-// 处理图表数据
-const processChartData = (items) => {
-  const dailyData = {}
-
-  items.forEach(item => {
-    const date = new Date(item.time).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
-    if (!dailyData[date]) {
-      dailyData[date] = { orders: 0, total: 0, orderIncome: 0, bonusIncome: 0 }
-    }
-    dailyData[date].orders += 1
-    dailyData[date].total += item.amount
-    if (item.type === 'order') {
-      dailyData[date].orderIncome += item.amount
-    } else {
-      dailyData[date].bonusIncome += item.amount
-    }
-  })
-
-  return Object.entries(dailyData)
-    .map(([date, data]) => ({ date, ...data }))
-    .slice(-7) // 只显示最近7天
-}
-
-// 生成模拟图表数据
-const generateMockChartData = () => {
-  const days = ['11-11', '11-12', '11-13', '11-14', '11-15', '11-16', '11-17']
-  chartData.value = days.map(date => ({
-    date,
-    orders: Math.floor(Math.random() * 10) + 5,
-    total: Math.floor(Math.random() * 200) + 100,
-    orderIncome: Math.floor(Math.random() * 180) + 80,
-    bonusIncome: Math.floor(Math.random() * 30) + 10
-  }))
-}
-
-// 更新工作统计数据
-const updateWorkStats = () => {
-  // 这些数据可以从更多的API获取，目前使用计算值
-  statsData.value.acceptRate = 85
-  statsData.value.onTimeRate = 95
-  statsData.value.positiveRate = 98
-  statsData.value.avgDeliveryTime = 18
-  statsData.value.avgDistance = 1.2
-  statsData.value.deliveryEfficiency = 88
-  statsData.value.customerSatisfaction = 96
-}
-
-// 生成Demo数据
-const generateDemoData = () => {
-  statsData.value = {
+// 加载Demo数据
+const loadDemoData = () => {
+  // 模拟核心数据
+  coreData.value = {
     totalIncome: 1280.50,
-    incomeChange: 0.15,
-    totalOrders: 68,
-    ordersChange: 0.08,
-    totalHours: 45,
-    hoursChange: -0.05,
-    avgRating: 4.8,
-    ratingChange: 0.02,
+    totalOrders: 125,
+    efficiency: 2.8,
+    rating: 4.8,
+    incomeChange: 15.2,
+    ordersChange: 8.5,
+    efficiencyChange: 5.3,
+    ratingChange: 0.2
+  }
+
+  // 模拟收入数据
+  if (chartType.value === 'daily') {
+    incomeData.value = [
+      { label: '周一', value: 156 },
+      { label: '周二', value: 189 },
+      { label: '周三', value: 234 },
+      { label: '周四', value: 178 },
+      { label: '周五', value: 245 },
+      { label: '周六', value: 167 },
+      { label: '周日', value: 111 }
+    ]
+  } else if (chartType.value === 'weekly') {
+    incomeData.value = [
+      { label: '第1周', value: 856 },
+      { label: '第2周', value: 1240 },
+      { label: '第3周', value: 1089 },
+      { label: '第4周', value: 1567 }
+    ]
+  } else {
+    incomeData.value = [
+      { label: '1月', value: 3200 },
+      { label: '2月', value: 3890 },
+      { label: '3月', value: 4156 },
+      { label: '4月', value: 3789 }
+    ]
+  }
+
+  // 模拟工作统计
+  workStats.value = {
+    onlineHours: 156,
+    workDays: 25,
     avgDeliveryTime: 18,
-    avgDistance: 1.2,
-    onTimeRate: 95,
-    positiveRate: 98,
-    acceptRate: 85,
-    orderIncome: 1200.00,
-    bonusIncome: 80.50,
-    avgOrderIncome: 18.83,
-    hourlyIncome: 28.46,
-    dailyAvgIncome: 256.10,
-    onlineHours: 6.5,
-    deliveryEfficiency: 88,
-    customerSatisfaction: 96,
-    weekIncome: 1280.50,
-    weekOrders: 68
+    avgDistance: 1.2
   }
-  generateMockChartData()
+
+  // 模拟订单统计
+  orderStats.value = {
+    completed: 875,
+    cancelled: 25,
+    total: 900
+  }
+
+  // 模拟评分统计
+  const totalRatings = 1200
+  ratingStats.value = {
+    fiveStar: 85,
+    fourStar: 12,
+    threeStar: 2,
+    twoStar: 0.5,
+    oneStar: 0.5,
+    fiveStarCount: Math.round(totalRatings * 0.85),
+    fourStarCount: Math.round(totalRatings * 0.12),
+    threeStarCount: Math.round(totalRatings * 0.02),
+    twoStarCount: Math.round(totalRatings * 0.005),
+    oneStarCount: Math.round(totalRatings * 0.005)
+  }
+
+  // 模拟效率统计
+  efficiencyStats.value = {
+    onTimeRate: 95.2,
+    onTimeCount: 834,
+    positiveRate: 98.7
+  }
 }
 
-// 加载排行榜数据
-const loadRankingData = async () => {
+// 刷新数据
+const refreshData = async () => {
   try {
-    // TODO: 调用排行榜API
-    // const response = await riderApi.getRankingData(activeRankingTab.value)
-
-    // Demo数据已在前面定义
+    refreshing.value = true
+    await initData()
+    ElMessage.success('刷新成功')
   } catch (error) {
-    console.error('加载排行榜数据失败:', error)
+    ElMessage.error('刷新失败')
+  } finally {
+    refreshing.value = false
   }
 }
 
-// 导出统计
-const exportStats = () => {
-  ElMessage.info('数据导出功能开发中...')
+// 时间范围变化
+const handleTimeChange = () => {
+  initData()
+}
+
+// 收入图表类型变化
+const handleIncomeChartChange = () => {
+  initData()
 }
 
 onMounted(() => {
-  loadStatsData()
-  loadRankingData()
+  initData()
 })
 </script>
 
 <style scoped>
-/* CSS图标 */
+/* CSS图标样式 */
 .css-icon {
   display: inline-block;
   width: 1em;
@@ -644,43 +512,180 @@ onMounted(() => {
   color: inherit;
 }
 
-/* 返回图标 */
-.css-icon.back::before {
+/* 箭头左 */
+.css-icon.arrow-left::before {
   content: '';
   position: absolute;
   top: 50%;
-  left: 50%;
-  transform: translate(-40%, -50%) rotate(-45deg);
+  left: 0;
+  transform: translateY(-50%) rotate(-45deg);
   width: 10px;
   height: 10px;
   border-left: 2px solid currentColor;
   border-bottom: 2px solid currentColor;
 }
 
-/* 下载图标 */
-.css-icon.download::before {
+/* 刷新图标 */
+.css-icon.refresh::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  border-top-color: transparent;
+  animation: rotate 1s linear infinite;
+}
+
+@keyframes rotate {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* 钱包图标 */
+.css-icon.wallet::before {
   content: '';
   position: absolute;
   top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 12px;
+  left: 0;
+  width: 16px;
   height: 12px;
   border: 2px solid currentColor;
   border-radius: 2px;
 }
 
-.css-icon.download::after {
+.css-icon.wallet::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  width: 6px;
+  height: 1px;
+  background: currentColor;
+  border-radius: 1px;
+}
+
+/* 文档图标 */
+.css-icon.document::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 12px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-radius: 2px;
+}
+
+.css-icon.document::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 6px;
+  height: 1px;
+  background: currentColor;
+  box-shadow: 0 2px 0 currentColor, 0 4px 0 currentColor;
+}
+
+/* 数据分析图标 */
+.css-icon.data-analysis::before {
   content: '';
   position: absolute;
   bottom: 0;
+  left: 2px;
+  width: 3px;
+  height: 6px;
+  background: currentColor;
+  border-radius: 1px;
+  box-shadow: 4px 0 0 currentColor, 8px 0 0 currentColor, 12px 0 0 currentColor;
+}
+
+.css-icon.data-analysis::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 2px;
+  width: 3px;
+  height: 10px;
+  background: currentColor;
+  border-radius: 1px;
+  box-shadow: 8px 0 0 currentColor;
+}
+
+/* 星星图标 */
+.css-icon.star::before {
+  content: '';
+  position: absolute;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
-  width: 0;
-  height: 0;
-  border-left: 6px solid transparent;
-  border-right: 6px solid transparent;
-  border-top: 8px solid currentColor;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 12px;
+  background: currentColor;
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+}
+
+/* 计时器图标 */
+.css-icon.timer::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+
+.css-icon.timer::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 6px;
+  height: 2px;
+  background: currentColor;
+}
+
+/* 地图图标 */
+.css-icon.map::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 16px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-radius: 2px;
+}
+
+.css-icon.map::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 3px;
+  height: 3px;
+  background: currentColor;
+  border-radius: 50%;
+  box-shadow: 6px 3px 0 currentColor, 3px 6px 0 currentColor;
+}
+
+/* 奖章图标 */
+.css-icon.award::before {
+  content: '★';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 12px;
+  color: currentColor;
 }
 
 /* 房子图标 */
@@ -709,31 +714,6 @@ onMounted(() => {
   border-bottom: 8px solid currentColor;
 }
 
-/* 数据分析图标 */
-.css-icon.data-analysis::before {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 2px;
-  width: 3px;
-  height: 6px;
-  background: currentColor;
-  border-radius: 1px;
-  box-shadow: 4px 0 0 currentColor, 8px 0 0 currentColor, 12px 0 0 currentColor;
-}
-
-.css-icon.data-analysis::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 2px;
-  width: 3px;
-  height: 10px;
-  background: currentColor;
-  border-radius: 1px;
-  box-shadow: 8px 0 0 currentColor;
-}
-
 /* 列表图标 */
 .css-icon.list::before {
   content: '';
@@ -741,18 +721,6 @@ onMounted(() => {
   top: 0;
   left: 0;
   width: 16px;
-  height: 2px;
-  background: currentColor;
-  border-radius: 1px;
-  box-shadow: 0 4px 0 currentColor, 0 8px 0 currentColor;
-}
-
-.css-icon.list::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 2px;
-  width: 10px;
   height: 2px;
   background: currentColor;
   border-radius: 1px;
@@ -785,13 +753,14 @@ onMounted(() => {
 }
 
 .rider-stats {
-  background: #f5f5f5;
+  background: linear-gradient(to bottom, #FFFDE7, #FFFFFF);
   min-height: 100vh;
   padding-bottom: 60px;
+  font-family: 'PingFang SC', 'Helvetica Neue', sans-serif;
 }
 
-/* 顶部导航栏 */
-.header-bar {
+/* 顶部导航 */
+.header-nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -800,465 +769,333 @@ onMounted(() => {
   color: #333;
 }
 
-.back-btn, .export-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 50%;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.back-btn:hover, .export-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.back-btn .css-icon, .export-btn .css-icon {
-  font-size: 20px;
-  color: #333;
-}
-
-.page-title {
-  margin: 0;
+.nav-title {
   font-size: 18px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
-/* 时间选择器 */
-.time-selector {
+/* 时间筛选 */
+.time-filter {
   padding: 15px;
   background: white;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.time-tabs {
-  display: flex;
-  background: #f5f5f5;
-  border-radius: 20px;
-  padding: 3px;
-  margin-bottom: 10px;
-}
-
-.time-tab {
-  flex: 1;
-  padding: 8px 0;
-  font-size: 14px;
-  color: #666;
-  text-align: center;
-  cursor: pointer;
-  border-radius: 17px;
-  transition: all 0.3s ease;
-}
-
-.time-tab.active {
-  background: #FFD700;
-  color: white;
-}
-
-.custom-date {
-  display: flex;
-  justify-content: center;
-}
-
-/* 核心指标卡片 */
-.metrics-cards {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 15px;
-  padding: 15px;
-}
-
-.metric-card {
-  display: flex;
-  align-items: center;
-  padding: 20px;
-  background: white;
+  margin: 10px;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  text-align: center;
 }
 
-.metric-icon {
-  font-size: 32px;
-  margin-right: 15px;
+/* 核心数据 */
+.core-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  padding: 0 15px;
 }
 
-.metric-content {
+.stat-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.stat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: white;
+  flex-shrink: 0;
+}
+
+.stat-card.income .stat-icon {
+  background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+}
+
+.stat-card.orders .stat-icon {
+  background: linear-gradient(135deg, #409EFF 0%, #1890ff 100%);
+}
+
+.stat-card.efficiency .stat-icon {
+  background: linear-gradient(135deg, #67C23A 0%, #52c41a 100%);
+}
+
+.stat-card.rating .stat-icon {
+  background: linear-gradient(135deg, #E6A23C 0%, #ffa502 100%);
+}
+
+.stat-content {
   flex: 1;
 }
 
-.metric-value {
+.stat-value {
   font-size: 24px;
   font-weight: bold;
   color: #333;
   margin-bottom: 4px;
 }
 
-.metric-label {
+.stat-label {
   font-size: 14px;
   color: #666;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
-.metric-change {
+.stat-change {
   font-size: 12px;
-  font-weight: 500;
+  color: #f56c6c;
 }
 
-.metric-change.positive {
-  color: #67C23A;
+.stat-change.positive {
+  color: #67c23a;
 }
 
-.metric-change.negative {
-  color: #F56C6C;
+/* 图表区域 */
+.charts-section {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  padding: 0 15px;
 }
 
-.metric-change.neutral {
-  color: #999;
-}
-
-/* 图表部分 */
-.chart-section {
-  margin: 15px;
+.chart-card {
   background: white;
   border-radius: 12px;
   padding: 20px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.section-header {
+.chart-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
 }
 
-.section-header h3 {
+.chart-header h3 {
   margin: 0;
   font-size: 16px;
   color: #333;
 }
 
-.chart-legend {
-  display: flex;
-  gap: 15px;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  color: #666;
-}
-
-.legend-color {
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-}
-
-.legend-color.order-income {
-  background: #409EFF;
-}
-
-.legend-color.bonus-income {
-  background: #E6A23C;
-}
-
-.income-chart {
+.chart-content {
   height: 200px;
 }
 
-.chart-placeholder {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.chart-content {
+/* 柱状图 */
+.simple-chart {
   width: 100%;
   height: 100%;
-  position: relative;
 }
 
 .chart-bars {
   display: flex;
   align-items: flex-end;
-  justify-content: space-between;
-  height: 150px;
-  padding: 0 10px;
+  justify-content: space-around;
+  height: 100%;
+  gap: 5px;
 }
 
 .chart-bar {
   flex: 1;
-  max-width: 40px;
-  background: linear-gradient(to top, #409EFF, #67C23A);
+  max-width: 60px;
+  background: linear-gradient(to top, #409EFF, #1890ff);
   border-radius: 4px 4px 0 0;
-  margin: 0 2px;
   position: relative;
-  cursor: pointer;
-}
-
-.bar-tooltip {
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  opacity: 0;
-  visibility: hidden;
-  transition: all 0.3s ease;
-  z-index: 10;
-}
-
-.chart-bar:hover .bar-tooltip {
-  opacity: 1;
-  visibility: visible;
-}
-
-.tooltip-content {
-  background: rgba(0, 0, 0, 0.8);
-  color: white;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.chart-labels {
   display: flex;
-  justify-content: space-between;
-  padding: 10px;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  padding-top: 8px;
+}
+
+.bar-value {
   font-size: 12px;
+  color: #333;
+  font-weight: 500;
+}
+
+.bar-label {
+  font-size: 11px;
   color: #666;
+  margin-top: 4px;
+}
+
+/* 饼图 */
+.distribution-chart {
+  width: 100%;
+  height: 60px;
+  border-radius: 30px;
+  overflow: hidden;
+  display: flex;
+  position: relative;
+}
+
+.pie-segment {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  font-size: 12px;
+  color: white;
+  font-weight: 500;
+}
+
+.pie-segment.completed {
+  background: linear-gradient(135deg, #67C23A 0%, #52c41a 100%);
+}
+
+.pie-segment.cancelled {
+  background: linear-gradient(135deg, #F56C6C 0%, #ff4757 100%);
+}
+
+.segment-label {
+  position: absolute;
+  left: 8px;
+  font-size: 10px;
+}
+
+.segment-value {
+  font-size: 11px;
+  margin-left: 4px;
 }
 
 /* 详细统计 */
-.detail-stats {
+.detailed-stats {
   padding: 0 15px;
+}
+
+.stats-group {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 15px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.stats-group h3 {
+  margin: 0 0 15px 0;
+  font-size: 16px;
+  color: #333;
 }
 
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 15px;
-  margin-bottom: 15px;
-}
-
-.stats-card {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.stats-card h4 {
-  margin: 0 0 15px 0;
-  font-size: 16px;
-  color: #333;
-  padding-bottom: 10px;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.stats-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
 }
 
 .stat-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  text-align: center;
+  padding: 10px;
+  background: #f8f9fa;
+  border-radius: 8px;
 }
 
-.stat-label {
-  font-size: 14px;
+.stat-item .stat-label {
+  font-size: 12px;
   color: #666;
+  margin-bottom: 8px;
+  display: block;
 }
 
-.stat-value {
-  font-size: 14px;
-  font-weight: 500;
-  color: #333;
-}
-
-/* 工作效率 */
-.efficiency-section {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  margin-bottom: 15px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.efficiency-section h4 {
-  margin: 0 0 20px 0;
+.stat-item .stat-value {
   font-size: 16px;
+  font-weight: 600;
   color: #333;
 }
 
-.efficiency-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.efficiency-item {
+/* 评分统计 */
+.rating-breakdown {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.efficiency-label {
-  font-size: 14px;
-  color: #666;
-}
-
-.efficiency-value {
-  font-size: 18px;
-  font-weight: bold;
-  color: #FFD700;
-}
-
-.efficiency-progress {
+.rating-item {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.progress-bar {
+.rating-label {
+  width: 30px;
+  font-size: 13px;
+  color: #666;
+}
+
+.rating-bar {
   flex: 1;
   height: 8px;
   background: #f0f0f0;
   border-radius: 4px;
   overflow: hidden;
+  position: relative;
 }
 
-.progress-fill {
+.rating-fill {
   height: 100%;
   background: linear-gradient(90deg, #FFD700, #FFA500);
   border-radius: 4px;
   transition: width 0.3s ease;
 }
 
-.progress-text {
-  font-size: 12px;
+.rating-count {
+  width: 30px;
+  font-size: 13px;
   color: #666;
-  min-width: 35px;
+  text-align: right;
 }
 
-/* 排行榜 */
-.ranking-section {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  margin-bottom: 15px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.ranking-section h4 {
-  margin: 0 0 15px 0;
-  font-size: 16px;
-  color: #333;
-}
-
-.ranking-tabs {
-  display: flex;
-  background: #f5f5f5;
-  border-radius: 8px;
-  padding: 4px;
-  margin-bottom: 20px;
-}
-
-.ranking-tab {
-  flex: 1;
-  padding: 8px 0;
-  font-size: 14px;
-  color: #666;
-  text-align: center;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: all 0.3s ease;
-}
-
-.ranking-tab.active {
-  background: #FFD700;
-  color: white;
-}
-
-.ranking-list {
+/* 效率统计 */
+.efficiency-stats {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.ranking-item {
+.efficiency-item {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 12px;
-  border-radius: 8px;
   background: #f8f9fa;
-  transition: all 0.3s ease;
+  border-radius: 8px;
 }
 
-.ranking-item.self {
-  background: linear-gradient(135deg, #fff9e6, #fff7e6);
-  border: 1px solid #FFD700;
-}
-
-.rank-number {
-  width: 30px;
-  height: 30px;
+.efficiency-icon {
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
-  font-weight: bold;
-  background: #e9ecef;
-  color: #666;
-}
-
-.rank-number.gold {
-  background: linear-gradient(135deg, #FFD700, #FFA500);
+  background: #409EFF;
   color: white;
+  font-size: 18px;
 }
 
-.rank-number.silver {
-  background: linear-gradient(135deg, #C0C0C0, #808080);
-  color: white;
-}
-
-.rank-number.bronze {
-  background: linear-gradient(135deg, #CD7F32, #8B4513);
-  color: white;
-}
-
-.rider-info {
+.efficiency-content {
   flex: 1;
 }
 
-.rider-name {
+.efficiency-title {
   font-size: 14px;
-  font-weight: 500;
-  color: #333;
-  margin-bottom: 2px;
-}
-
-.rider-stats {
-  font-size: 12px;
   color: #666;
+  margin-bottom: 4px;
 }
 
-.rank-value {
+.efficiency-value {
   font-size: 16px;
-  font-weight: bold;
-  color: #FFD700;
+  font-weight: 600;
+  color: #333;
 }
 
 /* 底部导航 */
@@ -1300,9 +1137,38 @@ onMounted(() => {
 
 /* 响应式设计 */
 @media (max-width: 375px) {
-  .metrics-cards {
+  .core-stats {
     grid-template-columns: 1fr;
-    gap: 10px;
+    gap: 8px;
+    padding: 0 10px;
+  }
+
+  .stat-card {
+    padding: 15px;
+  }
+
+  .stat-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
+
+  .stat-value {
+    font-size: 20px;
+  }
+
+  .charts-section {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 0 10px;
+  }
+
+  .chart-card {
+    padding: 15px;
+  }
+
+  .detailed-stats {
+    padding: 0 10px;
   }
 
   .stats-grid {
@@ -1310,13 +1176,24 @@ onMounted(() => {
     gap: 10px;
   }
 
-  .ranking-tabs {
-    flex-wrap: wrap;
+  .rating-item {
+    flex-direction: column;
+    gap: 5px;
+    text-align: center;
   }
 
-  .ranking-tab {
-    flex: 1;
-    min-width: 80px;
+  .efficiency-stats {
+    gap: 8px;
+  }
+
+  .efficiency-item {
+    padding: 8px;
+  }
+
+  .efficiency-icon {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
   }
 }
 </style>

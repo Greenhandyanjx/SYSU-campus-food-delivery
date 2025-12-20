@@ -10,7 +10,7 @@
         />
 
         <label style="margin-right: 5px; margin-left: 15px"> 套餐分类: </label>
-        <el-select v-model="categoryId" placeholder="请选择" style="width: 20%">
+        <el-select v-model="categoryId" placeholder="请选择" style="width: 15%">
           <el-option
             v-for="item in options"
             :key="item.id"
@@ -57,13 +57,14 @@
         <el-table-column label="图片">
           <template #default="{ row }">
             <el-image
-              style="width: 80px; height: 40px; border: none"
-              :src="row.image"
+              style="width: 60px; height: 60px; border: none"
+              :src="safeImage(row.image, noImg)"
+              @error="(e) => imageErrorHandler(e, row)"
             ></el-image>
           </template>
         </el-table-column>
         <el-table-column prop="categoryName" label="套餐分类" />
-        <el-table-column prop="price" label="套餐价" />
+        <el-table-column prop="price" label="套餐价" style="width: 50px;" />
         <el-table-column label="售卖状态">
           <template #default="{ row }">
             <div
@@ -74,12 +75,18 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="UpdatedAt  " label="最后操作时间" />
+        <el-table-column label="最后操作时间">
+          <template #default="{ row }">
+            <span>{{ formatDateToCN(row.UpdatedAt || row.updateTime || row.updatedAt || row.updated_at) }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" align="center" width="250px">
           <template #default="{ row }">
-            <el-button type="text" size="small"> 修改 </el-button>
+            <el-button type="text" size="small" @click="handleEdit(row)">
+              修改
+            </el-button>
             <el-button type="text" size="small" @click="handleStartOrStop(row)">
-              {{ row.status == "1" ? "停售" : "启售" }}
+              {{ Number(row.status) === 1 ? "停售" : "启售" }}
             </el-button>
             <el-button
               type="text"
@@ -106,6 +113,8 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
+import noImg from "@/assets/noImg.png";
+import { safeImage } from "@/utils/asset";
 import { useRouter } from "vue-router";
 import { ElMessageBox, ElMessage } from "element-plus";
 import { getCategoryByType } from "@/api/merchant/category";
@@ -114,6 +123,8 @@ import {
   enableOrDisableSetmeal,
   deleteSetmeal,
 } from "@/api/merchant/setMeal";
+import { getBaseUserDetail } from "@/api/chat";
+import request from "@/api/merchant/request";
 
 const router = useRouter();
 
@@ -123,6 +134,7 @@ const pageSize = ref(10);
 const total = ref(0);
 const records = ref<any[]>([]);
 const options = ref<any[]>([]);
+const merchantId = ref<number | null>(null);
 const categoryId = ref<any>("");
 const statusArr = [
   { value: "0", label: "停售" },
@@ -130,6 +142,17 @@ const statusArr = [
 ];
 const status = ref<any>("");
 const multipleSelection = ref<any[]>([]);
+
+function imageErrorHandler(e: any, row: any) {
+  try {
+    const target = e && e.target ? e.target : null;
+    if (target && target.src && !String(target.src).includes("noImg"))
+      target.src = noImg;
+    if (row) row.image = noImg;
+  } catch (err) {
+    // ignore
+  }
+}
 
 function pageQuery() {
   const params = {
@@ -139,13 +162,58 @@ function pageQuery() {
     status: status.value,
     categoryId: categoryId.value,
   };
+  if (merchantId.value) (params as any).merchantId = merchantId.value;
   getSetmealPage(params).then((res: any) => {
     if (Number(res.data.code) === 1) {
-      console.log("套餐列表：", res.data.data); // ✅ 在 return 之前打印
-      total.value = res.data.data.total || res.data.data.items.length;
-      records.value = res.data.data.items || [];
+      total.value = res.data.data.total || (res.data.data.items || []).length || 0;
+      // Normalize image field names to ensure UI always reads `image`
+      const items = (res.data.data.items || []).map((it: any) => ({
+        ...it,
+        image:
+          it.image ||
+          it.ImagePath ||
+          it.imageUrl ||
+          it.image_path ||
+          it.img ||
+          "",
+      }));
+
+      // Try to fetch category names and map categoryId -> categoryName
+      getCategoryByType({ type: 2 })
+        .then((catRes: any) => {
+          if (Number(catRes.data.code) === 1) {
+            const map: Record<string, string> = {};
+            (catRes.data.data || []).forEach((c: any) => {
+              if (c && c.id !== undefined) map[String(c.id)] = c.name || '';
+            });
+            const normalized = items.map((it: any) => ({
+              ...it,
+              categoryName:
+                it.categoryName || it.category_name || it.category || map[String(it.categoryId || it.category_id || it.category)] || '',
+            }));
+            records.value = normalized;
+          } else {
+            records.value = items;
+          }
+        })
+        .catch(() => {
+          records.value = items;
+        });
     }
   });
+}
+
+function formatDateToCN(s: any) {
+  if (!s) return '';
+  const dt = new Date(s);
+  if (isNaN(dt.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const yyyy = dt.getFullYear();
+  const mm = pad(dt.getMonth() + 1);
+  const dd = pad(dt.getDate());
+  const HH = pad(dt.getHours());
+  const MM = pad(dt.getMinutes());
+  return `${yyyy}年${mm}月${dd}日 ${HH}:${MM}`;
 }
 
 function handleSizeChange(pSize: number) {
@@ -159,7 +227,9 @@ function handleCurrentChange(p: number) {
 }
 
 function handleStartOrStop(row: any) {
-  const newStatus = row.status == 1 ? "off" : "on"; // ✅ 改这里
+  // 后端通常使用数字 0/1 表示状态。这里显式转换并切换。
+  const current = Number(row.status);
+  const newStatus = current === 1 ? 0 : 1;
   const p = {
     id: row.ID,
     status: newStatus,
@@ -169,16 +239,37 @@ function handleStartOrStop(row: any) {
     confirmButtonText: "确定",
     cancelButtonText: "取消",
     type: "warning",
-  }).then(() => {
-    enableOrDisableSetmeal(p).then((res: any) => {
-      if (res.data.code === 1) {
-        ElMessage.success("套餐售卖状态修改成功！");
-        pageQuery();
-      } else {
-        ElMessage.error(res.data.message || "修改失败");
-      }
+  })
+    .then(() => {
+      enableOrDisableSetmeal(p)
+        .then((res: any) => {
+          if (Number(res.data.code) === 1) {
+            ElMessage.success("套餐售卖状态修改成功！");
+            // 重新查询当前页数据
+            pageQuery();
+          } else {
+            ElMessage.error(res.data.message || "修改失败");
+          }
+        })
+        .catch((e: any) => {
+          ElMessage.error("请求失败");
+        });
+    })
+    .catch(() => {});
+}
+
+function handleEdit(row: any) {
+  // 跳转到编辑页面，携带 id 作为查询参数
+  try {
+    // 这里复用现有的添加/编辑页面路由：/merchant/meal/add
+    // 该页面通过 query.id 判断是编辑模式
+    router.push({
+      path: "/merchant/meal/add",
+      query: { id: String(row.ID || row.id) },
     });
-  });
+  } catch (e) {
+    console.warn("navigate to edit failed", e);
+  }
 }
 
 function handleDelete(type: string, id?: string) {
@@ -195,11 +286,13 @@ function handleDelete(type: string, id?: string) {
           arr.push(element.ID);
         });
         param = arr.join(",");
+        console.log("批量删除参数:", param); // 调试信息
       } else {
         param = (id as string) || "";
+        console.log("单个删除参数:", param); // 调试信息
       }
       deleteSetmeal(param).then((res: any) => {
-        if (res.data.code === 1) {
+        if (Number(res.data.code) === 1) {
           ElMessage.success("删除成功！");
           pageQuery();
         } else {
@@ -215,12 +308,27 @@ function handleSelectionChange(val: any) {
 }
 
 onMounted(() => {
-  getCategoryByType({ type: 2 }).then((res: any) => {
-    if (res.data.code === 1) {
-      options.value = res.data.data;
-    }
-  });
-  pageQuery();
+  (async () => {
+    try {
+      const u = await getBaseUserDetail();
+      const uid = u && u.data && u.data.data && u.data.data.id;
+      if (uid) {
+        const res = await request({
+          url: "/merchant/detail",
+          method: "get",
+          params: { base_id: uid },
+        });
+        const m = res && res.data && res.data.data;
+        if (m && m.id) merchantId.value = m.id;
+      }
+    } catch (e) {}
+    getCategoryByType({ type: 2 }).then((res: any) => {
+      if (Number(res.data.code) === 1) {
+        options.value = res.data.data;
+      }
+    });
+    pageQuery();
+  })();
 });
 </script>
 <style lang="scss">

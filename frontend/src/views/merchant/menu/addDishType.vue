@@ -202,15 +202,17 @@ const rules = reactive({
       required: true,
       validator: (rule: any, value: string, callback: Function) => {
         if (!value) {
-          callback(new Error('请输入菜品名称'))
-        } else {
-          const reg = /^([A-Za-z0-9\u4e00-\u9fa5]){2,20}$/
-          if (!reg.test(value)) {
-            callback(new Error('菜品名称输入不符，请输入2-20个字符'))
+            callback(new Error('请输入菜品名称'))
           } else {
-            callback()
+            const reg = /^([A-Za-z0-9\u4e00-\u9fa5]){2,20}$/
+            if (!reg.test(value)) {
+              callback(new Error('菜品名称输入不符，请输入2-20个字符'))
+            } else if (/^\d+$/.test(String(value).trim())) {
+              callback(new Error('菜品名称不能为纯数字'))
+            } else {
+              callback()
+            }
           }
-        }
       },
       trigger: 'blur'
     }
@@ -376,9 +378,9 @@ async function submitForm(formRefName: string, st?: any) {
           if (actionType.value === 'add') {
             delete params.id
             const res = await addDish(params)
-            if (res.data.code === 1) {
+            if (Number(res.data.code) === 1) {
               ElMessage.success('菜品添加成功！')
-              if (!st) router.push({ path: '/menu' })
+              if (!st) router.push({ path: '/merchant/menu' })
               else {
                 dishFlavors.value = []
                 imageUrl.value = ''

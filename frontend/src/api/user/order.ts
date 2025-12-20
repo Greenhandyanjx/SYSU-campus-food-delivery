@@ -53,6 +53,15 @@ export function payOrder(id: string, payload?: any) {
 }
 
 /**
+ * updateOrderAddress(id, payload)
+ * 功能：更新订单的 consigneeid（用于 checkout 时用户更换地址）
+ * 请求：POST /user/order/updateAddress { id, consigneeid }
+ */
+export function updateOrderAddress(id: string, payload: any) {
+  return request({ url: '/user/order/updateAddress', method: 'post', data: { id, ...payload } })
+}
+
+/**
  * reorder(order)
  * 功能：再次购买 - 将历史订单内菜品加入购物车
  * 前端实现：调用 storeApi.addToCart 逐条加入（若后端支持可提供批量接口）
@@ -114,6 +123,7 @@ export default {
   getOrderDetail,
   cancelOrder,
   payOrder,
+  updateOrderAddress,
   reorder,
   confirmOrder,
   contactRider,

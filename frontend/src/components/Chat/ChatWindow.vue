@@ -6,10 +6,13 @@
 
       <div class="chat-header">
       <div class="header-left">
-        <img class="avatar" :src="merchantAvatar" alt="商家" />
+        <img class="avatar" :src="merchantAvatar" alt="商家" @error="onMerchantImgError($event)" />
         <span class="title">{{ merchantName }} · 在线客服</span>
       </div>
-      <button class="local-close" @click="$emit('close')" aria-label="关闭聊天">✕</button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <img src="/JDlogo.png" class="jd-logo" alt="嘉递" />
+        <button class="local-close" @click="$emit('close')" aria-label="关闭聊天">✕</button>
+      </div>
     </div>
 
     <!-- 消息区域 -->
@@ -23,13 +26,14 @@
         <!-- 头像 -->
         <img 
           class="msg-avatar" 
-          :src="isMyMessage(m) ? merchantAvatar : userAvatarLocal"
+          :src="isMyMessage(m) ? userAvatarLocal : merchantAvatar"
+          @error="onMsgImgError($event, isMyMessage(m))"
         />
 
         <!-- 气泡 -->
         <div class="bubble-wrapper">
           <div class="bubble">{{ m.content }}</div>
-          <div class="time">{{ formatTime(m.created_at) }}</div>
+          <div class="time">{{ formatDateToCN(m.created_at) }}</div>
         </div>
       </div>
     </div>
@@ -47,20 +51,22 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { getChatHistory, getWsUrl, getMerchantDetail, getBaseUserDetail } from '@/api/chat'
+import request from '@/api/merchant/request'
 import chatClient from '@/utils/chatClient'
+import merchantSvg from '@/assets/merchant.svg'
+import userPng from '@/assets/user.png'
 
 const props = defineProps({
-  merchantId: { type: Number, required: true },
+  merchantId: { type: Number, required: false },
   userBaseId: { type: Number, required: false },
-  token: { type: String, required: true },
+  token: { type: String, required: false },
   merchantName: { type: String, default: "商家" },
-  merchantAvatar: { type: String, default: "/imgs/merchant.png" },
-  userAvatar: { type: String, default: "/imgs/user.png" }
+  merchantAvatar: { type: String, default: '' },
+  userAvatar: { type: String, default: '' }
 })
 
 const messages = ref([])
 const input = ref('')
-let ws = null
 const msgWrap = ref(null)
 
 // 当前登录者 base_user id（用于判断消息方向：来自当前者 = 我）
@@ -68,28 +74,48 @@ const currentBaseId = ref(null)
 
 // reactive local display fields (initialized from props)
 const merchantName = ref(props.merchantName || '商家')
-const merchantAvatar = ref(props.merchantAvatar || '/imgs/merchant.png')
-const userAvatarLocal = ref(props.userAvatar || '/imgs/user.png')
+const merchantAvatar = ref(props.merchantAvatar || merchantSvg)
+const userAvatarLocal = ref(props.userAvatar || userPng)
+function onMerchantImgError(ev) {
+  try {
+    const el = ev && ev.target
+    if (!el) return
+    // 避免无限触发：只允许一次回退
+    if (el.dataset && el.dataset.fallback === '1') return
+    if (el.dataset) el.dataset.fallback = '1'
+    el.src = merchantSvg
+  } catch (e) {}
+}
+function onMsgImgError(ev, isMine) {
+  try {
+    const el = ev && ev.target
+    if (!el) return
+    if (el.dataset && el.dataset.fallback === '1') return
+    if (el.dataset) el.dataset.fallback = '1'
+    el.src = isMine ? userPng : merchantSvg
+  } catch (e) {}
+}
 const userNameLocal = ref('我')
 const userBaseIdLocal = ref(props.userBaseId || null)
 
-function formatTime(s) {
+function formatDateToCN(s) {
   if (!s) return ''
   const dt = new Date(s)
-  const now = new Date()
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const startOfYesterday = new Date(startOfToday.getTime() - 24 * 3600 * 1000)
+  if (isNaN(dt.getTime())) return ''
   const pad = (n) => String(n).padStart(2, '0')
-  const timePart = `${pad(dt.getHours())}:${pad(dt.getMinutes())}`
-  if (dt >= startOfToday) return `今天 ${timePart}`
-  if (dt >= startOfYesterday) return `昨天 ${timePart}`
-  if (dt.getFullYear() === now.getFullYear()) return `${dt.getMonth() + 1}月${dt.getDate()}日 ${timePart}`
-  return `${dt.getFullYear()}年${dt.getMonth() + 1}月${dt.getDate()}日 ${timePart}`
+  const yyyy = dt.getFullYear()
+  const mm = pad(dt.getMonth() + 1)
+  const dd = pad(dt.getDate())
+  const HH = pad(dt.getHours())
+  const MM = pad(dt.getMinutes())
+  return `${yyyy}年${mm}月${dd}日 ${HH}:${MM}`
 }
 
 async function loadHistory() {
   // load history using the resolved userBaseId (from ensureNames)
-  if (!userBaseIdLocal.value || !props.merchantId) return
+  // treat 0 as a valid id: only bail out when null/undefined
+  if (userBaseIdLocal.value === null || typeof userBaseIdLocal.value === 'undefined') return
+  if (props.merchantId === null || typeof props.merchantId === 'undefined') return
   const res = await getChatHistory(props.merchantId, userBaseIdLocal.value)
   if (res && res.data?.data) {
     messages.value = res.data.data.reverse()
@@ -118,7 +144,7 @@ async function ensureNames() {
     } catch (e) {}
   }
   // user info: 若没有传入 props.userBaseId，则默认把当前登录者视为 user（普通用户打开聊天）
-  if (!props.userBaseId) {
+  if (props.userBaseId === null || typeof props.userBaseId === 'undefined') {
     if (currentBaseId.value) {
       userBaseIdLocal.value = currentBaseId.value
     } else {
@@ -126,7 +152,7 @@ async function ensureNames() {
         const u = await getBaseUserDetail()
         if (u && u.data && u.data.data) {
           userBaseIdLocal.value = u.data.data.id
-          userAvatarLocal.value = userAvatarLocal.value || '/imgs/user.png'
+          userAvatarLocal.value = userAvatarLocal.value || '/src/assets/user.png'
           userNameLocal.value = u.data.data.username || userNameLocal.value
         }
       } catch (e) {}
@@ -142,22 +168,8 @@ async function ensureNames() {
   }
 }
 
-function connectWs() {
-  // backend expects raw token without the "Bearer " prefix in the query param
-  const pureToken = (props.token || '').replace(/^Bearer\s+/i, '')
-  const url = getWsUrl() + `?token=${encodeURIComponent(pureToken)}`
-  ws = new WebSocket(url)
-
-  ws.onmessage = (ev) => {
-    try {
-      const data = JSON.parse(ev.data)
-      messages.value.push(data)
-      nextTick(scrollBottom)
-    } catch (err) {
-      // ignore malformed messages
-    }
-  }
-}
+// We use centralized chatClient (singleton) for incoming push messages.
+// Ensure the client is connected and subscribe to messages below.
 
 function handleGlobalMessage(msg) {
   // append only if message belongs to this chat (merchant/user pair)
@@ -165,8 +177,8 @@ function handleGlobalMessage(msg) {
   const uid = msg.user_base_id || msg.userBaseId
   // ignore server echoes of messages we just sent (from_base_id equals our own base id)
   const from = msg.from_base_id || msg.fromBaseId
-  if (from && userBaseIdLocal.value && Number(from) === Number(userBaseIdLocal.value)) return
-  if (!mid || Number(mid) !== Number(props.merchantId)) return
+  if (from && (userBaseIdLocal.value !== null && typeof userBaseIdLocal.value !== 'undefined') && Number(from) === Number(userBaseIdLocal.value)) return
+  if (mid === null || typeof mid === 'undefined' || Number(mid) !== Number(props.merchantId)) return
   // push and scroll
   messages.value.push(msg)
   nextTick(scrollBottom)
@@ -189,10 +201,8 @@ const payload = {
   const ok = chatClient.send(payload)
 
   if (!ok) {
-    console.warn('[ChatWindow] chatClient failed, fallback to local ws')
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(payload))
-    }
+    console.warn('[ChatWindow] chatClient not open — attempting reconnect')
+    try { chatClient.connect() } catch (e) {}
   }
 
   // 本地立即显示一条消息
@@ -238,28 +248,47 @@ const isMyMessage = (msg) => {
 }
 
 onMounted(async () => {
-  await detectRole()
-  await ensureNames()
-  await loadHistory()
-  connectWs()
-  chatClient.onMessage(handleGlobalMessage)
+  try {
+    console.log('[ChatWindow] mounting for merchantId=', props.merchantId, 'userBaseId=', props.userBaseId)
+    await detectRole()
+    await ensureNames()
+    await loadHistory()
+    // 当通过消息通知打开会话时，主动请求后端标记为已读并通知其它组件
+    try {
+      if (props.merchantId) {
+        await request.post('/user/chats/mark_read', { merchant_id: Number(props.merchantId) })
+        try { window.dispatchEvent(new CustomEvent('user:chats:marked_read', { detail: { merchant_id: Number(props.merchantId) } })) } catch(e) {}
+      }
+    } catch(e) { console.warn('[ChatWindow] mark_read failed', e) }
+    chatClient.onMessage(handleGlobalMessage)
+    // ensure centralized websocket connection
+    try { chatClient.connect() } catch (e) { console.warn('[ChatWindow] chatClient.connect failed', e) }
+    try { window.dispatchEvent(new CustomEvent('chat:window:mounted', { detail: { merchantId: props.merchantId, userBaseId: userBaseIdLocal.value } })) } catch (e) {}
+    console.log('[ChatWindow] mounted')
+  } catch (err) {
+    console.error('[ChatWindow] mount error', err)
+    try { window.dispatchEvent(new CustomEvent('chat:window:error', { detail: { error: String(err) } })) } catch (e) {}
+  }
 })
 
 // 当外部传入的 merchantId / userBaseId 发生变化时，重新加载会话
 watch(() => props.merchantId, async (newVal, oldVal) => {
-  if (!newVal) return
+  if (newVal === null || typeof newVal === 'undefined') return
   // 重置消息并重新加载
   messages.value = []
   await ensureNames()
   await loadHistory()
   // 如果当前用户打开的是会话，尝试通知后端标记为已读（用户端）
   try {
-    await fetch('/api/user/chats/mark_read', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: localStorage.getItem('token') || '' }, body: JSON.stringify({ merchant_id: Number(newVal) }) })
-  } catch (e) {}
+    await request.post('/user/chats/mark_read', { merchant_id: Number(newVal) })
+  } catch (e) { console.warn('[ChatWindow] mark_read watcher failed', e) }
+  // 通知其它组件当前用户会话已读（例如刷新用户会话列表）
+  try { window.dispatchEvent(new CustomEvent('user:chats:marked_read', { detail: { merchant_id: Number(newVal) } })) } catch (e) {}
 })
 
 watch(() => props.userBaseId, async (newVal, oldVal) => {
   // 当 userBaseId 变化（例如商家端切换客户）时重新加载
+  if (newVal === null || typeof newVal === 'undefined') return
   messages.value = []
   await ensureNames()
   await loadHistory()
@@ -274,7 +303,6 @@ watch(() => props.merchantAvatar, (nv) => {
 })
 
 onBeforeUnmount(() => {
-  ws?.close()
   chatClient.offMessage(handleGlobalMessage)
 })
 </script>
@@ -343,6 +371,13 @@ onBeforeUnmount(() => {
   font-weight: bold;
 }
 
+.jd-logo {
+  width: 28px;
+  height: 28px;
+  object-fit:contain;
+  border-radius:4px;
+}
+
 /* ====================== 消息区域 ====================== */
 .messages {
   flex: 1;
@@ -366,37 +401,38 @@ onBeforeUnmount(() => {
 
 .message-row {
   display: flex;
-  margin-bottom: 16px;
-  align-items: flex-end;             /* 关键：让气泡底部对齐 */
+  margin-bottom: 12px;
+  align-items: flex-end;
+  width: 100%;
 }
 
-.message-row.me {
-  flex-direction: row-reverse;
-}
+/* 左侧（收到）为正常方向，右侧（我）反方向 */
+.message-row:not(.me) { flex-direction: row; justify-content: flex-start }
+.message-row.me { flex-direction: row-reverse; justify-content: flex-end }
 
 /* 头像 */
-.msg-avatar {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
+.msg-avatar { width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0 }
+.message-row:not(.me) .msg-avatar { margin-right: 10px }
+.message-row.me .msg-avatar { margin-left: 10px }
 
 /* 气泡容器 */
 .bubble-wrapper {
   max-width: 72%;
   position: relative;
+  display: block;
 }
 
-/* 气泡主体 */
+/* 气泡主体：根据内容宽度自适应，支持换行，使用相对定位以便三角形定位于气泡 */
 .bubble {
+  display: inline-block;
+  position: relative;
   padding: 8px 12px;
   border-radius: 16px;
   font-size: 14px;
   line-height: 1.45;
   word-break: break-word;
-  position: relative;
-  display: inline-block;
+  white-space: pre-wrap;
+  max-width: 100%;
 }
 
 /* 左边（商家）气泡 - 白色 + 尖角 */
@@ -416,16 +452,8 @@ onBeforeUnmount(() => {
 .message-row:not(.me) .bubble::before {
   content: "";
   position: absolute;
-  left: -7px;
-  bottom: 8px;
-  border: 8px solid transparent;
-  border-right-color: #ffffff;
-}
-.message-row:not(.me) .bubble::after {
-  content: "";
-  position: absolute;
-  left: -15px;
-  bottom: 7px;
+  left: -6px;
+  top: 12px;
   border: 8px solid transparent;
   border-right-color: #ffffff;
 }
@@ -433,8 +461,8 @@ onBeforeUnmount(() => {
 .message-row.me .bubble::before {
   content: "";
   position: absolute;
-  right: -7px;
-  bottom: 8px;
+  right: -6px;
+  top: 12px;
   border: 8px solid transparent;
   border-left-color: #ffe563;
 }
@@ -443,15 +471,16 @@ onBeforeUnmount(() => {
 .time {
   font-size: 11px;
   color: #999;
-  margin-top: 4px;
-  text-align: center;
-  padding: 0 8px;
+  margin-top: 6px;
+  display: block;
+  padding: 0 6px;
 }
 
-/* 我发的消息时间在左边 */
-.message-row.me .time {
-  text-align: right;
-}
+/* 时间对齐：跟随气泡 */
+.message-row:not(.me) .bubble-wrapper { margin-right: auto; text-align: left }
+.message-row.me .bubble-wrapper { margin-left: auto; text-align: right }
+.message-row.me .time { text-align: right }
+.message-row:not(.me) .time { text-align: left }
 
 /* ====================== 输入栏（关键修复）====================== */
 .input-bar {

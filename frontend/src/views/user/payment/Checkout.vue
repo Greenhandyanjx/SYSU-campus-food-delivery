@@ -220,9 +220,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from 'vue'
 import qrImg from '@/assets/qrcode.png'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
+import orderApi from '@/api/user/order'
 import * as addressApi from '@/api/common/address'
 import * as cartApi from '@/api/user/cart'
+import { getDeliveryConfig } from '@/api/user/store'
 import { showToast } from 'vant'
 
 const router = useRouter()
@@ -247,6 +249,7 @@ const form = ref({ remark: '', tableware: 0 })
 const showPayModal = ref(false)
 const payQrImg = ref(qrImg)
 const payAmount = ref(0)
+const pendingOrders = ref<string[]>([])
 
 // 格式化地址
 function formatFullAddress(a: any) {
@@ -327,6 +330,22 @@ async function loadCart() {
         shopList.value = list
         // 使用完后清理临时数据
         sessionStorage.removeItem('checkout_payload')
+        // 为每个店铺获取配送配置（覆盖 deliveryFee / minPrice 等）
+        try {
+          await Promise.all(shopList.value.map(async (s: any) => {
+            const bid = s.storeId || s.merchantId || s.store_id || s.storeId
+            if (!bid) return
+            const r = await getDeliveryConfig(bid)
+            const cfg = r && r.data ? r.data.data || r.data : r
+            s.deliveryFee = Number(cfg?.delivery_fee ?? cfg?.deliveryFee ?? s.deliveryFee ?? 2)
+            s.minPrice = Number(cfg?.min_price ?? cfg?.minPrice ?? s.minPrice ?? 15)
+            s.deliveryRange = Number(cfg?.delivery_range ?? cfg?.deliveryRange ?? s.deliveryRange ?? 2000)
+            // recalc shopTotal based on items + packing + delivery
+            const itemsTotal = (s.items || []).reduce((sm: number, it: any) => sm + Number(it.price || 0) * Number(it.qty || 0), 0)
+            const packing = Number(s.packingFee || s.packing_fee || 0)
+            s.shopTotal = itemsTotal + packing + Number(s.deliveryFee || 0)
+          }))
+        } catch (e) { console.warn('fetch shop delivery configs failed', e) }
         return
       } catch (err) {
         console.warn('解析 checkout_payload 失败，回退到 getCart', err)
@@ -358,6 +377,21 @@ async function loadCart() {
           }))
         }
       })
+    // 为每个店铺补充配送配置并重新计算 shopTotal
+    try {
+      await Promise.all(shopList.value.map(async (s: any) => {
+        const bid = s.storeId || s.merchant_id || s.id || s.storeId
+        if (!bid) return
+        const r = await getDeliveryConfig(bid)
+        const cfg = r && r.data ? r.data.data || r.data : r
+        s.deliveryFee = Number(cfg?.delivery_fee ?? cfg?.deliveryFee ?? s.deliveryFee ?? 2)
+        s.minPrice = Number(cfg?.min_price ?? cfg?.minPrice ?? s.minPrice ?? 15)
+        s.deliveryRange = Number(cfg?.delivery_range ?? cfg?.deliveryRange ?? s.deliveryRange ?? 2000)
+        const itemsTotal = (s.items || []).reduce((sm: number, it: any) => sm + Number(it.price || 0) * Number(it.qty || 0), 0)
+        const packing = Number(s.packingFee || s.packing_fee || 0)
+        s.shopTotal = itemsTotal + packing + Number(s.deliveryFee || 0)
+      }))
+    } catch (e) { console.warn('fetch shop delivery configs failed', e) }
   } catch (e) {
     console.error(e)
   }
@@ -371,6 +405,77 @@ const totalAmount = computed(() => {
 onMounted(async () => {
   await loadAddresses()
   await loadCart()
+  // 如果在跳转前已由购物车页创建了 pending orders，则优先使用它们并从 sessionStorage 清除
+  try {
+    const pendingRaw = sessionStorage.getItem('pending_orders')
+    if (pendingRaw) {
+      const parsed = JSON.parse(pendingRaw)
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        pendingOrders.value = parsed.map((x: any) => String(x))
+        sessionStorage.removeItem('pending_orders')
+      }
+    }
+  } catch (e) { console.warn('read pending_orders from session failed', e) }
+  // 在用户进入结算页时：如果带有 orderId（从订单卡片/详情跳转），不创建新的 pending，而是直接加载该订单用于支付；
+  // 否则按照购物车内容创建 pending 以便持久化未完成的结算尝试。
+  try {
+    const route = useRoute()
+    const qid = route.query.orderId
+    if (qid) {
+      // 如果 URL 带有 orderId，立即将其作为待支付目标，避免后续回退到 createPayOrder
+      pendingOrders.value = [String(qid)]
+      // 支付已有订单 —— 不创建新的 pending，只将该订单 id 作为待支付目标并尝试加载详情
+      try {
+        const od: any = await orderApi.getOrderDetail(String(qid))
+        const odata = od && od.data && (od.data.data || od.data)
+        if (odata) {
+          // 构建页面展示数据（兼容旧后端结构）
+          shopList.value = [{
+            storeId: odata.merchantId || odata.merchantid || odata.merchantID || 0,
+            name: odata.storeName || odata.shopName || '',
+            items: (odata.items || odata.orderDetailList || []).map((it: any) => ({
+              dishId: it.id || it.skuId || null,
+              name: it.name,
+              spec: it.spec || it.sku || '',
+              qty: it.qty || it.count || it.num || 1,
+              price: Number(it.price || 0)
+            })),
+            packingFee: Number(odata.packAmount || odata.pack_amount || 0),
+            deliveryFee: Number(odata.deliveryAmount || odata.delivery_amount || 0),
+            shopTotal: Number(odata.amount || odata.total || 0)
+          }]
+          pendingOrders.value = [String(qid)]
+          payAmount.value = Number(odata.amount || 0)
+        }
+      } catch (e) {
+        console.warn('failed to fetch order detail for checkout', e)
+      }
+    } else {
+      // 原购物车结算路径：为当前选中项创建 pending（持久化尝试）
+      let payloadShops: any[] = []
+      // send totalPrice as items total (exclude delivery); deliveryFee sent separately
+      payloadShops = shopList.value.map((s: any) => {
+        const itemsTotal = (s.items || []).reduce((sm: number, it: any) => sm + Number(it.price || 0) * Number(it.qty || 0), 0)
+        return ({ merchantId: s.storeId || s.merchantId || s.id, totalPrice: itemsTotal, deliveryAmount: Number(s.deliveryFee || s.delivery_fee || 0) })
+      })
+
+      if (payloadShops && payloadShops.length > 0 && selectedAddress.value) {
+        const payload = { shops: payloadShops, consigneeid: selectedAddress.value.id, totalPrice: totalAmount.value, remarks: form.value.remark }
+        try {
+          const cp: any = await cartApi.createPending(payload)
+          if (cp && cp.data && cp.data.orders) {
+            pendingOrders.value = (cp.data.orders || []).map((x: any) => String(x.orderId || x.OrderID || x.order_id))
+          } else if (cp && cp.orders) {
+            pendingOrders.value = (cp.orders || []).map((x: any) => String(x.orderId || x.OrderID || x.order_id))
+          }
+        } catch (e) {
+          console.warn('create pending order failed', e)
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('checkout onMounted error', e)
+  }
 })
 
 function openAddressManager() {
@@ -378,9 +483,17 @@ function openAddressManager() {
   showAddressModal.value = true
 }
 
-function pickAddress(a: any) {
+async function pickAddress(a: any) {
   selectedAddress.value = a
   showAddressModal.value = false
+  // 如果已有 pending orders，更新它们的 consigneeid
+  try {
+    if (pendingOrders.value && pendingOrders.value.length > 0) {
+      for (const oid of pendingOrders.value) {
+        await orderApi.updateOrderAddress(String(oid), { consigneeid: a.id }).catch(() => {})
+      }
+    }
+  } catch (e) { console.warn('update pending order address failed', e) }
 }
 
 async function addNewAddress() {
@@ -636,6 +749,26 @@ async function onPay() {
   }
 
   try {
+    // 若存在 pendingOrders（例如来自已有订单或已创建的 pending），直接标记这些订单为已支付
+    if (pendingOrders.value && pendingOrders.value.length > 0) {
+      payAmount.value = totalAmount.value || payAmount.value || 0
+      payQrImg.value = qrImg
+      showPayModal.value = true
+
+      setTimeout(async () => {
+        showPayModal.value = false
+        for (const oid of pendingOrders.value) {
+          try { await orderApi.payOrder(String(oid)) } catch (e) { console.warn('payOrder failed', e) }
+        }
+        // 清理购物车中已结算的项
+        try { await cartApi.deleteSelected() } catch (e) {}
+        await loadCart()
+        router.push('/user/payment/success')
+      }, 3000)
+      return
+    }
+
+    // 否则走购物车结算流程（createPayOrder）
     const payloadShops = shopList.value.map(s => ({
       storeId: s.storeId,
       items: s.items.map((it: any) => ({ dishId: it.dishId, qty: it.qty }))
@@ -650,13 +783,21 @@ async function onPay() {
 
     const resp: any = await cartApi.checkout(payload)
     payAmount.value = totalAmount.value
-    // 统一使用本地静态二维码资源（演示用）
     payQrImg.value = qrImg
     showPayModal.value = true
 
-    // 模拟支付成功
     setTimeout(async () => {
       showPayModal.value = false
+      try {
+        const orders = (resp && resp.data && (resp.data.orders || resp.data.orders)) || resp.orders || []
+        for (const o of orders) {
+          const oid = o.orderId || o.OrderID || o.orderID || o.id || o
+          if (oid) {
+            try { await orderApi.payOrder(String(oid)) } catch (e) { console.warn('payOrder failed', e) }
+          }
+        }
+      } catch (e) { console.warn('mark orders paid failed', e) }
+
       await cartApi.deleteSelected()
       await loadCart()
       router.push('/user/payment/success')

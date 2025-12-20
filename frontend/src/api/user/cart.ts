@@ -237,6 +237,15 @@ export async function checkout(payload?: any) {
   }
 }
 
+export async function createPending(payload?: any) {
+  try {
+    const res = await request.post('/order/createPending', payload)
+    return res.data
+  } catch (e) {
+    return { code: 0, message: 'failed to create pending', error: e }
+  }
+}
+
 /**
  * checkout()
  * 请求: POST /user/cart/checkout
@@ -275,5 +284,6 @@ export default {
   toggleShopSelection,
   selectAll,
   checkout,
+  createPending,
   deleteSelected
 }

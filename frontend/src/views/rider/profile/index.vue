@@ -1,243 +1,170 @@
 <template>
   <div class="rider-profile">
-    <!-- 顶部导航栏 -->
-    <div class="header-bar">
-      <div class="back-btn" @click="$router.go(-1)">
-        <i class="css-icon back"></i>
+    <!-- 顶部导航 -->
+    <div class="header-nav">
+      <div class="nav-left">
+        <el-button type="text" @click="$router.back()">
+          <i class="css-icon arrow-left"></i>
+        </el-button>
       </div>
-      <h1 class="page-title">个人中心</h1>
-      <div class="settings-btn" @click="$router.push('/rider/settings')">
-        <i class="css-icon settings"></i>
+      <div class="nav-title">个人中心</div>
+      <div class="nav-right">
+        <el-button type="text" @click="showSettings">
+          <i class="css-icon setting"></i>
+        </el-button>
       </div>
     </div>
 
-    <!-- 用户信息卡片 -->
-    <div class="profile-header">
-      <div class="profile-card">
-        <div class="avatar-section">
-          <el-avatar :size="80" :src="riderInfo.avatar" @click="changeAvatar" />
-          <div class="camera-icon" @click="changeAvatar">
-            <i class="css-icon camera"></i>
-          </div>
-        </div>
-        <div class="info-section">
-          <h2 class="rider-name">{{ riderInfo.name }}</h2>
-          <div class="rider-id">骑手号：{{ riderInfo.id }}</div>
+    <!-- 骑手信息卡片 -->
+    <div class="profile-card">
+      <div class="profile-header">
+        <el-avatar :size="80" :src="riderInfo.avatar || '/src/assets/user.png'" />
+        <div class="profile-info">
+          <h2>{{ riderInfo.name }}</h2>
           <div class="rating-section">
             <el-rate v-model="riderInfo.rating" disabled />
             <span class="rating-text">{{ riderInfo.rating }}分</span>
           </div>
+          <p class="completed-orders">已完成 {{ riderInfo.completedOrders }} 单</p>
         </div>
       </div>
 
-      <!-- 成就徽章 -->
-      <div class="achievements">
-        <div class="achievement-item">
-          <div class="badge gold">🏆</div>
-          <div class="badge-text">金牌骑手</div>
+      <div class="status-section">
+        <div class="status-item">
+          <span class="status-label">当前状态</span>
+          <el-tag :type="isOnline ? 'success' : 'info'">
+            {{ isOnline ? '在线接单' : '已下线' }}
+          </el-tag>
         </div>
-        <div class="achievement-item">
-          <div class="badge speed">⚡</div>
-          <div class="badge-text">闪电配送</div>
-        </div>
-        <div class="achievement-item">
-          <div class="badge star">⭐</div>
-          <div class="badge-text">五星好评</div>
+        <div class="status-item">
+          <span class="status-label">工作时长</span>
+          <span class="status-value">{{ workHours }}小时</span>
         </div>
       </div>
     </div>
 
-    <!-- 数据概览 -->
-    <div class="data-overview">
-      <div class="overview-item">
-        <div class="overview-value">{{ riderInfo.completedOrders }}</div>
-        <div class="overview-label">累计订单</div>
-      </div>
-      <div class="overview-item">
-        <div class="overview-value">{{ riderInfo.workDays }}</div>
-        <div class="overview-label">工作天数</div>
-      </div>
-      <div class="overview-item">
-        <div class="overview-value">{{ riderInfo.totalIncome.toFixed(2) }}</div>
-        <div class="overview-label">总收入(元)</div>
+    <!-- 数据统计 -->
+    <div class="stats-section">
+      <h3>数据统计</h3>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-icon income">
+            <i class="css-icon wallet"></i>
+          </div>
+          <div class="stat-content">
+            <div class="stat-value">¥{{ totalIncome.toFixed(2) }}</div>
+            <div class="stat-label">总收入</div>
+          </div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-icon orders">
+            <i class="css-icon document"></i>
+          </div>
+          <div class="stat-content">
+            <div class="stat-value">{{ totalOrders }}</div>
+            <div class="stat-label">完成订单</div>
+          </div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-icon rating">
+            <i class="css-icon star"></i>
+          </div>
+          <div class="stat-content">
+            <div class="stat-value">{{ riderInfo.rating }}</div>
+            <div class="stat-label">评分</div>
+          </div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-icon efficiency">
+            <i class="css-icon data-analysis"></i>
+          </div>
+          <div class="stat-content">
+            <div class="stat-value">{{ efficiency }}单/时</div>
+            <div class="stat-label">效率</div>
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- 功能菜单 -->
-    <div class="menu-sections">
-      <!-- 账户管理 -->
-      <div class="menu-section">
-        <h3 class="section-title">账户管理</h3>
-        <div class="menu-list">
-          <div class="menu-item" @click="editProfile">
-            <div class="menu-icon">
-              <i class="css-icon edit"></i>
-            </div>
-            <div class="menu-content">
-              <div class="menu-title">个人资料</div>
-              <div class="menu-desc">编辑基本信息</div>
-            </div>
-            <div class="menu-arrow">
-              <i class="css-icon arrow"></i>
-            </div>
+    <div class="menu-section">
+      <div class="menu-group">
+        <div class="menu-item" @click="goToProfileEdit">
+          <div class="menu-icon">
+            <i class="css-icon user-edit"></i>
           </div>
-
-          <div class="menu-item" @click="manageAccount">
-            <div class="menu-icon">
-              <i class="css-icon account"></i>
-            </div>
-            <div class="menu-content">
-              <div class="menu-title">账户安全</div>
-              <div class="menu-desc">密码、手机绑定</div>
-            </div>
-            <div class="menu-arrow">
-              <i class="css-icon arrow"></i>
-            </div>
+          <span class="menu-title">个人资料</span>
+          <i class="css-icon arrow-right"></i>
+        </div>
+        <div class="menu-item" @click="goToSecurity">
+          <div class="menu-icon">
+            <i class="css-icon lock"></i>
           </div>
-
-          <div class="menu-item" @click="paymentSettings">
-            <div class="menu-icon">
-              <i class="css-icon payment"></i>
-            </div>
-            <div class="menu-content">
-              <div class="menu-title">收款设置</div>
-              <div class="menu-desc">银行卡、支付宝设置</div>
-            </div>
-            <div class="menu-arrow">
-              <i class="css-icon arrow"></i>
-            </div>
+          <span class="menu-title">账户安全</span>
+          <i class="css-icon arrow-right"></i>
+        </div>
+        <div class="menu-item" @click="goToPayment">
+          <div class="menu-icon">
+            <i class="css-icon credit-card"></i>
           </div>
+          <span class="menu-title">收款设置</span>
+          <i class="css-icon arrow-right"></i>
+        </div>
+        <div class="menu-item" @click="goToWorkSettings">
+          <div class="menu-icon">
+            <i class="css-icon setting"></i>
+          </div>
+          <span class="menu-title">工作设置</span>
+          <i class="css-icon arrow-right"></i>
         </div>
       </div>
 
-      <!-- 工作设置 -->
-      <div class="menu-section">
-        <h3 class="section-title">工作设置</h3>
-        <div class="menu-list">
-          <div class="menu-item" @click="workSettings">
-            <div class="menu-icon">
-              <i class="css-icon work"></i>
-            </div>
-            <div class="menu-content">
-              <div class="menu-title">工作偏好</div>
-              <div class="menu-desc">配送范围、工作时间</div>
-            </div>
-            <div class="menu-arrow">
-              <i class="css-icon arrow"></i>
-            </div>
+      <div class="menu-group">
+        <div class="menu-item" @click="goToNotification">
+          <div class="menu-icon">
+            <i class="css-icon notification"></i>
           </div>
-
-          <div class="menu-item" @click="notificationSettings">
-            <div class="menu-icon">
-              <i class="css-icon notification"></i>
-            </div>
-            <div class="menu-content">
-              <div class="menu-title">消息通知</div>
-              <div class="menu-desc">新订单、系统通知</div>
-            </div>
-            <div class="menu-arrow">
-              <i class="css-icon arrow"></i>
-            </div>
+          <span class="menu-title">消息通知</span>
+          <span class="menu-badge" v-if="unreadCount > 0">{{ unreadCount }}</span>
+          <i class="css-icon arrow-right"></i>
+        </div>
+        <div class="menu-item" @click="goToVerification">
+          <div class="menu-icon">
+            <i class="css-icon shield"></i>
           </div>
-
-          <div class="menu-item" @click="mapSettings">
-            <div class="menu-icon">
-              <i class="css-icon map"></i>
-            </div>
-            <div class="menu-content">
-              <div class="menu-title">地图设置</div>
-              <div class="menu-desc">导航偏好、语音设置</div>
-            </div>
-            <div class="menu-arrow">
-              <i class="css-icon arrow"></i>
-            </div>
-          </div>
+          <span class="menu-title">实名认证</span>
+          <el-tag :type="verificationStatus === 'verified' ? 'success' : verificationStatus === 'pending' ? 'warning' : 'info'" size="small">
+            {{ verificationStatusText }}
+          </el-tag>
+          <i class="css-icon arrow-right"></i>
         </div>
       </div>
 
-      <!-- 帮助与反馈 -->
-      <div class="menu-section">
-        <h3 class="section-title">帮助与反馈</h3>
-        <div class="menu-list">
-          <div class="menu-item" @click="helpCenter">
-            <div class="menu-icon">
-              <i class="css-icon help"></i>
-            </div>
-            <div class="menu-content">
-              <div class="menu-title">帮助中心</div>
-              <div class="menu-desc">常见问题、使用指南</div>
-            </div>
-            <div class="menu-arrow">
-              <i class="css-icon arrow"></i>
-            </div>
+      <div class="menu-group">
+        <div class="menu-item" @click="goToHelp">
+          <div class="menu-icon">
+            <i class="css-icon service"></i>
           </div>
-
-          <div class="menu-item" @click="feedback">
-            <div class="menu-icon">
-              <i class="css-icon feedback"></i>
-            </div>
-            <div class="menu-content">
-              <div class="menu-title">意见反馈</div>
-              <div class="menu-desc">问题建议、功能需求</div>
-            </div>
-            <div class="menu-arrow">
-              <i class="css-icon arrow"></i>
-            </div>
+          <span class="menu-title">帮助中心</span>
+          <i class="css-icon arrow-right"></i>
+        </div>
+        <div class="menu-item" @click="goToFeedback">
+          <div class="menu-icon">
+            <i class="css-icon message"></i>
           </div>
-
-          <div class="menu-item" @click="contactService">
-            <div class="menu-icon">
-              <i class="css-icon service"></i>
-            </div>
-            <div class="menu-content">
-              <div class="menu-title">联系客服</div>
-              <div class="menu-desc">400-123-4567</div>
-            </div>
-            <div class="menu-arrow">
-              <i class="css-icon arrow"></i>
-            </div>
-          </div>
+          <span class="menu-title">意见反馈</span>
+          <i class="css-icon arrow-right"></i>
         </div>
       </div>
 
-      <!-- 关于 -->
-      <div class="menu-section">
-        <h3 class="section-title">关于</h3>
-        <div class="menu-list">
-          <div class="menu-item" @click="aboutUs">
-            <div class="menu-icon">
-              <i class="css-icon about"></i>
-            </div>
-            <div class="menu-content">
-              <div class="menu-title">关于我们</div>
-              <div class="menu-desc">版本 v1.0.0</div>
-            </div>
-            <div class="menu-arrow">
-              <i class="css-icon arrow"></i>
-            </div>
+      <div class="menu-group logout">
+        <div class="menu-item logout-item" @click="handleLogout">
+          <div class="menu-icon">
+            <i class="css-icon logout"></i>
           </div>
-
-          <div class="menu-item" @click="privacyPolicy">
-            <div class="menu-icon">
-              <i class="css-icon privacy"></i>
-            </div>
-            <div class="menu-content">
-              <div class="menu-title">隐私政策</div>
-              <div class="menu-desc">用户协议、隐私条款</div>
-            </div>
-            <div class="menu-arrow">
-              <i class="css-icon arrow"></i>
-            </div>
-          </div>
+          <span class="menu-title">退出登录</span>
         </div>
       </div>
-    </div>
-
-    <!-- 退出登录按钮 -->
-    <div class="logout-section">
-      <el-button type="danger" @click="logout" class="logout-btn">
-        退出登录
-      </el-button>
     </div>
 
     <!-- 底部导航栏 -->
@@ -263,92 +190,137 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import riderApi from '@/api/rider'
 
+const defaultAvatar = '/src/assets/user.png'
+
 const router = useRouter()
+
+// 状态数据
+const loading = ref(false)
+const isOnline = ref(false)
+const unreadCount = ref(0)
 
 // 骑手信息
 const riderInfo = ref({
-  id: 'R001',
-  name: '李骑手',
-  avatar: 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
-  rating: 4.8,
-  completedOrders: 1250,
-  workDays: 186,
-  totalIncome: 15680.50
+  name: '骑手',
+  avatar: '',
+  rating: 5.0,
+  completedOrders: 0
 })
 
-// 加载骑手信息
-const loadRiderInfo = async () => {
-  try {
-    const response = await riderApi.getRiderInfoWithDemo()
+// 工作数据
+const workHours = ref(0)
+const totalIncome = ref(0)
+const totalOrders = ref(0)
 
-    if (response.code === 1 && response.data) {
-      riderInfo.value = {
-        ...riderInfo.value,
-        ...response.data
-      }
+// 认证状态
+const verificationStatus = ref('unverified') // unverified, pending, verified
+
+// 计算属性
+const efficiency = computed(() => {
+  if (workHours.value > 0) {
+    return (totalOrders.value / workHours.value).toFixed(1)
+  }
+  return '0.0'
+})
+
+const verificationStatusText = computed(() => {
+  const statusMap = {
+    'unverified': '未认证',
+    'pending': '审核中',
+    'verified': '已认证'
+  }
+  return statusMap[verificationStatus.value] || '未认证'
+})
+
+// 初始化数据
+const initData = async () => {
+  try {
+    loading.value = true
+
+    // 获取骑手信息
+    const riderData = await riderApi.getRiderInfo()
+    if (riderData.code === 1 && riderData.data) {
+      riderInfo.value = riderData.data
+      isOnline.value = riderData.data.isOnline || false
     }
+
+    // 获取统计数据
+    const incomeData = await riderApi.getIncomeSummary()
+    if (incomeData.code === 1 && incomeData.data) {
+      totalIncome.value = incomeData.data.totalIncome || 0
+      totalOrders.value = incomeData.data.completedOrders || 0
+    }
+
+    // 获取工作统计
+    const workData = await riderApi.getWorkStats()
+    if (workData.code === 1 && workData.data) {
+      workHours.value = Math.round((workData.data.totalOrders * 0.3) / 60) // 估算在线时长
+    }
+
+    // 获取认证信息
+    const verificationData = await riderApi.getVerification()
+    if (verificationData.code === 1 && verificationData.data) {
+      verificationStatus.value = verificationData.data.status || 'unverified'
+    }
+
+    // 获取未读通知数
+    const notificationData = await riderApi.getNotifications({ read: false })
+    if (notificationData.code === 1 && notificationData.data) {
+      unreadCount.value = notificationData.data.unreadCount || 0
+    }
+
   } catch (error) {
-    console.error('加载骑手信息失败:', error)
-    // 使用Demo数据
+    console.error('初始化数据失败:', error)
+    ElMessage.error('获取数据失败，请刷新重试')
+  } finally {
+    loading.value = false
   }
 }
 
-// 菜单点击事件处理
-const changeAvatar = () => {
-  ElMessage.info('更换头像功能开发中...')
-}
-
-const editProfile = () => {
+// 导航方法
+const goToProfileEdit = () => {
   router.push('/rider/profile/edit')
 }
 
-const manageAccount = () => {
+const goToSecurity = () => {
   router.push('/rider/profile/security')
 }
 
-const paymentSettings = () => {
+const goToPayment = () => {
   router.push('/rider/profile/payment')
 }
 
-const workSettings = () => {
+const goToWorkSettings = () => {
   router.push('/rider/profile/work')
 }
 
-const notificationSettings = () => {
+const goToNotification = () => {
   router.push('/rider/profile/notification')
 }
 
-const mapSettings = () => {
-  router.push('/rider/profile/map')
+const goToVerification = () => {
+  router.push('/rider/profile/verification')
 }
 
-const helpCenter = () => {
-  ElMessage.info('帮助中心功能开发中...')
+const goToHelp = () => {
+  router.push('/rider/profile/help')
 }
 
-const feedback = () => {
-  ElMessage.info('意见反馈功能开发中...')
+const goToFeedback = () => {
+  router.push('/rider/profile/feedback')
 }
 
-const contactService = () => {
-  ElMessage.info('正在拨打客服电话：400-123-4567')
-}
-
-const aboutUs = () => {
-  ElMessage.info('关于我们功能开发中...')
-}
-
-const privacyPolicy = () => {
-  ElMessage.info('隐私政策功能开发中...')
+const showSettings = () => {
+  ElMessage.info('设置功能开发中...')
 }
 
 // 退出登录
-const logout = async () => {
+const handleLogout = async () => {
   try {
     await ElMessageBox.confirm(
       '确定要退出登录吗？',
@@ -362,7 +334,7 @@ const logout = async () => {
 
     // 清除本地存储的用户信息
     localStorage.removeItem('token')
-    localStorage.removeItem('riderInfo')
+    localStorage.removeItem('userInfo')
 
     ElMessage.success('退出登录成功')
 
@@ -374,12 +346,12 @@ const logout = async () => {
 }
 
 onMounted(() => {
-  loadRiderInfo()
+  initData()
 })
 </script>
 
 <style scoped>
-/* CSS图标 */
+/* CSS图标样式 */
 .css-icon {
   display: inline-block;
   width: 1em;
@@ -389,33 +361,46 @@ onMounted(() => {
   color: inherit;
 }
 
-/* 返回图标 */
-.css-icon.back::before {
+/* 箭头左 */
+.css-icon.arrow-left::before {
   content: '';
   position: absolute;
   top: 50%;
-  left: 50%;
-  transform: translate(-40%, -50%) rotate(-45deg);
+  left: 0;
+  transform: translateY(-50%) rotate(-45deg);
   width: 10px;
   height: 10px;
   border-left: 2px solid currentColor;
   border-bottom: 2px solid currentColor;
 }
 
+/* 箭头右 */
+.css-icon.arrow-right::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%) rotate(45deg);
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+}
+
 /* 设置图标 */
-.css-icon.settings::before {
+.css-icon.setting::before {
   content: '';
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border: 2px solid currentColor;
   border-radius: 50%;
 }
 
-.css-icon.settings::after {
+.css-icon.setting::after {
   content: '';
   position: absolute;
   top: 50%;
@@ -427,58 +412,8 @@ onMounted(() => {
   border-radius: 50%;
 }
 
-/* 相机图标 */
-.css-icon.camera::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 16px;
-  height: 12px;
-  border: 2px solid currentColor;
-  border-radius: 4px;
-}
-
-.css-icon.camera::after {
-  content: '';
-  position: absolute;
-  bottom: -4px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 8px;
-  height: 6px;
-  background: currentColor;
-  border-radius: 0 0 4px 4px;
-}
-
-/* 编辑图标 */
-.css-icon.edit::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) rotate(-45deg);
-  width: 14px;
-  height: 14px;
-  border: 2px solid currentColor;
-  border-radius: 2px;
-}
-
-.css-icon.edit::after {
-  content: '';
-  position: absolute;
-  bottom: 2px;
-  left: 2px;
-  width: 8px;
-  height: 2px;
-  background: currentColor;
-  border-radius: 1px;
-  transform: rotate(45deg);
-}
-
-/* 账户图标 */
-.css-icon.account::before {
+/* 用户编辑图标 */
+.css-icon.user-edit::before {
   content: '';
   position: absolute;
   top: 2px;
@@ -490,7 +425,7 @@ onMounted(() => {
   border-radius: 50%;
 }
 
-.css-icon.account::after {
+.css-icon.user-edit::after {
   content: '';
   position: absolute;
   bottom: 0;
@@ -502,67 +437,136 @@ onMounted(() => {
   border-radius: 5px 5px 0 0;
 }
 
-/* 支付图标 */
-.css-icon.payment::before {
+/* 锁图标 */
+.css-icon.lock::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 8px;
+  border: 2px solid currentColor;
+  border-radius: 2px 2px 0 0;
+}
+
+.css-icon.lock::after {
   content: '';
   position: absolute;
   top: 0;
   left: 50%;
   transform: translateX(-50%);
+  width: 6px;
+  height: 6px;
+  background: currentColor;
+  border-radius: 50%;
+}
+
+/* 信用卡图标 */
+.css-icon.credit-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 16px;
   height: 12px;
   border: 2px solid currentColor;
   border-radius: 2px;
 }
 
-.css-icon.payment::after {
+.css-icon.credit-card::after {
   content: '';
   position: absolute;
   bottom: 2px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 2px;
+  width: 12px;
+  height: 1px;
+  background: currentColor;
+  border-radius: 1px;
+}
+
+/* 钱包图标 */
+.css-icon.wallet::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 16px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-radius: 2px;
+}
+
+.css-icon.wallet::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 8px;
   width: 6px;
   height: 1px;
   background: currentColor;
   border-radius: 1px;
 }
 
-/* 箭头图标 */
-.css-icon.arrow::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) rotate(45deg);
-  width: 8px;
-  height: 8px;
-  border-right: 2px solid currentColor;
-  border-top: 2px solid currentColor;
-}
-
-/* 工作图标 */
-.css-icon.work::before {
+/* 文档图标 */
+.css-icon.document::before {
   content: '';
   position: absolute;
   top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 14px;
-  height: 14px;
+  left: 0;
+  width: 12px;
+  height: 16px;
   border: 2px solid currentColor;
-  border-radius: 50%;
+  border-radius: 2px;
 }
 
-.css-icon.work::after {
+.css-icon.document::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 6px;
+  height: 1px;
+  background: currentColor;
+  box-shadow: 0 2px 0 currentColor, 0 4px 0 currentColor;
+}
+
+/* 星星图标 */
+.css-icon.star::before {
   content: '';
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 6px;
+  width: 12px;
+  height: 12px;
+  background: currentColor;
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+}
+
+/* 数据分析图标 */
+.css-icon.data-analysis::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 2px;
+  width: 3px;
   height: 6px;
   background: currentColor;
-  border-radius: 50%;
+  border-radius: 1px;
+  box-shadow: 4px 0 0 currentColor, 8px 0 0 currentColor, 12px 0 0 currentColor;
+}
+
+.css-icon.data-analysis::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 2px;
+  width: 3px;
+  height: 10px;
+  background: currentColor;
+  border-radius: 1px;
+  box-shadow: 8px 0 0 currentColor;
 }
 
 /* 通知图标 */
@@ -572,97 +576,50 @@ onMounted(() => {
   top: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border: 2px solid currentColor;
-  border-radius: 50% 50% 50% 0;
-  transform: translateX(-50%) rotate(-45deg);
+  border-radius: 50%;
 }
 
 .css-icon.notification::after {
   content: '';
   position: absolute;
-  bottom: 0;
+  top: 0;
   right: 0;
   width: 6px;
   height: 6px;
-  background: #F56C6C;
+  background: #ff4757;
+  border-radius: 50%;
   border: 1px solid white;
-  border-radius: 50%;
 }
 
-/* 地图图标 */
-.css-icon.map::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 16px;
-  height: 12px;
-  border: 2px solid currentColor;
-  border-radius: 2px;
-}
-
-.css-icon.map::after {
-  content: '';
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 3px;
-  height: 3px;
-  background: currentColor;
-  border-radius: 50%;
-  box-shadow: 6px 3px 0 currentColor, 3px 6px 0 currentColor;
-}
-
-/* 帮助图标 */
-.css-icon.help::before {
+/* 盾牌图标 */
+.css-icon.shield::before {
   content: '';
   position: absolute;
   top: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: 14px;
+  width: 12px;
   height: 14px;
   border: 2px solid currentColor;
+  border-radius: 50% 50% 0 0;
+}
+
+.css-icon.shield::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 6px;
+  background: currentColor;
   border-radius: 50%;
 }
 
-.css-icon.help::after {
-  content: '?';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 12px;
-  font-weight: bold;
-}
-
-/* 反馈图标 */
-.css-icon.feedback::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 16px;
-  height: 12px;
-  border: 2px solid currentColor;
-  border-radius: 8px 8px 0 0;
-}
-
-.css-icon.feedback::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 10px;
-  height: 2px;
-  background: currentColor;
-  border-radius: 1px;
-}
-
-/* 客服图标 */
+/* 服务图标 */
 .css-icon.service::before {
   content: '';
   position: absolute;
@@ -687,53 +644,54 @@ onMounted(() => {
   border-radius: 1px;
 }
 
-/* 关于图标 */
-.css-icon.about::before {
+/* 消息图标 */
+.css-icon.message::before {
   content: '';
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 16px;
-  height: 16px;
-  border: 2px solid currentColor;
-  border-radius: 50%;
-}
-
-.css-icon.about::after {
-  content: 'i';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 12px;
-  font-weight: bold;
-  font-style: italic;
-}
-
-/* 隐私图标 */
-.css-icon.privacy::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
   width: 14px;
-  height: 18px;
+  height: 10px;
   border: 2px solid currentColor;
-  border-radius: 8px 8px 0 0;
+  border-radius: 7px;
 }
 
-.css-icon.privacy::after {
+.css-icon.message::after {
   content: '';
   position: absolute;
-  top: 4px;
+  bottom: 2px;
   left: 50%;
   transform: translateX(-50%);
   width: 6px;
-  height: 6px;
+  height: 2px;
   background: currentColor;
-  border-radius: 2px;
+  border-radius: 1px;
+}
+
+/* 退出图标 */
+.css-icon.logout::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-45deg);
+  width: 12px;
+  height: 2px;
+  background: currentColor;
+  border-radius: 1px;
+}
+
+.css-icon.logout::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(45deg);
+  width: 12px;
+  height: 2px;
+  background: currentColor;
+  border-radius: 1px;
 }
 
 /* 房子图标 */
@@ -762,31 +720,6 @@ onMounted(() => {
   border-bottom: 8px solid currentColor;
 }
 
-/* 数据分析图标 */
-.css-icon.data-analysis::before {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 2px;
-  width: 3px;
-  height: 6px;
-  background: currentColor;
-  border-radius: 1px;
-  box-shadow: 4px 0 0 currentColor, 8px 0 0 currentColor, 12px 0 0 currentColor;
-}
-
-.css-icon.data-analysis::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 2px;
-  width: 3px;
-  height: 10px;
-  background: currentColor;
-  border-radius: 1px;
-  box-shadow: 8px 0 0 currentColor;
-}
-
 /* 列表图标 */
 .css-icon.list::before {
   content: '';
@@ -794,18 +727,6 @@ onMounted(() => {
   top: 0;
   left: 0;
   width: 16px;
-  height: 2px;
-  background: currentColor;
-  border-radius: 1px;
-  box-shadow: 0 4px 0 currentColor, 0 8px 0 currentColor;
-}
-
-.css-icon.list::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 2px;
-  width: 10px;
   height: 2px;
   background: currentColor;
   border-radius: 1px;
@@ -838,13 +759,14 @@ onMounted(() => {
 }
 
 .rider-profile {
-  background: #f5f5f5;
+  background: linear-gradient(to bottom, #FFFDE7, #FFFFFF);
   min-height: 100vh;
   padding-bottom: 60px;
+  font-family: 'PingFang SC', 'Helvetica Neue', sans-serif;
 }
 
-/* 顶部导航栏 */
-.header-bar {
+/* 顶部导航 */
+.header-nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -853,112 +775,107 @@ onMounted(() => {
   color: #333;
 }
 
-.back-btn, .settings-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 50%;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.back-btn:hover, .settings-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.back-btn .css-icon, .settings-btn .css-icon {
-  font-size: 20px;
-  color: #333;
-}
-
-.page-title {
-  margin: 0;
+.nav-title {
   font-size: 18px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
-/* 用户信息卡片 */
-.profile-header {
-  padding: 20px 15px;
-  background: white;
-}
-
+/* 骑手信息卡片 */
 .profile-card {
+  background: white;
+  margin: 15px;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.profile-header {
   display: flex;
   align-items: center;
+  gap: 15px;
   margin-bottom: 20px;
 }
 
-.avatar-section {
-  position: relative;
-  margin-right: 20px;
-}
-
-.camera-icon {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 24px;
-  height: 24px;
-  background: #FFD700;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  border: 2px solid white;
-}
-
-.camera-icon .css-icon {
-  font-size: 12px;
+.profile-info h2 {
+  margin: 0;
+  font-size: 22px;
   color: #333;
-}
-
-.info-section {
-  flex: 1;
-}
-
-.rider-name {
-  margin: 0 0 5px 0;
-  font-size: 20px;
-  color: #333;
-  font-weight: 500;
-}
-
-.rider-id {
-  font-size: 14px;
-  color: #999;
-  margin-bottom: 8px;
 }
 
 .rating-section {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-top: 5px;
 }
 
 .rating-text {
-  font-size: 14px;
   color: #666;
+  font-size: 14px;
 }
 
-/* 成就徽章 */
-.achievements {
+.completed-orders {
+  margin: 5px 0 0 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.status-section {
   display: flex;
   justify-content: space-around;
+  padding-top: 15px;
+  border-top: 1px solid #f0f0f0;
 }
 
-.achievement-item {
+.status-item {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 5px;
 }
 
-.badge {
+.status-label {
+  color: #666;
+  font-size: 14px;
+}
+
+.status-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+/* 数据统计 */
+.stats-section {
+  background: white;
+  margin: 15px;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.stats-section h3 {
+  margin: 0 0 15px 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 15px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 10px;
+}
+
+.stat-icon {
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -966,81 +883,54 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   font-size: 20px;
+  color: white;
 }
 
-.badge.gold {
-  background: linear-gradient(135deg, #FFD700, #FFA500);
+.stat-icon.income {
+  background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
 }
 
-.badge.speed {
-  background: linear-gradient(135deg, #409EFF, #67C23A);
+.stat-icon.orders {
+  background: linear-gradient(135deg, #409EFF 0%, #1890ff 100%);
 }
 
-.badge.star {
-  background: linear-gradient(135deg, #E6A23C, #F56C6C);
+.stat-icon.rating {
+  background: linear-gradient(135deg, #67C23A 0%, #52c41a 100%);
 }
 
-.badge-text {
-  font-size: 12px;
-  color: #666;
+.stat-icon.efficiency {
+  background: linear-gradient(135deg, #E6A23C 0%, #ffa502 100%);
 }
 
-/* 数据概览 */
-.data-overview {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  padding: 15px;
-  background: white;
-  border-top: 1px solid #f0f0f0;
-}
-
-.overview-item {
-  text-align: center;
-  padding: 15px 0;
-}
-
-.overview-value {
+.stat-value {
   font-size: 20px;
   font-weight: bold;
   color: #333;
-  margin-bottom: 5px;
+  margin-bottom: 2px;
 }
 
-.overview-label {
-  font-size: 12px;
+.stat-label {
+  font-size: 14px;
   color: #666;
 }
 
 /* 功能菜单 */
-.menu-sections {
-  padding: 15px;
+.menu-section {
+  margin: 15px;
 }
 
-.menu-section {
+.menu-group {
   background: white;
   border-radius: 12px;
   margin-bottom: 15px;
-  overflow: hidden;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.section-title {
-  margin: 0;
-  padding: 15px 20px 10px;
-  font-size: 16px;
-  color: #333;
-  font-weight: 500;
-}
-
-.menu-list {
-  padding: 0 20px;
+  overflow: hidden;
 }
 
 .menu-item {
   display: flex;
   align-items: center;
-  padding: 15px 0;
+  padding: 15px;
   border-bottom: 1px solid #f0f0f0;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -1052,64 +942,46 @@ onMounted(() => {
 
 .menu-item:hover {
   background: #f8f9fa;
-  margin: 0 -20px;
-  padding-left: 20px;
-  padding-right: 20px;
+}
+
+.menu-item.logout-item {
+  justify-content: center;
+  color: #f56c6c;
+}
+
+.menu-item.logout-item:hover {
+  background: #fef0f0;
 }
 
 .menu-icon {
-  width: 40px;
-  height: 40px;
-  background: #f8f9fa;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-right: 15px;
-}
-
-.menu-icon .css-icon {
-  font-size: 20px;
-  color: #FFD700;
-}
-
-.menu-content {
-  flex: 1;
+  background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+  color: white;
+  font-size: 16px;
+  margin-right: 12px;
+  flex-shrink: 0;
 }
 
 .menu-title {
+  flex: 1;
   font-size: 16px;
   color: #333;
-  margin-bottom: 2px;
 }
 
-.menu-desc {
+.menu-badge {
+  background: #ff4757;
+  color: white;
   font-size: 12px;
-  color: #999;
-}
-
-.menu-arrow {
-  width: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.menu-arrow .css-icon {
-  font-size: 16px;
-  color: #ccc;
-}
-
-/* 退出登录 */
-.logout-section {
-  padding: 20px 15px;
-}
-
-.logout-btn {
-  width: 100%;
-  height: 50px;
-  font-size: 16px;
-  border-radius: 25px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  min-width: 18px;
+  text-align: center;
+  margin-right: 8px;
 }
 
 /* 底部导航 */
@@ -1151,15 +1023,31 @@ onMounted(() => {
 
 /* 响应式设计 */
 @media (max-width: 375px) {
-  .data-overview {
-    grid-template-columns: 1fr;
-    gap: 8px;
+  .profile-card {
+    margin: 10px;
+    padding: 15px;
   }
 
-  .menu-item:hover {
-    margin: 0;
-    padding-left: 0;
-    padding-right: 0;
+  .stats-section {
+    margin: 10px;
+    padding: 15px;
+  }
+
+  .menu-section {
+    margin: 10px;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .stat-item {
+    padding: 12px;
+  }
+
+  .menu-item {
+    padding: 12px 15px;
   }
 }
 </style>

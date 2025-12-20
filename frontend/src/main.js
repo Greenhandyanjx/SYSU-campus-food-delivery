@@ -2,6 +2,7 @@ import '@/styles/home.scss';
 import '@/styles/index.scss';
 import { createApp } from 'vue'
 import ElementPlus from 'element-plus'
+import { createPinia } from 'pinia'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import 'element-plus/dist/index.css'
 
@@ -13,6 +14,9 @@ const app = createApp(App)
 app.use(Vant)
 app.use(ElementPlus)
 app.use(router)
+// Pinia store
+const pinia = createPinia()
+app.use(pinia)
 
 // 注册 Element Plus 图标（可选）
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
@@ -20,6 +24,22 @@ for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
 }
 app.config.errorHandler = (err, vm, info) => {
   console.error('Vue 全局错误捕获:', err, info, vm)
+
+  // 改进错误处理，区分不同类型的错误
+  if (err.name === 'AxiosError') {
+    console.error('Axios网络请求错误:', {
+      message: err.message,
+      code: err.code,
+      config: err.config,
+      response: err.response
+    })
+
+    // 网络错误不显示全局错误，让组件内部处理
+    return false
+  }
+
+  // 其他Vue错误仍然显示
+  console.error('Vue运行时错误:', err)
 }
 
 app.mount('#app')

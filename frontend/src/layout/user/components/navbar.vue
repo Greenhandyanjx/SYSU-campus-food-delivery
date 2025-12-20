@@ -1,6 +1,7 @@
 <template>
-	<header ref="navRef" class="meituan-navbar">
-		<div class="left">
+  <header ref="navRef" class="meituan-navbar">
+    <div class="left">
+      <img src="/JDlogo.png" class="site-logo" alt="嘉递外卖" />
 			<el-button type="text" class="loc-btn" @click="onLocation">
         <img src="@\assets\icons\location.svg" alt="定位" />
         <div class="loc-info">
@@ -43,8 +44,8 @@
 		<div class="right">
 			<el-dropdown trigger="click" @command="handleCommand">
 				<span class="el-dropdown-link user-link">
-					<el-avatar size="32" icon="User"/>
-					<span class="username">{{ username || '游客' }}</span>
+          <el-avatar :size="45" :src="avatar || defaultAvatar" />
+            <span class="username">{{ username || '游客' }}</span>
 				</span>
 				<template #dropdown>
 					<el-dropdown-menu>
@@ -59,6 +60,8 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
+import userPng from '@/assets/user.png'
+import * as myApi from '@/api/user/my'
 import { useRouter, useRoute } from 'vue-router'
 import SearchSuggest from '@/components/SearchSuggest.vue'
 import { Search } from '@element-plus/icons-vue'
@@ -75,7 +78,11 @@ const route = useRoute()
 const q = ref('')
 const city = ref(localStorage.getItem('city') || '定位中...')
 const username = ref(localStorage.getItem('username') || '')
-const avatar = ref('/src/assets/login/mini-logo.png')
+const avatar = ref(localStorage.getItem('avatar') || '')
+const defaultAvatar = userPng
+
+// site logo style (small, aligns with left controls)
+
 
 // 仅当路由是订单列表或订单详情时，显示订单搜索框
 const isOrderRoute = computed(() => {
@@ -252,6 +259,13 @@ onMounted(() => {
   window.addEventListener('resize', onScroll);
   // 页面加载时获取一次实时地址展示
   fetchAndSetCurrentAddress().catch(() => {})
+  // 尝试从后端拉取用户资料（头像/用户名）以显示在导航栏
+  myApi.getProfile().then((p: any) => {
+    if (!p) return
+    username.value = p.nickname || p.username || localStorage.getItem('username') || username.value
+    avatar.value = p.avatar_url || p.avatar || avatar.value
+    if (avatar.value) localStorage.setItem('avatar', avatar.value)
+  }).catch(() => {})
 })
 onUnmounted(() => { window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll); if (rafId != null) cancelAnimationFrame(rafId) })
 </script>
@@ -384,6 +398,9 @@ onUnmounted(() => { window.removeEventListener('scroll', onScroll); window.remov
   display: flex;
   align-items: center;
 }
+
+/* site logo style (small, aligns with left controls) */
+.site-logo { width: 30px; height: 30px; object-fit: contain; padding:0; }
 .notice-search:hover,
 .notice-search:focus-within {
   box-shadow: 0 0 0 3px rgba(255, 213, 79, 0.3);
@@ -404,7 +421,7 @@ onUnmounted(() => { window.removeEventListener('scroll', onScroll); window.remov
 }
 .notice-search :deep(.el-input__suffix) {
   position: relative;
-  width: 0;
+  width: 10px;
 }
 
 /* === 搜索按钮 === */

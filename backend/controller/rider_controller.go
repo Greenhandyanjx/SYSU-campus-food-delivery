@@ -5,6 +5,7 @@ import (
 	"backend/models"
 	"backend/utils"
 	"encoding/json"
+	"log"
 	"strconv"
 	"time"
 
@@ -72,28 +73,146 @@ type OrderItemResp struct {
 }
 
 func GetNewOrders(c *gin.Context) {
+	// 1. 先查出待接单的订单
 	var orders []models.Order
-	global.Db.Where("status = 1").Order("created_at DESC").Limit(50).Find(&orders)
+	if err := global.Db.
+		Where("status = ?", 1).
+		Order("created_at DESC").
+		Limit(50).
+		Find(&orders).Error; err != nil {
 
-	list := []OrderItemResp{}
+		log.Printf("GetNewOrders find orders error: %v\n", err)
+		c.JSON(200, gin.H{
+			"code": 0,
+			"msg":  "获取订单失败",
+			"data": []OrderItemResp{},
+		})
+		return
+	}
+
+	if len(orders) == 0 {
+		c.JSON(200, gin.H{
+			"code": 1,
+			"msg":  "获取成功",
+			"data": []OrderItemResp{},
+		})
+		return
+	}
+
+	// 2. 收集所有需要的商家ID、收货人ID（去重）
+	merchantIDs := make([]uint, 0)
+	consigneeIDs := make([]uint, 0)
+	merchantSet := make(map[uint]struct{})
+	consigneeSet := make(map[uint]struct{})
 
 	for _, o := range orders {
-		var merchant models.Merchant
-		global.Db.Where("id = ?", o.MerchantID).First(&merchant)
+		// MerchantID 本身就是 uint
+		if o.MerchantID > 0 {
+			if _, ok := merchantSet[o.MerchantID]; !ok {
+				merchantSet[o.MerchantID] = struct{}{}
+				merchantIDs = append(merchantIDs, o.MerchantID)
+			}
+		}
+		// Consigneeid 是 int，这里统一转成 uint
+		if o.Consigneeid > 0 {
+			cid := uint(o.Consigneeid)
+			if _, ok := consigneeSet[cid]; !ok {
+				consigneeSet[cid] = struct{}{}
+				consigneeIDs = append(consigneeIDs, cid)
+			}
+		}
+	}
 
-		var consignee models.Consignee
-		global.Db.Where("id = ?", o.Consigneeid).First(&consignee)
+	// 3. 一次性查出所有商家，map[uint]Merchant
+	merchantMap := make(map[uint]models.Merchant)
+	if len(merchantIDs) > 0 {
+		var merchants []models.Merchant
+		if err := global.Db.
+			Where("id IN ?", merchantIDs).
+			Find(&merchants).Error; err != nil {
 
-		var addr models.Address
-		global.Db.Where("id = ?", consignee.Addressid).First(&addr)
+			log.Printf("GetNewOrders find merchants error: %v\n", err)
+		}
+		for _, m := range merchants {
+			merchantMap[m.ID] = m
+		}
+	}
+
+	// 4. 一次性查出所有收货人，同时收集地址ID（地址这边用 int）
+	consigneeMap := make(map[uint]models.Consignee)
+	addressIDs := make([]int, 0)
+	addrSet := make(map[int]struct{})
+
+	if len(consigneeIDs) > 0 {
+		var consignees []models.Consignee
+		if err := global.Db.
+			Where("id IN ?", consigneeIDs).
+			Find(&consignees).Error; err != nil {
+
+			log.Printf("GetNewOrders find consignees error: %v\n", err)
+		}
+		for _, cg := range consignees {
+			consigneeMap[cg.ID] = cg
+
+			if cg.Addressid > 0 {
+				aid := cg.Addressid // int
+				if _, ok := addrSet[aid]; !ok {
+					addrSet[aid] = struct{}{}
+					addressIDs = append(addressIDs, aid)
+				}
+			}
+		}
+	}
+
+	// 5. 一次性查出所有地址，map[int]Address
+	addrMap := make(map[int]models.Address)
+	if len(addressIDs) > 0 {
+		var addrs []models.Address
+		if err := global.Db.
+			Where("id IN ?", addressIDs).
+			Find(&addrs).Error; err != nil {
+
+			log.Printf("GetNewOrders find addresses error: %v\n", err)
+		}
+		for _, a := range addrs {
+			addrMap[a.ID] = a // a.ID 是 int，这里就不会再报错了
+		}
+	}
+
+	// 6. 组装返回数据，遇到脏数据就跳过
+	list := make([]OrderItemResp, 0, len(orders))
+
+	for _, o := range orders {
+		// 商家
+		m, ok := merchantMap[o.MerchantID]
+		if !ok {
+			log.Printf("order %d merchant %d not found\n", o.ID, o.MerchantID)
+			continue
+		}
+
+		// 收货人
+		cid := uint(o.Consigneeid)
+		cg, ok := consigneeMap[cid]
+		if !ok {
+			log.Printf("order %d consignee %d not found\n", o.ID, o.Consigneeid)
+			continue
+		}
+
+		// 地址（全部用 int）
+		aid := cg.Addressid
+		addr, ok := addrMap[aid]
+		if !ok {
+			log.Printf("order %d address %d not found\n", o.ID, cg.Addressid)
+			continue
+		}
 
 		fullAddr := addr.Province + addr.City + addr.District + addr.Street + addr.Detail
 
 		list = append(list, OrderItemResp{
 			ID:              o.ID,
-			Restaurant:      merchant.ShopName,
-			PickupAddress:   merchant.ShopLocation,
-			Customer:        consignee.Name,
+			Restaurant:      m.ShopName,
+			PickupAddress:   m.ShopLocation,
+			Customer:        cg.Name,
 			DeliveryAddress: fullAddr,
 			Distance:        1.2,
 			EstimatedFee:    o.TotalPrice,
@@ -102,7 +221,13 @@ func GetNewOrders(c *gin.Context) {
 		})
 	}
 
-	c.JSON(200, gin.H{"code": 1, "data": list})
+	log.Printf("GetNewOrders success, count=%d\n", len(list))
+
+	c.JSON(200, gin.H{
+		"code": 1,
+		"msg":  "获取成功",
+		"data": list,
+	})
 }
 
 // POST /rider/orders/:orderId/accept_safe
@@ -683,6 +808,8 @@ func AcceptOrder(c *gin.Context) {
 		"rider_id":    riderID,
 		"pickup_code": pickupCode,
 		"accepted_at": &now,
+		// 分配骑手成功后，设置预计送达时间（示例：当前时间 + 30 分钟）
+		"expected_time": now.Add(30 * time.Minute),
 	})
 
 	c.JSON(200, gin.H{
