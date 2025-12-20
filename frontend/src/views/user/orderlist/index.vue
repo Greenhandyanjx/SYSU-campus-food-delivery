@@ -65,6 +65,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
+import { ElMessage } from 'element-plus'
 import chatClient from '@/utils/chatClient'
 import { useRoute, useRouter } from 'vue-router'
 import OrderCard from '@/components/OrderList/OrderCard.vue'
@@ -208,6 +209,12 @@ function mapBackendOrder(o) {
     // keep legacy aliases for safety
     deliveryFee: o.delivery_fee ?? o.deliveryFee ?? o.deliveryAmount ?? o.delivery ?? o.fee ?? 0,
     items
+    ,
+    is_commented: o.is_commented ?? o.isCommented ?? false,
+    reviewed: o.reviewed ?? o.is_commented ?? o.isCommented ?? false,
+    // optional review summary if backend provides
+    merchant_score: o.merchant_score ?? o.merchantScore ?? o.merchant?.avg_score ?? o.merchant?.avgScore ?? null,
+    rider_score: o.rider_score ?? o.riderScore ?? null
   }
 }
 
@@ -263,7 +270,14 @@ async function onReorder(order) {
   alert('已加入购物车，前往购物车结算')
   router.push('/user/cart')
 }
-function onReview(order) { alert('去评价: ' + order.id) }
+function onReview(order) {
+  if (!order) return
+  if (order.is_commented || order.isCommented || order.reviewed) {
+    ElMessage.info('该订单已评价')
+    return
+  }
+  router.push(`/user/review/${order.id}`)
+}
 function onViewRefund(order) { alert('查看退款详情: ' + order.id) }
 function openStore(id) { 
   // prefer path-based navigation using numeric id to avoid relying on 'name' param

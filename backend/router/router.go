@@ -178,6 +178,8 @@ func SetRouter() *gin.Engine {
 		// 用户端订单接口：列表与详情
 		auth.GET("/user/order/list", controller.GetUserOrderList)
 		auth.GET("/user/order/:id", controller.GetUserOrderDetail)
+		// 用户评价订单
+		auth.POST("/user/order/:id/review", controller.ReviewOrder)
 		// 用户端订单操作：取消、支付、更新收货人/地址
 		auth.POST("/user/order/cancel", controller.CancelOrder)
 		auth.POST("/user/order/pay", controller.PayOrder)

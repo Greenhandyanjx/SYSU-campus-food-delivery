@@ -81,7 +81,9 @@ func GetStores(c *gin.Context) {
 			"desc":        m.ShopLocation,
 			"logo":        m.Logo,
 			"tags":        []string{},
-			"rating":      4.8,
+			"rating":      m.AvgScore,
+			"avg_score":   m.AvgScore,
+			"score_count": m.ScoreCount,
 			"sales":       m.MenuCount,
 			"minOrder":    0,
 			"deliveryFee": 0,
@@ -152,6 +154,8 @@ func GetStoreByQuery(c *gin.Context) {
 		"logo":          m.Logo,
 		"phone":         m.Phone,
 		"menu_count":    m.MenuCount,
+		"avg_score":     m.AvgScore,
+		"score_count":   m.ScoreCount,
 	}
 
 	// cache for 60s
@@ -281,7 +285,7 @@ func GetStoreDishes(c *gin.Context) {
 	}
 
 	resp := map[string]interface{}{
-		"merchant": map[string]interface{}{"id": m.ID, "base_id": m.BaseID, "name": m.ShopName, "logo": m.Logo, "phone": m.Phone, "shop_location": m.ShopLocation},
+		"merchant": map[string]interface{}{"id": m.ID, "base_id": m.BaseID, "name": m.ShopName, "logo": m.Logo, "phone": m.Phone, "shop_location": m.ShopLocation, "avg_score": m.AvgScore, "score_count": m.ScoreCount},
 		"dishes":   dishes,
 		"meals":    mealsOut,
 	}

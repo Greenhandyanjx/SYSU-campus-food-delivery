@@ -474,6 +474,9 @@ func GetUserOrderList(c *gin.Context) {
 			"storeName":       m.ShopName,
 			"storeLogo":       m.Logo,
 			"items":           itms,
+			"is_commented":    o.IsCommented,
+			"merchant_avg_score": m.AvgScore,
+			"merchant_score_count": m.ScoreCount,
 		})
 	}
 
@@ -616,6 +619,17 @@ func GetUserOrderDetail(c *gin.Context) {
 			"deliveryAmount":  order.PayInfo.Deliveryamount,
 		},
 	}
+	// expose whether this order has been commented and merchant/rider rating summary
+	response["data"].(gin.H)["is_commented"] = order.IsCommented
+	response["data"].(gin.H)["merchant_avg_score"] = merchant.AvgScore
+	response["data"].(gin.H)["merchant_score_count"] = merchant.ScoreCount
+	// rider may be empty
+	response["data"].(gin.H)["rider_avg_score"] = 0.0
+	response["data"].(gin.H)["rider_score_count"] = 0
+	if rider.ID != 0 {
+		response["data"].(gin.H)["rider_avg_score"] = rider.AvgScore
+		response["data"].(gin.H)["rider_score_count"] = rider.ScoreCount
+	}
 	// 填充 payDeadline 字段（如果存在）
 	if order.PayInfo.ExpiresAt != nil {
 		response["data"].(gin.H)["payDeadline"] = order.PayInfo.ExpiresAt.Format(time.RFC3339)
@@ -706,6 +720,135 @@ func OrderAccept(c *gin.Context) {
 		"code": 1,
 		"data": gin.H{"success": true},
 	})
+}
+
+// ReviewOrder 允许用户对已完成的订单进行评分（商家与骑手），路由：POST /user/order/:id/review
+func ReviewOrder(c *gin.Context) {
+	idStr := c.Param("id")
+	if idStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "order id required"})
+		return
+	}
+	oid, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid order id"})
+		return
+	}
+
+	// 身份校验：必须是订单所属用户
+	baseIf, ok := c.Get("baseUserID")
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "message": "not authenticated"})
+		return
+	}
+	baseUserID := baseIf.(uint)
+
+	var order models.Order
+	if err := global.Db.First(&order, oid).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"code": 0, "message": "order not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get order"})
+		return
+	}
+	if order.Userid != baseUserID {
+		c.JSON(http.StatusForbidden, gin.H{"code": 0, "message": "forbidden"})
+		return
+	}
+	// 仅允许对已完成订单评分
+	if order.Status != 5 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "order not completed"})
+		return
+	}
+	if order.IsCommented {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "order already reviewed"})
+		return
+	}
+
+	var body struct {
+		MerchantScore int `json:"merchant_score" binding:"omitempty,min=1,max=5"`
+		RiderScore    int `json:"rider_score" binding:"omitempty,min=1,max=5"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid payload", "error": err.Error()})
+		return
+	}
+
+	// 开启事务更新商家/骑手评分并标记订单已评价
+	tx := global.Db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "internal error"})
+		}
+	}()
+
+	// 更新商家评分
+	if body.MerchantScore > 0 {
+		var m models.Merchant
+		if err := tx.First(&m, order.MerchantID).Error; err == nil {
+			// 计算新的平均分
+			prevCount := m.ScoreCount
+			if prevCount < 0 { prevCount = 0 }
+			total := m.AvgScore*float64(prevCount) + float64(body.MerchantScore)
+			newCount := prevCount + 1
+			m.ScoreCount = newCount
+			m.AvgScore = 0.0
+			if newCount > 0 {
+				m.AvgScore = total / float64(newCount)
+			}
+			if err := tx.Save(&m).Error; err != nil {
+				tx.Rollback()
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to update merchant score"})
+				return
+			}
+		}
+	}
+
+	// 更新骑手评分（若存在）
+	if body.RiderScore > 0 && order.RiderID != 0 {
+		var r models.Rider
+		if err := tx.First(&r, order.RiderID).Error; err == nil {
+			prevCount := r.ScoreCount
+			if prevCount < 0 { prevCount = 0 }
+			total := r.AvgScore*float64(prevCount) + float64(body.RiderScore)
+			newCount := prevCount + 1
+			r.ScoreCount = newCount
+			r.AvgScore = 0.0
+			if newCount > 0 {
+				r.AvgScore = total / float64(newCount)
+			}
+			if err := tx.Save(&r).Error; err != nil {
+				tx.Rollback()
+				c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to update rider score"})
+				return
+			}
+		}
+	}
+
+	// 标记订单已评价
+	order.IsCommented = true
+	if err := tx.Save(&order).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to mark order reviewed"})
+		return
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "commit failed"})
+		return
+	}
+
+	// 触发前端刷新事件（可选：通过 websocket 或前端主动轮询）
+	tryEmit := func() {
+		// 尝试触发全局事件以便页面刷新（前端监听 order:changed）
+		_ = global.Db // no-op to keep linter happy
+		// 这里无法直接触发浏览器事件；前端应在成功返回后触发刷新
+	}
+	tryEmit()
+
+	c.JSON(http.StatusOK, gin.H{"code": 1, "message": "review saved"})
 }
 
 func triggerDeliveryProcess(order models.Order) {
