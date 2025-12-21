@@ -459,23 +459,23 @@ func GetUserOrderList(c *gin.Context) {
 		}
 
 		items = append(items, gin.H{
-			"id":              o.ID,
-			"number":          num,
-			"amount":          o.TotalPrice,
-			"deliveryFee":     o.DeliveryFee,
-			"delivery_amount": o.DeliveryFee,
-			"status":          o.Status,
-			"orderTime":       o.CreatedAt.Format(time.RFC3339),
-			"createdAt":       o.CreatedAt.Format(time.RFC3339),
-			"created_at":      o.CreatedAt.Format(time.RFC3339),
-			"time":            o.CreatedAt.Format(time.RFC3339),
-			"payDeadline":     payDeadline,
-			"merchantId":      o.MerchantID,
-			"storeName":       m.ShopName,
-			"storeLogo":       m.Logo,
-			"items":           itms,
-			"is_commented":    o.IsCommented,
-			"merchant_avg_score": m.AvgScore,
+			"id":                   o.ID,
+			"number":               num,
+			"amount":               o.TotalPrice,
+			"deliveryFee":          o.DeliveryFee,
+			"delivery_amount":      o.DeliveryFee,
+			"status":               o.Status,
+			"orderTime":            o.CreatedAt.Format(time.RFC3339),
+			"createdAt":            o.CreatedAt.Format(time.RFC3339),
+			"created_at":           o.CreatedAt.Format(time.RFC3339),
+			"time":                 o.CreatedAt.Format(time.RFC3339),
+			"payDeadline":          payDeadline,
+			"merchantId":           o.MerchantID,
+			"storeName":            m.ShopName,
+			"storeLogo":            m.Logo,
+			"items":                itms,
+			"is_commented":         o.IsCommented,
+			"merchant_avg_score":   m.AvgScore,
 			"merchant_score_count": m.ScoreCount,
 		})
 	}
@@ -790,7 +790,9 @@ func ReviewOrder(c *gin.Context) {
 		if err := tx.First(&m, order.MerchantID).Error; err == nil {
 			// 计算新的平均分
 			prevCount := m.ScoreCount
-			if prevCount < 0 { prevCount = 0 }
+			if prevCount < 0 {
+				prevCount = 0
+			}
 			total := m.AvgScore*float64(prevCount) + float64(body.MerchantScore)
 			newCount := prevCount + 1
 			m.ScoreCount = newCount
@@ -811,7 +813,9 @@ func ReviewOrder(c *gin.Context) {
 		var r models.Rider
 		if err := tx.First(&r, order.RiderID).Error; err == nil {
 			prevCount := r.ScoreCount
-			if prevCount < 0 { prevCount = 0 }
+			if prevCount < 0 {
+				prevCount = 0
+			}
 			total := r.AvgScore*float64(prevCount) + float64(body.RiderScore)
 			newCount := prevCount + 1
 			r.ScoreCount = newCount
