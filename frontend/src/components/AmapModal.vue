@@ -349,6 +349,16 @@ const geocodeAndShowMarker = (data: any) => {
             匹配度: result.geocodes[0].confidence
           });
 
+          // 🚨 地图坐标调试信息
+          console.log('🚨 [地图坐标调试] 地图显示坐标:', {
+            lng: preciseLng,
+            lat: preciseLat,
+            地址类型: data.type,
+            原始地址: data.address,
+            解析后地址: enhancedAddress,
+            用途: data.type === 'merchant' ? '商家位置' : '用户收货位置'
+          });
+
           // 更新地图中心点 - 使用更精确的经纬度
           map.setCenter(preciseLocation);
           map.setZoom(18); // 提高缩放级别以获得更精确的视图

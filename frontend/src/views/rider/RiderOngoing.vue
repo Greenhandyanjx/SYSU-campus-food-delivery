@@ -251,6 +251,17 @@ const deliver = async (id: number) => {
   // 设置对应按钮的loading状态
   deliveringId.value = id;
 
+  // 🚨 确认送达调试信息
+  const currentOrder = list.value.find(o => o.id === id);
+  console.log('🚨 [确认送达调试] 点击送达按钮:', {
+    订单ID: id,
+    订单状态: currentOrder?.status,
+    商家名称: currentOrder?.restaurant,
+    商家地址: currentOrder?.pickupAddress,
+    收货地址: currentOrder?.deliveryAddress,
+    操作: '准备调用后端 deliverOrder API'
+  });
+
   try {
     await riderApi.deliverOrder(id);
     ElMessage.success("🎉 送达成功！感谢您的配送服务");
