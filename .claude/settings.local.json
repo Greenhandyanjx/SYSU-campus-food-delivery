@@ -11,7 +11,8 @@
       "Bash(go build:*)",
       "Bash(go run:*)",
       "Bash(ls:*)",
-      "Bash(npx vue-tsc:*)"
+      "Bash(npx vue-tsc:*)",
+      "Bash(sqlite3:*)"
     ],
     "deny": [],
     "ask": []
