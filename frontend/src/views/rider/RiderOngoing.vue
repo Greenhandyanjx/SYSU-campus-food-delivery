@@ -107,7 +107,7 @@
                 </el-button>
                 <div class="delivery-tip">
                   <i class="iconfont icon-location"></i>
-                  <span>送达需在收货点附近（150m内）</span>
+                  <span>送达需在收货点附近（1km内）</span>
                 </div>
               </div>
 
@@ -309,7 +309,7 @@ const deliver = async (id: number) => {
       setTimeout(() => {
         ElMessage({
           type: "warning",
-          message: `💡 请导航至${distance}米范围内的收货点，然后重试送达`,
+          message: `💡 请导航至1公里范围内的收货点，然后重试送达`,
           duration: 5000,
           showClose: true
         });
@@ -351,6 +351,22 @@ const deliver = async (id: number) => {
           showClose: true
         });
       }, 3500);
+
+    } else if (errorMsg.includes("骑手位置异常") || errorMsg.includes("位置异常")) {
+      ElMessage.error({
+        message: "❌ 您的位置异常，请重新获取定位后再试",
+        duration: 4000,
+        showClose: true
+      });
+
+      setTimeout(() => {
+        ElMessage({
+          type: "warning",
+          message: "💡 请确保在珠海地区并允许浏览器定位权限",
+          duration: 5000,
+          showClose: true
+        });
+      }, 1500);
 
     } else if (errorMsg.includes("订单状态不允许")) {
       ElMessage.error({
