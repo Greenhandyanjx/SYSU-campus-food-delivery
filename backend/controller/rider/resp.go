@@ -17,4 +17,5 @@ func fail(c *gin.Context, msg string) {
 		"code": 0,
 		"msg":  msg,
 	})
+	c.Abort() // 🚨 关键修复：终止后续中间件和处理函数的执行
 }
