@@ -204,6 +204,7 @@ function mapBackendOrder(o) {
     statusText: o.status_text || o.statusText || mapStatusText(statusNum),
     time: formatFriendlyTime(rawTime),
     payDeadline: o.pay_deadline || o.payDeadline || null,
+    payInfoUpdatedAt: o.pay_info_updated_at || o.payInfoUpdatedAt || o.payInfoUpdatedAt || null,
     // delivery fee: support multiple backend field names
     delivery_fee: o.delivery_fee ?? o.deliveryFee ?? o.deliveryAmount ?? o.delivery ?? o.fee ?? 0,
     // keep legacy aliases for safety
