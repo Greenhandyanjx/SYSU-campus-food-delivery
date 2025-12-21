@@ -164,3 +164,5 @@ func MarkChatRead(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 1, "msg": "ok"})
 }
+
+//前有无意义
