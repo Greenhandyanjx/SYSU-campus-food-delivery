@@ -62,6 +62,14 @@ export function updateOrderAddress(id: string, payload: any) {
 }
 
 /**
+ * updateOrderNotes(id, payload)
+ * 功能：更新订单备注（notes 字段），用于结算页在支付前更新已存在的 pending 订单备注
+ * 请求：POST /user/order/updateNotes { id, notes }
+ */
+export function updateOrderNotes(id: string, payload: any) {
+  return request({ url: '/user/order/updateNotes', method: 'post', data: { id, ...payload } })
+}
+/**
  * reorder(order)
  * 功能：再次购买 - 将历史订单内菜品加入购物车
  * 前端实现：调用 storeApi.addToCart 逐条加入（若后端支持可提供批量接口）
@@ -124,6 +132,7 @@ export default {
   cancelOrder,
   payOrder,
   updateOrderAddress,
+  updateOrderNotes,
   reorder,
   confirmOrder,
   contactRider,

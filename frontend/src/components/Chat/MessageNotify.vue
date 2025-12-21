@@ -284,22 +284,23 @@ async function viewOrderDetail(o) {
 
   try {
     const path = (window.location && window.location.pathname) ? window.location.pathname : ''
-    const isOrdersPage = path.includes('/merchant/order') || path.includes('/merchant/orders')
+    const isOrdersPage = path.includes('/merchant/orders') || path.includes('/merchant/orders')
     // 使用路由携带参数以便订单页可根据 query 打开对应详情，减少依赖全局事件导致的重复请求
-    const queryPayload = { orderId: orderId, _t: String(Date.now()) }
+    const queryPayload = { orderId: orderId }
     if (!isOrdersPage) {
       try { await router.push({ path: '/merchant/orders', query: queryPayload }) } catch (e) {}
       // 给订单页组件短等待时间以保证 mounted 完成
       await new Promise(res => setTimeout(res, 220))
     } else {
       // 在当前订单页仅更新 query，触发页面内部监听
-      try { await router.replace({ path: '/merchant/orders', query: queryPayload }) } catch (e) {}
+      try { await router.push({ path: '/merchant/orders', query: queryPayload }) } catch (e) {}
       await new Promise(res => setTimeout(res, 120))
     }
 
     // 使用路由携带 orderId 打开详情页，避免派发全局事件导致多个组件同时处理
     try {
       // 已经通过路由打开，页面会根据 route.query.orderId 打开详情
+      try { window.dispatchEvent(new CustomEvent('merchant:open_order', { detail: { orderId } })) } catch (e) {}
       return
     } catch (e) { console.warn('open_detail_routing failed', e) }
   } catch (e) {

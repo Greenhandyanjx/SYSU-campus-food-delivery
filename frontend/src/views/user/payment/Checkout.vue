@@ -757,6 +757,16 @@ async function onPay() {
 
       setTimeout(async () => {
         showPayModal.value = false
+        // 如果用户在结算页填写了备注，先把备注写入所有待支付订单的 notes 字段
+        try {
+          const note = (form.value && form.value.remark) ? String(form.value.remark).trim() : ''
+          if (note) {
+            for (const oid of pendingOrders.value) {
+              try { await orderApi.updateOrderNotes(String(oid), { notes: note }) } catch (e) { console.warn('updateOrderNotes failed', e) }
+            }
+          }
+        } catch (e) { console.warn('apply pending notes failed', e) }
+
         for (const oid of pendingOrders.value) {
           try { await orderApi.payOrder(String(oid)) } catch (e) { console.warn('payOrder failed', e) }
         }
@@ -769,15 +779,19 @@ async function onPay() {
     }
 
     // 否则走购物车结算流程（createPayOrder）
-    const payloadShops = shopList.value.map(s => ({
-      storeId: s.storeId,
-      items: s.items.map((it: any) => ({ dishId: it.dishId, qty: it.qty }))
-    }))
+    // 构建与后端 CreatePayOrder 兼容的 payload：
+    // shops: [{ merchantId, totalPrice, items:[{dishId,mealId,qty,price}], deliveryAmount }]
+    const payloadShops = shopList.value.map((s: any) => {
+      const items = (s.items || []).map((it: any) => ({ dishId: it.dishId, qty: it.qty, price: it.price }))
+      const itemsTotal = (s.items || []).reduce((sm: number, it: any) => sm + Number(it.price || 0) * Number(it.qty || 0), 0)
+      return ({ merchantId: s.storeId, totalPrice: itemsTotal, items, deliveryAmount: Number(s.deliveryFee || s.delivery_fee || 0) })
+    })
 
     const payload = {
       shops: payloadShops,
-      consigneeAddressId: selectedAddress.value.id,
-      remark: form.value.remark,
+      consigneeid: selectedAddress.value.id,
+      totalPrice: totalAmount.value,
+      remarks: form.value.remark,
       tableware: form.value.tableware
     }
 

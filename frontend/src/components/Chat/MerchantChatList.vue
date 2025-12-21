@@ -409,7 +409,7 @@ function viewOrderDetail(o) {
       const orderId = o.orderId
       const currentPath = (router && router.currentRoute && router.currentRoute.value && router.currentRoute.value.path) || window.location.pathname
       const isOrdersPage = currentPath && (currentPath.includes('/merchant/orders') || currentPath.includes('/merchant/order'))
-      const queryPayload = { orderId: orderId, _t: String(Date.now()) }
+      const queryPayload = { orderId: orderId }
       if (!isOrdersPage) {
         router.push({ path: '/merchant/orders', query: queryPayload }).catch(() => {})
       } else {
