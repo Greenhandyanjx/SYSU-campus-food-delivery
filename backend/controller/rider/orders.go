@@ -32,7 +32,6 @@ type OrderItemResp struct {
 	MerchantID uint `json:"merchantId"`
 	UserID     uint `json:"userId"`     // 订单用户ID
 	UserBaseID uint `json:"userBaseId"` // 用户的base_user_id，用于聊天
-	MerchantID uint `json:"merchantId"`
 
 	AcceptedAt *time.Time `json:"acceptedAt"`
 	PickupAt   *time.Time `json:"pickupAt"`
@@ -69,7 +68,6 @@ type orderJoinRow struct {
 	MerchantID uint `gorm:"column:merchant_id"`
 	UserID     uint `gorm:"column:user_id"`
 	UserBaseID uint `gorm:"column:user_base_id"`
-	MerchantID uint `gorm:"column:merchant_id"`
 
 	Province sql.NullString `gorm:"column:province"`
 	City     sql.NullString `gorm:"column:city"`
