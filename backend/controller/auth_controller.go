@@ -90,12 +90,27 @@ func Register(ctx *gin.Context) {
 			return
 		}
 	case "rider":
+		realName := getString("realname", "real_name")
+		if realName == "" {
+			realName = "骑手_" + username
+		}
+
+		idNo := getString("idNumber", "id_number")
+		if idNo == "" {
+			// 用 username 生成一个唯一身份证号占位（避免 unique/not null）
+			idNo = "ID_" + username
+		}
+
+		phone := getString("phone")
+		if phone == "" {
+			phone = "r_" + username // 兜底唯一
+		}
+
 		r := models.Rider{
 			BaseID:   base.ID,
-			RealName: getString("realname", "real_name"),
-			IDNumber: getString("idNumber", "id_number"),
-			// IDPhoto:  getString("idPhoto", "id_photo"),
-			Phone: getString("phone"),
+			RealName: realName,
+			IDNumber: idNo,
+			Phone:    phone,
 		}
 		if err := tx.Create(&r).Error; err != nil {
 			tx.Rollback()
@@ -103,12 +118,12 @@ func Register(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"code": "500", "msg": "create rider error"})
 			return
 		}
-		// ==== 新增：创建 rider_profile（骑手资料）====
+
 		rp := models.RiderProfile{
 			UserID:  base.ID,
 			RiderID: r.ID,
-			Name:    "李骑手", // 默认名
-			Phone:   r.Phone,
+			Name:    realName,
+			Phone:   phone,
 			Avatar:  "",
 		}
 		if err := tx.Create(&rp).Error; err != nil {
@@ -117,6 +132,7 @@ func Register(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"code": "500", "msg": "create rider_profile error"})
 			return
 		}
+
 	case "merchant":
 		m := models.Merchant{
 			BaseID:       base.ID,

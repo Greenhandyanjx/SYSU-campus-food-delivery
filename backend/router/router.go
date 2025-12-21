@@ -2,6 +2,7 @@ package router
 
 import (
 	"backend/controller"
+	"backend/controller/rider"
 	"backend/global"
 	"backend/midware"
 	"time"
@@ -119,41 +120,28 @@ func SetRouter() *gin.Engine {
 		auth.GET("/merchant/statistics/turnover", controller.GetDataOverView)
 		auth.GET("/merchant/statistics/user", controller.GetUserData)
 		auth.GET("/merchant/statistics/order", controller.GetOrderStatistics)
-		// ====== Rider APIs ======
-		auth.GET("/rider/info", controller.GetRiderInfo)
-		auth.POST("/rider/status", controller.UpdateRiderStatus)
-		auth.GET("/rider/orders/new", controller.GetNewOrders)
-		auth.POST("/rider/orders/:orderId/pickup", controller.PickupOrder)
-		auth.GET("/rider/orders/delivering", controller.GetDeliveringOrders)
-		auth.POST("/rider/orders/:orderId/complete", controller.CompleteOrder)
-		auth.GET("/rider/orders/history", controller.GetOrderHistory)
-		auth.GET("/rider/orders/pickup", controller.GetPickupOrders)
-		auth.GET("/rider/orders/:orderId", controller.GetOrderDetailForRider)
-		auth.GET("/rider/income/today", controller.GetTodayIncome)
-		auth.GET("/rider/income/summary", controller.GetIncomeSummary)
-		auth.GET("/rider/income/month", controller.GetMonthIncome)
-		auth.GET("/rider/dashboard", controller.GetRiderDashboard)
-		auth.POST("/rider/location", controller.UpdateRiderLocation)
-		// ====== Rider APIs (missing parts added) ======
+		// ====== Rider APIs (NEW) ======
+		rg := auth.Group("/rider")
+		{
+			rg.GET("/me", rider.GetMe)
+			rg.POST("/online", rider.UpdateOnline)  // 给前端/测试用
+			rg.PATCH("/online", rider.UpdateOnline) // 保留 REST 风格
 
-		auth.POST("/rider/orders/:orderId/accept", controller.AcceptOrder) // 正式版接单接口
+			rg.GET("/orders/new", rider.GetNewOrders)
+			rg.POST("/orders/:id/accept", rider.AcceptOrder)
+			rg.POST("/orders/:id/pickup", rider.PickupOrder)
+			rg.POST("/orders/:id/deliver", rider.DeliverOrder)
 
-		// 收入统计
-		auth.GET("/rider/income/stats", controller.GetIncomeStats)
-		auth.GET("/rider/income/history", controller.GetIncomeHistory)
+			rg.GET("/orders/ongoing", rider.GetOngoingOrders)
+			rg.GET("/orders/history", rider.GetHistoryOrders)
+			rg.GET("/wallet", rider.GetWallet)
+			rg.GET("/income", rider.GetIncome)
+			rg.POST("/withdraw", rider.ApplyWithdraw)
+			rg.GET("/withdraws", rider.GetWithdraws)
+			rg.POST("/location", rider.UpdateLocation)
+			rg.GET("/stat", rider.GetStat)
 
-		// 每周数据统计
-		auth.GET("/rider/stats/weekly", controller.GetWeeklyStats)
-
-		// 钱包
-		auth.GET("/rider/wallet", controller.GetWalletInfo)
-		auth.POST("/rider/wallet/withdraw", controller.Withdraw)
-		auth.GET("/rider/wallet/withdraw/history", controller.GetWithdrawHistory)
-
-		// 配送路线
-		auth.GET("/rider/orders/:orderId/route", controller.GetDeliveryRoute)
-		// 并发安全的接单接口（可替代原来的）
-		auth.POST("/rider/orders/:orderId/accept_safe", controller.AcceptOrderSafe)
+		}
 
 		auth.GET("merchant/statistics/top", controller.GetTopSales)
 
@@ -191,42 +179,6 @@ func SetRouter() *gin.Engine {
 		auth.PUT("/user/address/:id", controller.EditUserAddress)
 		auth.POST("/user/address/:id/default", controller.SetDefaultAddress)
 		auth.DELETE("/user/address/:id", controller.DeleteUserAddress)
-		// ====== Rider 扩展接口（根据 index.ts 补全） ======
-		// 配送状态扩展
-		auth.PUT("/rider/orders/:orderId/start", controller.StartDelivery)
-		auth.PUT("/rider/orders/:orderId/arrive-pickup", controller.ArrivePickup)
-		auth.PUT("/rider/orders/:orderId/status", controller.UpdateDeliveryStatus)
-		auth.POST("/rider/orders/:orderId/issue", controller.ReportIssue)
-
-		// 收入明细 & 配送记录
-		auth.GET("/rider/income/details", controller.GetIncomeDetails)
-		auth.GET("/rider/delivery/records", controller.GetDeliveryRecords)
-
-		// 工作统计
-		auth.GET("/rider/stats/work", controller.GetWorkStats)
-		auth.GET("/rider/stats/monthly", controller.GetMonthlyStats)
-
-		// 评价 & 排行榜
-		auth.GET("/rider/reviews", controller.GetReviews)
-		auth.GET("/rider/ranking/:type", controller.GetRanking)
-
-		// 通知 & 系统消息 & 热力图
-		auth.GET("/rider/notifications", controller.GetNotifications)
-		auth.PUT("/rider/notifications/:id/read", controller.MarkNotificationRead)
-		auth.GET("/rider/messages/system", controller.GetSystemMessages)
-		auth.GET("/rider/heatmap", controller.GetHeatmapData)
-
-		// 认证
-		auth.GET("/rider/verification", controller.GetVerification)
-		auth.POST("/rider/verification", controller.SubmitVerification)
-
-		// 设置
-		auth.GET("/rider/settings/work", controller.GetWorkSettings)
-		auth.PUT("/rider/settings/work", controller.UpdateWorkSettings)
-		auth.GET("/rider/settings/account", controller.GetAccountSettings)
-		auth.PUT("/rider/settings/account", controller.UpdateAccountSettings)
-		auth.GET("/rider/settings/notification", controller.GetNotificationSettings)
-		auth.PUT("/rider/settings/notification", controller.UpdateNotificationSettings)
 
 	}
 	return fe

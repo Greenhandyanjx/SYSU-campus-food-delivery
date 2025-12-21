@@ -64,8 +64,19 @@ func GetBusinessData(c *gin.Context) {
         Where("merchant_id = ? AND day = ?", baseid, currentDate).
         First(&todaydata).Error; err != nil {
         if err == gorm.ErrRecordNotFound {
-            c.JSON(http.StatusNotFound, gin.H{"code": 0, "message": "数据未找到"})
-        } else {
+            parsedDate, err := time.Parse("2006-01-02", currentDate)
+            if err != nil {
+                c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "日期解析失败"})
+                return
+            }
+            // 如果记录未找到，将 todaydata 的字段初始化为 0 或者结构体的零值
+        todaydata = models.Revenue{
+            MerchantID: merchantID,
+            Day:        parsedDate,
+            Revenue:     0,
+            Usernumber: 0,
+        }
+        }else {
             c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "查询失败"})
         }
         return
