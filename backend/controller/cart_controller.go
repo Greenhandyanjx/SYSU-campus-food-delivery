@@ -303,7 +303,7 @@ func AddToCart(c *gin.Context) {
 		return
 	}
 
-	// 尝试从多个可能的字段名解析商家标识，最终以商家主键 `id` 为准并存入购物车
+	// 尝试从多个可能的字段名解析商家标识，最终以商家主键 `id` 为准并存入购物车，赞
 	var storeCandidates = []interface{}{req["storeId"], req["merchantId"], req["merchant_id"], req["merchantID"], req["store_id"]}
 	var found bool
 	for _, cand := range storeCandidates {
