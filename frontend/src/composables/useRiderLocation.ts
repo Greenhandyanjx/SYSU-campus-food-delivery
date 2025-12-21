@@ -109,8 +109,21 @@ const useRiderLocation = () => {
       detail: {
         isTracking: isTracking.value,
         error: locationError.value,
+        location: currentPosition.value,
       }
     }));
+  };
+
+  // 发送位置更新事件
+  const emitLocationUpdate = () => {
+    if (currentPosition.value) {
+      window.dispatchEvent(new CustomEvent('rider:locationUpdate', {
+        detail: {
+          location: currentPosition.value,
+          timestamp: Date.now()
+        }
+      }));
+    }
   };
 
   // 开始位置追踪
@@ -140,6 +153,7 @@ const useRiderLocation = () => {
               longitude: position.coords.longitude,
             };
             currentPosition.value = location;
+            emitLocationUpdate();
 
             console.log('🔄 [位置更新]', {
               时间: new Date().toLocaleTimeString(),
@@ -244,17 +258,17 @@ const useRiderLocation = () => {
     return true;
   };
 
-  // 组件挂载时自动开始追踪
-  onMounted(() => {
-    // 延迟1秒后开始，确保页面加载完成
-    setTimeout(() => {
-      checkLocationPermission().then((hasPermission) => {
-        if (hasPermission) {
-          startLocationTracking();
-        }
-      });
-    }, 1000);
-  });
+  // 组件挂载时不自动开始追踪，改为手动控制
+  // onMounted(() => {
+  //   // 延迟1秒后开始，确保页面加载完成
+  //   setTimeout(() => {
+  //     checkLocationPermission().then((hasPermission) => {
+  //       if (hasPermission) {
+  //         startLocationTracking();
+  //       }
+  //     });
+  //   }, 1000);
+  // });
 
   // 组件卸载时清理
   onUnmounted(() => {

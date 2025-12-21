@@ -36,6 +36,12 @@ const routes = [
         name: "RiderMe",
         meta: { title: "个人信息" },
       },
+      {
+        path: "test-map",
+        component: () => import("@/test-map.vue"),
+        name: "TestMap",
+        meta: { title: "地图测试" },
+      },
     ],
   },
 ];

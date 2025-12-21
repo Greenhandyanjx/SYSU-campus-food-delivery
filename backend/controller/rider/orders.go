@@ -3,10 +3,12 @@ package rider
 import (
 	"backend/global"
 	"backend/models"
+	"backend/utils"
 	"database/sql"
 	"errors"
 	"fmt"
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -217,11 +219,88 @@ func calculateDistance(lat1, lon1, lat2, lon2 float64) float64 {
 	return R * c
 }
 
-// 解析地址获取经纬度（这里简化处理，实际应该调用地址解析服务）
+// 智能地址补全函数（与前端保持一致）
+func enhanceAddress(address string, addressType string) string {
+	if address == "" {
+		return ""
+	}
+
+	originalAddress := address
+
+	// 如果地址太简单，尝试智能补全（与前端逻辑保持一致）
+	if len(address) < 5 {
+		fmt.Printf("⚠️ [后端地址补全] 地址过于简单: %q，尝试智能补全\n", originalAddress)
+
+		// 中山大学珠海校区常见地点映射
+		campusLocations := map[string]string{
+			"容园": "广东省珠海市香洲区中山大学珠海校区榕园",
+			"榕园": "广东省珠海市香洲区中山大学珠海校区榕园",
+			"荔园": "广东省珠海市香洲区中山大学珠海校区荔园",
+			"食堂": "广东省珠海市香洲区中山大学珠海校区食堂",
+			"宿舍": "广东省珠海市香洲区中山大学珠海校区学生宿舍",
+			"教学楼": "广东省珠海市香洲区中山大学珠海校区教学楼",
+			"图书馆": "广东省珠海市香洲区中山大学珠海校区图书馆",
+			"超市": "广东省珠海市香洲区中山大学珠海校区超市",
+		}
+
+		// 尝试模糊匹配关键词
+		for key, location := range campusLocations {
+			if strings.Contains(address, key) || strings.Contains(key, address) {
+				fmt.Printf("✅ [后端地址补全] 智能匹配: %q -> %q\n", originalAddress, location)
+				return location
+			}
+		}
+
+		// 处理数字地址（可能是楼号、宿舍号等）
+		if matched, _ := regexp.MatchString(`^\d+$`, address); matched {
+			enhancedAddress := fmt.Sprintf("广东省珠海市香洲区中山大学珠海校区%s栋", address)
+			fmt.Printf("✅ [后端地址补全] 数字地址补全: %q -> %q\n", originalAddress, enhancedAddress)
+			return enhancedAddress
+		}
+
+		// 处理"容9"这类格式（数字+文字或文字+数字）
+		matched, _ := regexp.MatchString(`\d`, address)
+		if matched {
+			enhancedAddress := fmt.Sprintf("广东省珠海市香洲区中山大学珠海校区%s", address)
+			fmt.Printf("✅ [后端地址补全] 楼栋地址补全: %q -> %q\n", originalAddress, enhancedAddress)
+			return enhancedAddress
+		}
+
+		// 默认补全到中山大学珠海校区
+		defaultEnhanced := "广东省珠海市香洲区中山大学珠海校区"
+		fmt.Printf("⚠️ [后端地址补全] 默认补全: %q -> %q\n", originalAddress, defaultEnhanced)
+		return defaultEnhanced
+	}
+
+	return originalAddress
+}
+
+// 解析地址获取经纬度（使用高德地图API）
 func parseAddressToCoords(address string) (lat, lon float64, err error) {
-	// TODO: 这里应该调用地址解析服务（如高德地图API）
-	// 暂时返回错误，提示无法解析
-	return 0, 0, errors.New("无法解析地址坐标：" + address)
+	fmt.Printf("🌍 [parseAddressToCoords] 输入地址: %q (长度:%d)\n", address, len(address))
+
+	if address == "" {
+		fmt.Printf("❌ [parseAddressToCoords] 地址为空\n")
+		return 0, 0, errors.New("地址为空")
+	}
+
+	// 智能补全地址（与前端保持一致）
+	enhancedAddress := enhanceAddress(address, "delivery")
+	fmt.Printf("🔧 [parseAddressToCoords] 智能补全后地址: %q\n", enhancedAddress)
+
+	fmt.Printf("🔍 [parseAddressToCoords] 调用 utils.GeoCode 解析地址\n")
+
+	// 调用高德地图地理编码API
+	lng, lat, err := utils.GeoCode(enhancedAddress)
+	if err != nil {
+		fmt.Printf("❌ [parseAddressToCoords] utils.GeoCode 失败: %v\n", err)
+		return 0, 0, fmt.Errorf("无法解析收货地址坐标：%v，地址：%s", err, enhancedAddress)
+	}
+
+	fmt.Printf("✅ [parseAddressToCoords] 解析成功: %q -> lng=%.8f, lat=%.8f\n", enhancedAddress, lng, lat)
+	fmt.Printf("📍 [parseAddressToCoords] 返回: lat=%.8f, lon=%.8f\n", lat, lng)
+
+	return lat, lng, nil // 注意返回顺序：先纬度后经度
 }
 
 // ✅ 4) 送达：4 -> 5（需要距离校验）
@@ -241,18 +320,39 @@ func DeliverOrder(c *gin.Context) {
 		return
 	}
 
-	// 1. 获取骑手当前位置
+	// 1. 获取骑手当前位置（强制获取最新记录）
 	var riderProfile models.RiderProfile
-	if err := global.Db.Where("user_id = ?", baseUserID).First(&riderProfile).Error; err != nil {
+	if err := global.Db.Where("user_id = ?", baseUserID).Order("updated_at DESC").First(&riderProfile).Error; err != nil {
+		fmt.Printf("❌ [距离校验] 骑手信息查询失败: %v, baseUserID: %d\n", err, baseUserID)
 		fail(c, "未获取到骑手当前位置，请先上报定位")
+		return
+	}
+
+	// 检查位置数据时效性（最近10分钟内）
+	if time.Since(riderProfile.UpdatedAt) > 10*time.Minute {
+		fmt.Printf("❌ [距离校验] 骑手位置数据过期: 最后更新=%v, 当前=%v, 相差=%v\n",
+			riderProfile.UpdatedAt, time.Now(), time.Since(riderProfile.UpdatedAt))
+		fail(c, "骑手位置数据过期，请重新上报定位")
 		return
 	}
 
 	// 检查骑手是否有位置信息
 	if riderProfile.Latitude == 0 || riderProfile.Longitude == 0 {
+		fmt.Printf("❌ [距离校验] 骑手位置无效: lat=%.8f, lng=%.8f\n", riderProfile.Latitude, riderProfile.Longitude)
 		fail(c, "未获取到骑手当前位置，请先上报定位")
 		return
 	}
+
+	// 检查位置是否在合理范围内（珠海地区）
+	if riderProfile.Latitude < 21.5 || riderProfile.Latitude > 23.5 ||
+	   riderProfile.Longitude < 112.5 || riderProfile.Longitude > 114.5 {
+		fmt.Printf("❌ [距离校验] 骑手位置超出合理范围: lat=%.8f, lng=%.8f\n", riderProfile.Latitude, riderProfile.Longitude)
+		fail(c, "骑手位置异常，请重新获取定位")
+		return
+	}
+
+	fmt.Printf("✅ [距离校验] 骑手位置验证通过: lat=%.8f, lng=%.8f, 更新时间=%v\n",
+		riderProfile.Latitude, riderProfile.Longitude, riderProfile.UpdatedAt)
 
 	// 2. 获取订单的收货地址坐标
 	type OrderInfo struct {
@@ -305,25 +405,18 @@ func DeliverOrder(c *gin.Context) {
 	}
 
 	// 3. 解析收货地址坐标
-	// 实际项目中应该集成地图服务API（如高德地图、百度地图等）
-	// TODO: 集成真实的地址解析服务
-	var destLat, destLon float64
+	fmt.Printf("🗺️ [后端地址解析] 准备解析地址: %q\n", deliveryAddress)
+	fmt.Printf("🏗️ [后端地址解析] 地址组件: 省份=%q, 城市=%q, 区县=%q, 街道=%q, 详情=%q\n",
+		orderInfo.Province.String, orderInfo.City.String, orderInfo.District.String, orderInfo.Street.String, orderInfo.Detail.String)
 
-	// 临时测试：根据地址关键字设置一些测试坐标
-	if strings.Contains(deliveryAddress, "中山大学") || strings.Contains(deliveryAddress, "SYSU") {
-		// 中山大学珠海校区坐标
-		destLat, destLon = 22.3598, 113.5310
-		fmt.Printf("解析到中山大学地址：%s\n", deliveryAddress)
-	} else if strings.Contains(deliveryAddress, "珠海") {
-		// 珠海市中心坐标
-		destLat, destLon = 22.2769, 113.5678
-		fmt.Printf("解析到珠海地址：%s\n", deliveryAddress)
-	} else {
-		// 默认情况：使用一个固定坐标作为目的地（例如测试用）
-		// 注意：这里设置为0会导致距离校验失败，故意设置一个远离骑手的位置
-		destLat, destLon = 22.3500, 113.5500
-		fmt.Printf("使用默认目的地坐标，地址：%s\n", deliveryAddress)
+	destLat, destLon, err := parseAddressToCoords(deliveryAddress)
+	if err != nil {
+		fmt.Printf("❌ [后端地址解析] 失败: %v\n", err)
+		fail(c, err.Error())
+		return
 	}
+
+	fmt.Printf("✅ [后端地址解析] 成功: %q -> (%.8f, %.8f)\n", deliveryAddress, destLat, destLon)
 
 	// 4. 计算距离
 	distance := calculateDistance(
@@ -331,17 +424,22 @@ func DeliverOrder(c *gin.Context) {
 		destLat, destLon,
 	)
 
-	// 距离阈值：150米
-	const maxDistance = 150.0
+	// 距离阈值：100米（降低阈值，提高严格程度）
+	const maxDistance = 100.0
 
-	fmt.Printf("距离校验：骑手位置(%.6f,%.6f) -> 目的地(%.6f,%.6f) = %.2f米\n",
-		riderProfile.Latitude, riderProfile.Longitude,
-		destLat, destLon, distance)
+	fmt.Printf("🚨 [距离校验] 距离检查:\n")
+	fmt.Printf("   🏍️ 骑手位置: lat=%.8f, lng=%.8f\n", riderProfile.Latitude, riderProfile.Longitude)
+	fmt.Printf("   📍 目标位置: lat=%.8f, lng=%.8f\n", destLat, destLon)
+	fmt.Printf("   📏 计算距离: %.2f米\n", distance)
+	fmt.Printf("   ⚠️ 距离阈值: %.2f米\n", maxDistance)
 
 	if distance > maxDistance {
+		fmt.Printf("❌ [距离校验失败] 距离超出限制: %.2f > %.2f\n", distance, maxDistance)
 		fail(c, fmt.Sprintf("不在收货点附近（距离约 %d米），无法确认送达", int(distance)))
 		return
 	}
+
+	fmt.Printf("✅ [距离校验通过] 距离符合要求: %.2f <= %.2f\n", distance, maxDistance)
 
 	// 5. 通过距离校验，执行送达流程
 	changeStatus(c, OrderStatusDelivering, OrderStatusDone)
@@ -493,12 +591,24 @@ WHERE o.status IN ?
 
 	list := make([]OrderItemResp, 0, len(rows))
 	for _, r := range rows {
+		pickupAddr := r.ShopLocation.String
+		deliveryAddr := buildAddr(r)
+
+		// 后端调试日志
+		fmt.Printf("📍 [订单地址调试] ID:%d, 状态:%d\n", r.ID, r.Status)
+		fmt.Printf("  🏪 商家: %s\n", r.ShopName.String)
+		fmt.Printf("  📮 pickupAddress: %q (长度:%d)\n", pickupAddr, len(pickupAddr))
+		fmt.Printf("  🏠 客户: %s\n", r.CustomerName.String)
+		fmt.Printf("  📍 deliveryAddress: %q (长度:%d)\n", deliveryAddr, len(deliveryAddr))
+		fmt.Printf("  🏗️ 地址组件: 省=%q,市=%q,区=%q,街=%q,详=%q\n",
+			r.Province.String, r.City.String, r.District.String, r.Street.String, r.Detail.String)
+
 		list = append(list, OrderItemResp{
 			ID:              r.ID,
 			Restaurant:      r.ShopName.String,
-			PickupAddress:   r.ShopLocation.String,
+			PickupAddress:   pickupAddr,
 			Customer:        r.CustomerName.String,
-			DeliveryAddress: buildAddr(r),
+			DeliveryAddress: deliveryAddr,
 			Distance:        1.2,
 			EstimatedFee:    r.DeliveryFee, // 想展示总价就改成 r.TotalPrice
 			EstimatedTime:   20,
