@@ -57,6 +57,7 @@
 
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue'
+import amapLoader from '@/utils/amap'
 
 /* ===================== props / emits ===================== */
 
@@ -133,61 +134,51 @@ async function initMap() {
     return
   }
 
-  // Load AMap script if missing (use Vite env if provided)
-  const amapKey = (import.meta.env.VITE_AMAP_KEY as string) || ''
-  const AMapScriptUrl = `https://webapi.amap.com/maps?v=2.0&key=${amapKey}`
+  // 使用统一的 amapLoader 加载地图
+  try {
+    const AMap = await amapLoader.load({
+      plugins: ['AMap.Geocoder', 'AMap.PlaceSearch', 'AMap.ToolBar', 'AMap.AutoComplete']
+    });
 
-  if (!(window as any).AMap) {
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const s = document.createElement('script')
-        s.src = AMapScriptUrl
-        s.onload = () => resolve()
-        s.onerror = () => reject(new Error('加载高德地图脚本失败'))
-        document.head.appendChild(s)
-      })
-    } catch (e) {
-      console.error('AddressPicker: failed to load AMap script', e)
+    if (!AMap) {
+      console.error('AddressPicker: AMap not available after load')
       return
     }
-  }
 
-  const AMap = (window as any).AMap
-  if (!AMap) {
-    console.error('AddressPicker: AMap not available after load')
+    // Initialize plugins
+    AMap.plugin(['AMap.Geocoder', 'AMap.AutoComplete', 'AMap.PlaceSearch'], () => {
+      geocoder = new AMap.Geocoder({ city: '全国' })
+      try { autoComplete = new AMap.AutoComplete({ city: '全国' }) } catch (e) { autoComplete = null }
+      try { placeSearch = new AMap.PlaceSearch({ city: '全国' }) } catch (e) { placeSearch = null }
+    })
+
+    map = new AMap.Map(mapEl.value, {
+      zoom: 15,
+      center: [lng.value, lat.value]
+    })
+
+    marker = new AMap.Marker({
+      position: [lng.value, lat.value],
+      draggable: true,
+      map
+    })
+
+    map.on('click', (e: any) => updateLocation(e.lnglat))
+    marker.on('dragend', (e: any) => updateLocation(e.lnglat))
+
+    // 初始点位反向解析
+    reverseGeocode(lng.value, lat.value)
+
+    // store initial center so user can return to it
+    initialLng = lng.value
+    initialLat = lat.value
+
+    // Ensure proper rendering
+    setTimeout(() => map && map.resize(), 300)
+  } catch (e) {
+    console.error('AddressPicker: failed to load AMap script', e)
     return
   }
-
-  // Initialize plugins
-  AMap.plugin(['AMap.Geocoder', 'AMap.AutoComplete', 'AMap.PlaceSearch'], () => {
-    geocoder = new AMap.Geocoder({ city: '全国' })
-    try { autoComplete = new AMap.AutoComplete({ city: '全国' }) } catch (e) { autoComplete = null }
-    try { placeSearch = new AMap.PlaceSearch({ city: '全国' }) } catch (e) { placeSearch = null }
-  })
-
-  map = new AMap.Map(mapEl.value, {
-    zoom: 15,
-    center: [lng.value, lat.value]
-  })
-
-  marker = new AMap.Marker({
-    position: [lng.value, lat.value],
-    draggable: true,
-    map
-  })
-
-  map.on('click', (e: any) => updateLocation(e.lnglat))
-  marker.on('dragend', (e: any) => updateLocation(e.lnglat))
-
-  // 初始点位反向解析
-  reverseGeocode(lng.value, lat.value)
-
-  // store initial center so user can return to it
-  initialLng = lng.value
-  initialLat = lat.value
-
-  // Ensure proper rendering
-  setTimeout(() => map && map.resize(), 300)
 }
 
 function recenterOriginal() {

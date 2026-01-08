@@ -253,7 +253,14 @@ const pendingOrders = ref<string[]>([])
 
 // 格式化地址
 function formatFullAddress(a: any) {
-  return `${a.province || ''}${a.city || ''}${a.district || ''}${a.street || ''} ${a.detail || ''}`.trim()
+  // avoid duplicate adjacent parts (e.g. street and detail both '中山大学')
+  const baseParts = [a.province || '', a.city || '', a.district || '', a.street || ''].map((p: string) => p.trim()).filter((p: string) => p)
+  const base = baseParts.join('')
+  const detail = (a.detail || '').trim()
+  if (!detail) return base.trim()
+  // if detail is already contained in base, don't repeat
+  if (base && base.includes(detail)) return base.trim()
+  return (base + ' ' + detail).trim()
 }
 
 // 预计送达时间（当前时间 + 30 分钟）
@@ -422,9 +429,7 @@ onMounted(async () => {
     const route = useRoute()
     const qid = route.query.orderId
     if (qid) {
-      // 如果 URL 带有 orderId，立即将其作为待支付目标，避免后续回退到 createPayOrder
-      pendingOrders.value = [String(qid)]
-      // 支付已有订单 —— 不创建新的 pending，只将该订单 id 作为待支付目标并尝试加载详情
+      // 支付已有订单 —— 不创建新的 pending，只将该订单 id 作为待支付目标
       try {
         const od: any = await orderApi.getOrderDetail(String(qid))
         const odata = od && od.data && (od.data.data || od.data)
@@ -502,18 +507,21 @@ async function addNewAddress() {
     showToast('请填写姓名、手机号和详细地址')
     return
   }
-  try {
-    const payload = {
-      name: newAddress.value.name,
-      phone: newAddress.value.phone,
-      detail: newAddress.value.detail,
-      province: newAddress.value.province || '',
-      city: newAddress.value.city || '',
-      district: newAddress.value.district || '',
-      street: newAddress.value.street || '',
-      isDefault: newAddress.value.isDefault ? 1 : 0
-    }
-    const res: any = await addressApi.addAddress(payload)
+    try {
+      // reuse address page logic: split detail into structured fields
+      const parts = splitDetailToParts(newAddress.value.detail || '')
+      const detailStripped = stripPrefixFromDetail(newAddress.value.detail || '', parts.province, parts.city, parts.district, parts.street)
+      const payload = {
+        name: newAddress.value.name,
+        phone: newAddress.value.phone,
+        detail: detailStripped || newAddress.value.detail,
+        province: parts.province || newAddress.value.province || '',
+        city: parts.city || newAddress.value.city || '',
+        district: parts.district || newAddress.value.district || '',
+        street: parts.street || newAddress.value.street || '',
+        is_default: !!newAddress.value.isDefault
+      }
+      const res: any = await addressApi.addAddress(payload)
     // 刷新地址列表并选择新地址（后端返回格式兼容性较多）
     await loadAddresses()
     const maybe = addresses.value.find((x: any) => x.phone === newAddress.value.phone && x.name === newAddress.value.name)
@@ -625,6 +633,90 @@ function formatTipAddress(tip: any) {
   return parts.join(' ')
 }
 
+// helpers: split a raw detail string into address parts (province, city, district, street)
+function splitDetailToParts(detail: string) {
+  if (!detail) return { province: '', city: '', district: '', street: '' }
+  const txt = detail.trim()
+  // Try a Chinese address pattern: province (省/自治区/特别行政区/市), city (市/自治州/地区/盟), district (区/县/市/旗), rest
+  const re = /^(.*?(?:省|自治区|特别行政区|市))?\s*(.*?(?:市|自治州|地区|盟))?\s*(.*?(?:区|县|市|旗))?\s*(.*)$/
+  const m = txt.match(re)
+  if (m) {
+    const province = (m[1] || '').trim()
+    const city = (m[2] || '').trim()
+    const district = (m[3] || '').trim()
+    const street = (m[4] || '').trim()
+    // If at least one of province/city/district is detected, return these parts
+    if (province || city || district) {
+      return { province, city, district, street }
+    }
+  }
+  // Fallback: split by separators (space/comma)
+  const tokens = detail.split(/[,，\s]+/).filter(Boolean).map(s => s.trim())
+  const province = tokens[0] || ''
+  const city = tokens[1] || ''
+  const district = tokens[2] || ''
+  const street = tokens.slice(3).join(' ') || ''
+  return { province, city, district, street }
+}
+
+// Use AMap geocoder when available to get structured address parts (province/city/district/street)
+const geocodeAddress = async (detail: string) => {
+  if (!detail) return { province: '', city: '', district: '', street: '', lng: 0, lat: 0, formatted: '' }
+  const AMap = (window as any).AMap
+  if (!AMap || !geocoder) {
+    return { ...splitDetailToParts(detail), lng: 0, lat: 0, formatted: detail }
+  }
+
+  return await new Promise<any>((resolve) => {
+    try {
+      geocoder.getLocation(detail, (status: string, result: any) => {
+        if (status === 'complete' && result && result.geocodes && result.geocodes.length) {
+          const g = result.geocodes[0]
+          const comp = g.addressComponent || {}
+          const province = comp.province || g.province || ''
+          const city = comp.city || g.city || ''
+          const district = comp.district || g.district || ''
+          const street = comp.township || comp.street || (comp.streetNumber && comp.streetNumber.street) || g.township || g.street || ''
+          let lng = 0
+          let lat = 0
+          if (g.location) {
+            if (typeof g.location === 'string') {
+              const parts = g.location.split(',')
+              lng = parseFloat(parts[0]) || 0
+              lat = parseFloat(parts[1]) || 0
+            } else if (g.location.lng && g.location.lat) {
+              lng = g.location.lng
+              lat = g.location.lat
+            }
+          }
+          const formatted = g.formattedAddress || g.formatted || detail
+          resolve({ province, city, district, street, lng, lat, formatted })
+          return
+        }
+        resolve({ ...splitDetailToParts(detail), lng: 0, lat: 0, formatted: detail })
+      })
+    } catch (e) {
+      resolve({ ...splitDetailToParts(detail), lng: 0, lat: 0, formatted: detail })
+    }
+  })
+}
+
+// remove leading province/city/district/street from a formatted address string
+function stripPrefixFromDetail(formatted: string, province: string, city: string, district: string, street: string) {
+  if (!formatted) return ''
+  const parts = [province || '', city || '', district || '', street || ''].filter(Boolean)
+  if (parts.length === 0) return formatted.trim()
+  const escapeRegex = (s: string) => s.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
+  const pattern = '^\\s*' + parts.map(p => escapeRegex(p)).join('[\\s,，]*') + '[\\s,，]*'
+  try {
+    const re = new RegExp(pattern)
+    const stripped = formatted.replace(re, '')
+    return (stripped || '').trim()
+  } catch (e) {
+    return formatted.trim()
+  }
+}
+
 function selectSuggestion(item: any) {
   const name = item.name || ''
   const district = item.district || ''
@@ -682,19 +774,21 @@ async function saveAddress() {
     showToast('请填写完整的收货信息')
     return
   }
-  // 尝试使用地理信息（已在 updateLocation 中取得）
+  // 尝试使用高德地理解析以获得结构化地址（优先使用 geocoder）
+  const geo = await geocodeAddress(addressForm.value.detail || '')
+  const detailStripped = stripPrefixFromDetail(geo.formatted || addressForm.value.detail || '', geo.province || '', geo.city || '', geo.district || '', geo.street || '')
   const payload: any = {
     name: addressForm.value.name,
     phone: addressForm.value.phone,
-    province: '',
-    city: '',
-    district: '',
-    street: '',
-    detail: addressForm.value.detail,
+    province: geo.province || '',
+    city: geo.city || '',
+    district: geo.district || '',
+    street: geo.street || '',
+    detail: detailStripped || addressForm.value.detail,
     tag: addressForm.value.tag,
     is_default: !!addressForm.value.isDefault,
-    lng: addressForm.value.lng,
-    lat: addressForm.value.lat,
+    lng: geo.lng || addressForm.value.lng,
+    lat: geo.lat || addressForm.value.lat,
   }
   try {
     const res: any = await addressApi.addAddress(payload)
@@ -717,14 +811,17 @@ async function saveAddressInline() {
     showToast('请填写姓名、手机号和详细地址')
     return
   }
-  try {
-    const payload = {
-      name: addressForm.value.name,
-      phone: addressForm.value.phone,
-      detail: addressForm.value.detail,
-      province: '', city: '', district: '', street: '', isDefault: addressForm.value.isDefault ? 1 : 0
-    }
-    await addressApi.addAddress(payload)
+    try {
+      const geo = await geocodeAddress(addressForm.value.detail || '')
+      const detailStripped = stripPrefixFromDetail(geo.formatted || addressForm.value.detail || '', geo.province || '', geo.city || '', geo.district || '', geo.street || '')
+      const payload = {
+        name: addressForm.value.name,
+        phone: addressForm.value.phone,
+        detail: detailStripped || addressForm.value.detail,
+        province: geo.province || '', city: geo.city || '', district: geo.district || '', street: geo.street || '', is_default: !!addressForm.value.isDefault,
+        lng: geo.lng || addressForm.value.lng, lat: geo.lat || addressForm.value.lat
+      }
+      await addressApi.addAddress(payload)
     await loadAddresses()
     const maybe = addresses.value.find((x: any) => x.phone === addressForm.value.phone && x.name === addressForm.value.name)
     if (maybe) selectedAddress.value = maybe
@@ -769,15 +866,32 @@ async function onPay() {
     }
 
     // 否则走购物车结算流程（createPayOrder）
-    const payloadShops = shopList.value.map(s => ({
-      storeId: s.storeId,
-      items: s.items.map((it: any) => ({ dishId: it.dishId, qty: it.qty }))
-    }))
+    const payloadShops = shopList.value.map(s => {
+      const items = (s.items || []).map((it: any) => {
+        const raw = it.dishId || it.id || it.dish_id
+        let dishId = 0
+        let mealId = 0
+        if (typeof raw === 'string' && raw.startsWith('m-')) {
+          const parts = raw.split('-')
+          mealId = parseInt(parts[parts.length - 1], 10) || 0
+        } else {
+          dishId = Number(raw) || 0
+        }
+        return { dishId, mealId, qty: it.qty || 1, price: Number(it.price || 0) }
+      })
+      const itemsTotal = items.reduce((sm: number, it: any) => sm + Number(it.price || 0) * Number(it.qty || 0), 0)
+      return {
+        merchantId: s.storeId || s.merchantId || s.id,
+        totalPrice: itemsTotal,
+        deliveryAmount: Number(s.deliveryFee || s.delivery_fee || 0),
+        items,
+      }
+    })
 
     const payload = {
       shops: payloadShops,
-      consigneeAddressId: selectedAddress.value.id,
-      remark: form.value.remark,
+      consigneeid: selectedAddress.value.id,
+      remarks: form.value.remark,
       tableware: form.value.tableware
     }
 

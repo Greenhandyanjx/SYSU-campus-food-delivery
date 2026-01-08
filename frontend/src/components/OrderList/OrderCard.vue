@@ -137,7 +137,7 @@ const deliveryFee = computed(() => {
 
 // 时间格式化（优先 payDeadline → time → orderTime）
 const formattedTime = computed(() => {
-  const t = props.order.payDeadline || props.order.time || props.order.orderTime || props.order.createdAt
+  const t = props.order.time || props.order.orderTime || props.order.createdAt
   if (!t) return ''
   const d = new Date(t)
   if (isNaN(d)) return t

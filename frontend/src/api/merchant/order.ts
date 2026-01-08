@@ -87,6 +87,34 @@ export function queryOrderDetailById(params: { orderId: string | number }) {
   })
 }
 
+// 合并/缓存相同的订单详情请求，避免同时触发多个相同的网络请求
+const _inFlightOrderDetails: Record<string, Promise<any>> = {}
+const _orderDetailCache: Record<string, { ts: number; res: any }> = {}
+const _DETAIL_CACHE_TTL = 500 // ms
+export function queryOrderDetailByIdCoalesced(params: { orderId: string | number }) {
+  const id = String(params.orderId || '')
+  const key = JSON.stringify({ url: '/merchant/order/detail', id })
+  const now = Date.now()
+  const cached = _orderDetailCache[key]
+  if (cached && now - cached.ts < _DETAIL_CACHE_TTL) {
+    return Promise.resolve(cached.res)
+  }
+  if (_inFlightOrderDetails[key]) {
+    return _inFlightOrderDetails[key]
+  }
+  const p = queryOrderDetailById(params)
+  _inFlightOrderDetails[key] = p
+  p.then((r: any) => {
+    try { _orderDetailCache[key] = { ts: Date.now(), res: r } } catch (e) { }
+    try { delete _inFlightOrderDetails[key] } catch (e) { }
+    return r
+  }).catch((err: any) => {
+    try { delete _inFlightOrderDetails[key] } catch (e) { }
+    throw err
+  })
+  return p
+}
+
 // 商家接单
 export function orderAccept(data: any) {
   /**

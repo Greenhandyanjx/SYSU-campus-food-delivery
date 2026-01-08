@@ -11,6 +11,10 @@
           <p class="page-subtitle">查看并管理您的配送订单</p>
         </div>
         <div class="header-actions">
+          <div class="location-status-info" :class="{ 'tracking': isLocationTracking, 'error': locationError }">
+            <i class="iconfont" :class="locationStatusIcon"></i>
+            <span>{{ locationStatusText }}</span>
+          </div>
           <el-button :loading="loading" type="primary" size="large" @click="load">
             <i class="iconfont icon-refresh"></i>
             刷新状态
@@ -84,14 +88,51 @@
           @open-chat="handleOpenChat"
         >
           <template #actions>
-            <el-button v-if="o.status === 3" type="primary" size="large" @click="pickup(o.id)">
-              <i class="iconfont icon-pickup"></i>
-              确认取货
-            </el-button>
-            <el-button v-else type="success" size="large" @click="deliver(o.id)">
-              <i class="iconfont icon-deliver"></i>
-              确认送达
-            </el-button>
+            <div class="action-buttons">
+              <!-- 状态操作按钮 -->
+              <el-button v-if="o.status === 3" type="primary" size="large" @click="pickup(o.id)">
+                <i class="iconfont icon-pickup"></i>
+                确认取货
+              </el-button>
+              <div v-else class="deliver-action-container">
+                <el-button
+                  type="success"
+                  size="large"
+                  @click="deliver(o.id)"
+                  :loading="deliveringId === o.id"
+                  :disabled="deliveringId !== null && deliveringId !== o.id"
+                >
+                  <i class="iconfont icon-deliver"></i>
+                  {{ deliveringId === o.id ? '正在确认送达...' : '确认送达' }}
+                </el-button>
+                <div class="delivery-tip">
+                  <i class="iconfont icon-location"></i>
+                  <span>送达需在收货点附近</span>
+                </div>
+              </div>
+
+              <!-- 查看位置按钮 -->
+              <el-button
+                v-if="o.status === 3"
+                type="info"
+                size="large"
+                @click="showMerchantLocation(o)"
+                class="nav-button"
+              >
+                <i class="iconfont icon-map"></i>
+                查看商家位置
+              </el-button>
+              <el-button
+                v-else
+                type="info"
+                size="large"
+                @click="showUserLocation(o)"
+                class="nav-button"
+              >
+                <i class="iconfont icon-map"></i>
+                查看用户位置
+              </el-button>
+            </div>
           </template>
         </RiderOrderCard>
       </TransitionGroup>
@@ -103,6 +144,23 @@
         <el-button type="primary" @click="load">刷新页面</el-button>
       </el-empty>
     </div>
+
+    <!-- 地图弹窗 -->
+    <AmapModal
+      v-model="showMapModal"
+      :merchant-data="currentOrderData?.status === 3 ? {
+        title: currentOrderData?.restaurant || '商家',
+        address: currentOrderData?.pickupAddress || '',
+        type: 'merchant'
+      } : undefined"
+      :user-data="currentOrderData?.status === 4 ? {
+        title: currentOrderData?.customer || '用户',
+        address: currentOrderData?.deliveryAddress || '',
+        type: 'user'
+      } : undefined"
+      :default-location="mapDefaultLocation"
+      :initial-location-type="currentOrderData?.status === 3 ? 'merchant' : 'user'"
+    />
   </div>
 </template>
 
@@ -111,10 +169,35 @@ import { computed, onMounted, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { riderApi, type RiderOrderItem } from "@/api/rider";
 import RiderOrderCard from "@/components/rider/RiderOrderCard.vue";
+import AmapModal from "@/components/AmapModal.vue";
 
 const list = ref<RiderOrderItem[]>([]);
 const loading = ref(false);
 const tab = ref<"3" | "4">("3");
+
+// 地图弹窗相关
+const showMapModal = ref(false);
+const mapDefaultLocation = ref<[number, number]>([113.299, 23.099]);
+const currentOrderData = ref<any>(null);
+
+// 送达按钮loading状态
+const deliveringId = ref<number | null>(null);
+
+// 定位状态相关
+const isLocationTracking = ref(false);
+const locationError = ref<string | null>(null);
+
+const locationStatusIcon = computed(() => {
+  if (locationError.value) return "icon-location-error";
+  if (isLocationTracking.value) return "icon-location-on";
+  return "icon-location-off";
+});
+
+const locationStatusText = computed(() => {
+  if (locationError.value) return "定位异常";
+  if (isLocationTracking.value) return "定位正常";
+  return "未定位";
+});
 
 const count3 = computed(() => list.value.filter(x => x.status === 3).length);
 const count4 = computed(() => list.value.filter(x => x.status === 4).length);
@@ -129,6 +212,23 @@ const load = async () => {
   try {
     const res = await riderApi.getOngoing();
     list.value = res.data.data || [];
+
+    console.log('📦 === 订单数据加载完成 ===');
+    console.log('📋 订单总数:', list.value.length);
+    console.log('📊 待取餐订单数 (status=3):', count3.value);
+    console.log('📊 派送中订单数 (status=4):', count4.value);
+
+    // 详细输出每个订单的地址信息
+    list.value.forEach((order, index) => {
+      console.log(`📍 订单${index + 1} [ID:${order.id}] 地址信息:`);
+      console.log(`  🏪 商家: ${order.restaurant}`);
+      console.log(`  📮 pickupAddress: "${order.pickupAddress}" (长度: ${order.pickupAddress?.length || 0})`);
+      console.log(`  🏠 客户: ${order.customer}`);
+      console.log(`  📍 deliveryAddress: "${order.deliveryAddress}" (长度: ${order.deliveryAddress?.length || 0})`);
+      console.log(`  📋 状态: ${order.status} (${order.status === 3 ? '待取餐' : '派送中'})`);
+    });
+    console.log('=====================================');
+
     // 自动切到有数据的 tab
     if (tab.value === "3" && count3.value === 0 && count4.value > 0) tab.value = "4";
     if (tab.value === "4" && count4.value === 0 && count3.value > 0) tab.value = "3";
@@ -148,12 +248,172 @@ const pickup = async (id: number) => {
 };
 
 const deliver = async (id: number) => {
+  // 设置对应按钮的loading状态
+  deliveringId.value = id;
+
+  // 🚨 确认送达调试信息
+  const currentOrder = list.value.find(o => o.id === id);
+  console.log('🚨 [确认送达调试] 点击送达按钮:', {
+    订单ID: id,
+    订单状态: currentOrder?.status,
+    商家名称: currentOrder?.restaurant,
+    商家地址: currentOrder?.pickupAddress,
+    收货地址: currentOrder?.deliveryAddress,
+    操作: '准备调用后端 deliverOrder API'
+  });
+
   try {
     await riderApi.deliverOrder(id);
-    ElMessage.success("已送达");
+    ElMessage.success("🎉 送达成功！感谢您的配送服务");
     await load();
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.msg || "送达失败");
+    const errorMsg = e?.response?.data?.msg || "送达失败";
+
+    console.error("❌ 送达失败详情:", {
+      订单ID: id,
+      错误消息: errorMsg,
+      响应状态: e?.response?.status,
+      完整错误: e
+    });
+
+    // 处理不同类型的失败情况
+    if (errorMsg.includes("未获取到骑手当前位置")) {
+      // 显示主要错误信息
+      ElMessage.error({
+        message: "❌ 无法获取您的位置",
+        duration: 4000,
+        showClose: true
+      });
+
+      // 延迟显示详细的引导文案
+      setTimeout(() => {
+        ElMessage({
+          type: "warning",
+          message: "💡 请先打开浏览器定位权限，然后点击右上角定位状态刷新位置",
+          duration: 6000,
+          showClose: true,
+          dangerouslyUseHTMLString: true
+        });
+      }, 1000);
+
+      // 再次延迟显示操作指引
+      setTimeout(() => {
+        ElMessage({
+          type: "info",
+          message: "📍 步骤：1.允许定位 → 2.刷新位置 → 3.重新尝试送达",
+          duration: 5000,
+          showClose: true
+        });
+      }, 3000);
+
+    } else if (errorMsg.includes("不在收货点附近") || errorMsg.includes("距离约")) {
+      // 解析距离信息
+      const distanceMatch = errorMsg.match(/距离约\s*(\d+)\s*米/);
+      const distance = distanceMatch ? distanceMatch[1] : "未知";
+
+      ElMessage.error({
+        message: `❌ 距离收货点过远（约 ${distance} 米）`,
+        duration: 4000,
+        showClose: true
+      });
+
+      setTimeout(() => {
+        ElMessage({
+          type: "warning",
+          message: `💡 请导航至1公里范围内的收货点，然后重试送达`,
+          duration: 5000,
+          showClose: true
+        });
+      }, 1500);
+
+      // 建议使用地图功能
+      setTimeout(() => {
+        ElMessage({
+          type: "info",
+          message: "🗺️ 您可以点击'查看用户位置'按钮查看具体收货地点",
+          duration: 5000,
+          showClose: true
+        });
+      }, 3000);
+
+    } else if (errorMsg.includes("无法解析收货地址坐标")) {
+      ElMessage.error({
+        message: "❌ 收货地址解析失败",
+        duration: 4000,
+        showClose: true
+      });
+
+      const address = errorMsg.includes("：") ? errorMsg.split("：")[1] : "用户地址";
+
+      setTimeout(() => {
+        ElMessage({
+          type: "warning",
+          message: `⚠️ 地址: ${address}`,
+          duration: 6000,
+          showClose: true
+        });
+      }, 1500);
+
+      setTimeout(() => {
+        ElMessage({
+          type: "info",
+          message: "📞 如遇问题，请联系客服处理地址信息",
+          duration: 5000,
+          showClose: true
+        });
+      }, 3500);
+
+    } else if (errorMsg.includes("骑手位置异常") || errorMsg.includes("位置异常")) {
+      ElMessage.error({
+        message: "❌ 您的位置异常，请重新获取定位后再试",
+        duration: 4000,
+        showClose: true
+      });
+
+      setTimeout(() => {
+        ElMessage({
+          type: "warning",
+          message: "💡 请确保在珠海地区并允许浏览器定位权限",
+          duration: 5000,
+          showClose: true
+        });
+      }, 1500);
+
+    } else if (errorMsg.includes("订单状态不允许")) {
+      ElMessage.error({
+        message: "❌ 当前订单状态无法送达",
+        duration: 3000,
+        showClose: true
+      });
+
+    } else if (errorMsg.includes("不属于你")) {
+      ElMessage.error({
+        message: "❌ 您不是此订单的配送员",
+        duration: 3000,
+        showClose: true
+      });
+
+    } else {
+      // 其他未知错误
+      ElMessage.error({
+        message: `❌ 送达失败：${errorMsg}`,
+        duration: 4000,
+        showClose: true
+      });
+
+      setTimeout(() => {
+        ElMessage({
+          type: "info",
+          message: "💡 如问题持续存在，请刷新页面或联系技术支持",
+          duration: 5000,
+          showClose: true
+        });
+      }, 2000);
+    }
+
+  } finally {
+    // 无论成功还是失败，都清除loading状态，保持按钮可重复点击
+    deliveringId.value = null;
   }
 };
 
@@ -163,7 +423,69 @@ const handleOpenChat = (data: { type: 'user' | 'merchant'; id: number; name: str
   window.dispatchEvent(new CustomEvent('rider:openChat', { detail: data }));
 };
 
-onMounted(load);
+// 显示商家位置
+const showMerchantLocation = (order: RiderOrderItem) => {
+  console.log('📍 === 商家位置调试信息 ===');
+  console.log('📋 订单ID:', order.id);
+  console.log('🏪 商家名称:', order.restaurant);
+  console.log('📮 商家地址 (pickupAddress):', order.pickupAddress);
+  console.log('📊 地址长度:', order.pickupAddress?.length || 0);
+  console.log('🏠 客户名称:', order.customer);
+  console.log('📍 配送地址 (deliveryAddress):', order.deliveryAddress);
+  console.log('📊 配送地址长度:', order.deliveryAddress?.length || 0);
+  console.log('📋 订单状态:', order.status);
+  console.log('🏷️ 地址来源说明: 商家使用 pickupAddress 字段');
+  console.log('🏷️ 地址来源说明: 用户使用 deliveryAddress 字段');
+  console.log('=====================================');
+
+  currentOrderData.value = order;
+  showMapModal.value = true;
+};
+
+// 显示用户位置
+const showUserLocation = (order: RiderOrderItem) => {
+  console.log('📍 === 用户位置调试信息 ===');
+  console.log('📋 订单ID:', order.id);
+  console.log('🏪 商家名称:', order.restaurant);
+  console.log('📮 商家地址 (pickupAddress):', order.pickupAddress);
+  console.log('📊 商家地址长度:', order.pickupAddress?.length || 0);
+  console.log('🏠 客户名称:', order.customer);
+  console.log('📍 配送地址 (deliveryAddress):', order.deliveryAddress);
+  console.log('📊 配送地址长度:', order.deliveryAddress?.length || 0);
+  console.log('📋 订单状态:', order.status);
+  console.log('🏷️ 地址来源说明: 商家使用 pickupAddress 字段');
+  console.log('🏷️ 地址来源说明: 用户使用 deliveryAddress 字段');
+  console.log('=====================================');
+
+  currentOrderData.value = order;
+  showMapModal.value = true;
+};
+
+// 监听定位状态变化
+const setupLocationListener = () => {
+  // 监听定位状态
+  window.addEventListener('rider:locationStatus', (event: any) => {
+    isLocationTracking.value = event.detail.isTracking;
+    locationError.value = event.detail.error || null;
+
+    // 更新默认位置
+    if (event.detail.location) {
+      mapDefaultLocation.value = [event.detail.location.longitude || event.detail.location.lng, event.detail.location.latitude || event.detail.location.lat];
+    }
+  });
+
+  // 监听位置更新
+  window.addEventListener('rider:locationUpdate', (event: any) => {
+    if (event.detail.location) {
+      mapDefaultLocation.value = [event.detail.location.longitude || event.detail.location.lng, event.detail.location.latitude || event.detail.location.lat];
+    }
+  });
+};
+
+onMounted(() => {
+  load();
+  setupLocationListener();
+});
 </script>
 
 <style scoped lang="scss">
@@ -212,6 +534,46 @@ onMounted(load);
 }
 
 .header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+
+  .location-status-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+
+    .iconfont {
+      font-size: 16px;
+    }
+
+    &.tracking {
+      background: rgba(103, 194, 58, 0.2);
+      border-color: rgba(103, 194, 58, 0.4);
+      color: #fff;
+    }
+
+    &.error {
+      background: rgba(245, 108, 108, 0.2);
+      border-color: rgba(245, 108, 108, 0.4);
+      color: #fff;
+      animation: pulse 2s infinite;
+    }
+  }
+
+  @keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.6; }
+    100% { opacity: 1; }
+  }
+
   :deep(.el-button) {
     background: rgba(255, 255, 255, 0.2);
     border-color: rgba(255, 255, 255, 0.3);
@@ -456,4 +818,55 @@ onMounted(load);
 .icon-refresh:before { content: "🔄"; }
 .icon-pickup:before { content: "📦"; }
 .icon-deliver:before { content: "✅"; }
+.icon-location:before { content: "📍"; }
+.icon-nav:before { content: "🧭"; }
+.icon-map:before { content: "🗺️"; }
+.icon-center:before { content: "🎯"; }
+.icon-merchant:before { content: "🏪"; }
+.icon-user:before { content: "👤"; }
+
+// 操作按钮容器
+.action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+// 送达按钮容器
+.deliver-action-container {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+}
+
+// 送达提示
+.delivery-tip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--rider-sub);
+  background: var(--rider-primary-light);
+  padding: 4px 12px;
+  border-radius: 12px;
+
+  .iconfont {
+    font-size: 12px;
+  }
+}
+
+// 导航按钮
+.nav-button {
+  background: linear-gradient(135deg, #409EFF 0%, #66B1FF 100%);
+  border-color: #409EFF;
+
+  &:hover {
+    background: linear-gradient(135deg, #337ECC 0%, #5DA3FF 100%);
+    border-color: #337ECC;
+  }
+}
 </style>

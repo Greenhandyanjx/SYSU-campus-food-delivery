@@ -354,7 +354,18 @@ async function onCheckout() {
       merchantId: s.storeId || s.merchant_id || s.id,
       totalPrice: (s.items || []).filter((it: any) => it.selected).reduce((sum: number, it: any) => sum + Number(it.price || 0) * Number(it.qty || 0), 0),
       deliveryAmount: Number(s.deliveryFee || s.delivery_fee || 0),
-      items: (s.items || []).filter((it: any) => it.selected).map((it: any) => ({ dishId: it.dishId || it.dish_id || it.id, qty: it.qty, price: Number(it.price || 0) }))
+      items: (s.items || []).filter((it: any) => it.selected).map((it: any) => {
+        const raw = it.dishId || it.dish_id || it.id
+        let dishId = 0
+        let mealId = 0
+        if (typeof raw === 'string' && raw.startsWith('m-')) {
+          const parts = raw.split('-')
+          mealId = parseInt(parts[parts.length - 1], 10) || 0
+        } else {
+          dishId = Number(raw) || 0
+        }
+        return { dishId, mealId, qty: it.qty, price: Number(it.price || 0) }
+      })
     }))
     if (pendingShops.length > 0) {
       const res: any = await cartApi.createPending({ shops: pendingShops })

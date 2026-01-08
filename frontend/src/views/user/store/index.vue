@@ -571,8 +571,36 @@ async function refreshCart() {
       const shop = data.shops.find((s: any) => (s.storeId == storeIdToSend || s.id == storeIdToSend || s.merchant_id == storeIdToSend || s.merchantId == storeIdToSend))
       items = shop ? shop.items || [] : []
     }
+    // 合并本地保存的套餐（meal）项，以避免套餐在后端购物车不支持时被遗漏
+    function getLocalMeals(storeId: any) {
+      try {
+        const key = 'local_meal_cart_' + String(storeId)
+        const raw = sessionStorage.getItem(key)
+        return raw ? JSON.parse(raw) : []
+      } catch (e) { return [] }
+    }
+    function saveLocalMeals(storeId: any, arr: any[]) {
+      try { sessionStorage.setItem('local_meal_cart_' + String(storeId), JSON.stringify(arr)) } catch (e) {}
+    }
+    function mergeLocalMeals(items: any[], storeId: any) {
+      const local = getLocalMeals(storeId) || []
+      if (!local || local.length === 0) return items
+      const merged = (items || []).slice()
+      for (const lm of local) {
+        const exists = merged.find((it: any) => String(it.dishId) === String(lm.dishId))
+        if (exists) {
+          exists.qty = (exists.qty || 0) + (lm.qty || 0)
+        } else {
+          merged.push({ dishId: lm.dishId, name: lm.name, price: lm.price, qty: lm.qty, selected: true })
+        }
+      }
+      return merged
+    }
+
     // 保留并规范 selected 字段，方便页面按已选项结算
     // 如果某项存在于购物车且数量大于 0，则在进入店铺页时自动将其视为已选中，避免进入店铺后出现购物车中有商品但未被选中从而结算页缺失的问题
+    // merge local meals first
+    items = mergeLocalMeals(items || [], storeIdToSend)
     cart.value = (items || []).map((it: any) => ({ ...it, selected: !!it.selected || (!!(it.qty || it.Qty || it.quantity) && Number(it.qty || it.Qty || it.quantity) > 0) }))
     // 同步购物车数量到菜品：兼容多种返回键名（dish_id / dishId / id）
     for (const d of dishes.value) {
@@ -627,6 +655,34 @@ async function add(d: any) {
   try {
     // prefer primary key id when sending to backend
     const storeIdToSend = store.value.id || store.value.base_id || store.value.baseId
+    // if this is a meal (id prefixed with m-), prefer adding to backend cart (send numeric mealId);
+    // fall back to local session storage only if backend call fails.
+    if (String(d.id).startsWith('m-')) {
+      // extract numeric id from m-123
+      const mParts = String(d.id).split('-')
+      const mealIdNum = parseInt(mParts[mParts.length - 1], 10)
+      try {
+        await addToCart({ storeId: storeIdToSend, mealId: mealIdNum, name: d.name, price: Number(d.price), qty: 1 })
+        d.count = (d.count || 0) + 1
+        await refreshCart()
+        ElMessage.success('已加入套餐')
+        return
+      } catch (err) {
+        // fallback: keep local meal cart in sessionStorage for offline compatibility
+        const key = 'local_meal_cart_' + String(storeIdToSend)
+        let local: any[] = []
+        try { local = JSON.parse(sessionStorage.getItem(key) || '[]') } catch (e) { local = [] }
+        const existing = local.find(x => String(x.dishId) === String(d.id))
+        if (existing) existing.qty = (existing.qty || 0) + 1
+        else local.push({ dishId: d.id, name: d.name, price: d.price, qty: 1, selected: true })
+        try { sessionStorage.setItem(key, JSON.stringify(local)) } catch (e) {}
+        d.count = (d.count || 0) + 1
+        await refreshCart()
+        ElMessage.success('已加入套餐（本地）')
+        return
+      }
+    }
+
     await addToCart({ storeId: storeIdToSend, dishId: d.id, name: d.name, price: d.price, qty: 1 })
     // 本地乐观更新并刷新购物车以保持一致
     d.count = (d.count || 0) + 1
@@ -641,6 +697,22 @@ async function dec(d: any) {
   if ((d.count || 0) <= 0) return
   try {
     const storeIdToSend = store.value.id || store.value.base_id || store.value.baseId
+    if (String(d.id).startsWith('m-')) {
+      const key = 'local_meal_cart_' + String(storeIdToSend)
+      let local: any[] = []
+      try { local = JSON.parse(sessionStorage.getItem(key) || '[]') } catch (e) { local = [] }
+      const existing = local.find(x => String(x.dishId) === String(d.id))
+      if (existing) {
+        existing.qty = Math.max(0, (existing.qty || 0) - 1)
+        if (existing.qty <= 0) local = local.filter(x => String(x.dishId) !== String(d.id))
+      }
+      try { sessionStorage.setItem(key, JSON.stringify(local)) } catch (e) {}
+      d.count = Math.max(0, (d.count || 0) - 1)
+      await refreshCart()
+      ElMessage.success('已从套餐（本地）移除')
+      return
+    }
+
     await removeFromCart({ storeId: storeIdToSend, dishId: d.id, qty: 1 })
     d.count = Math.max(0, (d.count || 0) - 1)
     await refreshCart()
@@ -704,11 +776,24 @@ async function checkout() {
   if (!(cart.value || []).some((it: any) => !!it.selected)) { ElMessage.warning('请选择要结算的商品'); return }
     try {
       // Build shops payload from current cart (this view shows single store's cart)
-      const items = (cart.value || []).map((it: any) => ({
-        dishId: it.dishId || it.id || it.dish_id,
-        qty: it.qty || it.count || it.originalQty || 1,
-        price: Number(it.price || it.unitPrice || 0),
-      }))
+      // only include selected items and normalize meal vs dish ids
+      const items = (cart.value || []).filter((it: any) => !!it.selected).map((it: any) => {
+        const raw = it.dishId || it.id || it.dish_id
+        let dishId = 0
+        let mealId = 0
+        if (typeof raw === 'string' && raw.startsWith('m-')) {
+          const parts = raw.split('-')
+          mealId = parseInt(parts[parts.length - 1], 10) || 0
+        } else {
+          dishId = Number(raw) || 0
+        }
+        return {
+          dishId,
+          mealId,
+          qty: it.qty || it.count || it.originalQty || 1,
+          price: Number(it.price || it.unitPrice || 0),
+        }
+      })
 
       if (!items || items.length === 0) {
         ElMessage.warning('购物车为空，无法结算')

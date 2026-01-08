@@ -301,6 +301,7 @@ import { getMerchantProfile } from '@/api/merchant/profile'
 import {
   getOrderDetailPage,
   queryOrderDetailById,
+  queryOrderDetailByIdCoalesced,
   completeOrder,
   deliveryOrder,
   orderCancel,
@@ -679,7 +680,7 @@ async function goDetail(id: any, s: number, r: any, event?: Event) {
     console.log("请求 URL = /merchant/order/detail", "参数 =", { orderId: id })
   console.log("rowItem.id =", id)
   try {
-    const { data } = await queryOrderDetailById({ orderId: id })
+    const { data } = await queryOrderDetailByIdCoalesced({ orderId: id })
     const raw = data.data || {}
     // Normalize returned payload to modal fields
     const idVal = raw.id ?? raw.ID ?? raw.orderId ?? raw.orderID ?? raw.orderid ?? raw.orderNo ?? raw.number

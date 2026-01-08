@@ -171,6 +171,8 @@ func SetRouter() *gin.Engine {
 		// 用户端订单操作：取消、支付、更新收货人/地址
 		auth.POST("/user/order/cancel", controller.CancelOrder)
 		auth.POST("/user/order/pay", controller.PayOrder)
+		// 更新订单备注（用于 checkout 时用户修改已存在 pending 订单的商家备注）
+		auth.POST("/user/order/updateNotes", controller.UpdateOrderNotes)
 		auth.POST("/user/order/updateAddress", controller.UpdateOrderAddress)
 
 		// User address management

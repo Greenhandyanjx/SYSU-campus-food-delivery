@@ -16,6 +16,9 @@
 <script setup lang="ts">
 import Navbar from "./components/Navbar.vue";
 import RiderChat from "@/components/rider/RiderChat.vue";
+// 不自动启动定位追踪，改为手动控制
+// import useRiderLocation from "@/composables/useRiderLocation";
+// const { isTracking, locationError } = useRiderLocation();
 </script>
 
 <style scoped lang="scss">
