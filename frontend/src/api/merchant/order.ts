@@ -105,11 +105,11 @@ export function queryOrderDetailByIdCoalesced(params: { orderId: string | number
   const p = queryOrderDetailById(params)
   _inFlightOrderDetails[key] = p
   p.then((r: any) => {
-    try { _orderDetailCache[key] = { ts: Date.now(), res: r } } catch (e) {}
-    try { delete _inFlightOrderDetails[key] } catch (e) {}
+    try { _orderDetailCache[key] = { ts: Date.now(), res: r } } catch (e) { }
+    try { delete _inFlightOrderDetails[key] } catch (e) { }
     return r
   }).catch((err: any) => {
-    try { delete _inFlightOrderDetails[key] } catch (e) {}
+    try { delete _inFlightOrderDetails[key] } catch (e) { }
     throw err
   })
   return p

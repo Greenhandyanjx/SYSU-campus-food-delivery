@@ -184,6 +184,13 @@ func Initalldb() error {
 		return err
 	}
 
+	// CartItem: 支持把菜品或套餐加入购物车
+	if err := migrate("CartItem", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.CartItem{})
+	}); err != nil {
+		return err
+	}
+
 	if err := migrate("SalesStat", func(db *gorm.DB) error {
 		return db.AutoMigrate(&models.SalesStat{})
 	}); err != nil {

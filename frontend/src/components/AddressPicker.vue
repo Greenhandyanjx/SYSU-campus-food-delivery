@@ -179,6 +179,7 @@ async function initMap() {
     console.error('AddressPicker: failed to load AMap script', e)
     return
   }
+}
 
 function recenterOriginal() {
   if (initialLng == null || initialLat == null) return

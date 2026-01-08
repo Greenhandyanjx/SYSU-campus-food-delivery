@@ -124,7 +124,12 @@
           key="deliveryTime"
           prop="deliveryTime"
           label="送达时间"
-        />
+          min-width="110"
+        >
+          <template #default="{ row }">
+            <span>{{formatDateToCN(row.finishAt) }}</span>
+          </template>
+        </el-table-column>
         <el-table-column
           v-if="[2, 3, 4].includes(orderStatus)"
           key="expected_time"

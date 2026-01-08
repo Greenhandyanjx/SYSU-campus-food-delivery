@@ -362,6 +362,25 @@ func GetOrderDetail(c *gin.Context) {
 			"payMethod":    order.PayInfo.Paymethod,
 			"checkoutTime": order.PayInfo.CheckoutTime,
 			"packAmount":   order.PayInfo.Packamount,
+			// finish/delivery time when available
+			"deliveryTime": func() interface{} {
+				if order.FinishAt != nil {
+					return order.FinishAt.Format(time.RFC3339)
+				}
+				return nil
+			}(),
+			"finishAt": func() interface{} {
+				if order.FinishAt != nil {
+					return order.FinishAt.Format(time.RFC3339)
+				}
+				return nil
+			}(),
+			"finish_at": func() interface{} {
+				if order.FinishAt != nil {
+					return order.FinishAt.Format(time.RFC3339)
+				}
+				return nil
+			}(),
 			// "deliveryAmount": order.PayInfo.Deliveryamount,
 		},
 	}
@@ -507,16 +526,28 @@ func GetUserOrderList(c *gin.Context) {
 		}
 
 		items = append(items, gin.H{
-			"id":                   o.ID,
-			"number":               num,
-			"amount":               o.TotalPrice,
-			"deliveryFee":          o.DeliveryFee,
-			"delivery_amount":      o.DeliveryFee,
-			"status":               o.Status,
-			"orderTime":            o.CreatedAt.Format(time.RFC3339),
-			"createdAt":            o.CreatedAt.Format(time.RFC3339),
-			"created_at":           o.CreatedAt.Format(time.RFC3339),
-			"time":                 o.CreatedAt.Format(time.RFC3339),
+			"id":              o.ID,
+			"number":          num,
+			"amount":          o.TotalPrice,
+			"deliveryFee":     o.DeliveryFee,
+			"delivery_amount": o.DeliveryFee,
+			"status":          o.Status,
+			"orderTime":       o.CreatedAt.Format(time.RFC3339),
+			"createdAt":       o.CreatedAt.Format(time.RFC3339),
+			"created_at":      o.CreatedAt.Format(time.RFC3339),
+			"time":            o.CreatedAt.Format(time.RFC3339),
+			"finishAt": func() interface{} {
+				if o.FinishAt != nil {
+					return o.FinishAt.Format(time.RFC3339)
+				}
+				return nil
+			}(),
+			"finish_at": func() interface{} {
+				if o.FinishAt != nil {
+					return o.FinishAt.Format(time.RFC3339)
+				}
+				return nil
+			}(),
 			"payDeadline":          payDeadline,
 			"payInfoUpdatedAt":     payInfoUpdatedAt,
 			"merchantId":           o.MerchantID,
@@ -1405,10 +1436,10 @@ func Orderadd(c *gin.Context) {
 // CreatePayOrder 创建一个支付订单（预下单），兼容单商家和批量 shops 格式
 func CreatePayOrder(c *gin.Context) {
 	type ItemReq struct {
-		DishID uint    `json:"dishId"`
-		MealID uint    `json:"mealId"`
-		Qty    int     `json:"qty"`
-		Price  float64 `json:"price"`
+		DishID interface{} `json:"dishId"`
+		MealID interface{} `json:"mealId"`
+		Qty    int         `json:"qty"`
+		Price  float64     `json:"price"`
 	}
 	type ShopReq struct {
 		MerchantID     uint      `json:"merchantId" binding:"required"`
@@ -1579,10 +1610,10 @@ func CreatePayOrder(c *gin.Context) {
 // CreatePendingOrder 创建一个“预览/待支付”订单，用于用户进入结算页时持久化未完成的尝试。
 func CreatePendingOrder(c *gin.Context) {
 	type ItemReq struct {
-		DishID uint    `json:"dishId"`
-		MealID uint    `json:"mealId"`
-		Qty    int     `json:"qty"`
-		Price  float64 `json:"price"`
+		DishID interface{} `json:"dishId"`
+		MealID interface{} `json:"mealId"`
+		Qty    int         `json:"qty"`
+		Price  float64     `json:"price"`
 	}
 	type ShopReq struct {
 		MerchantID     uint      `json:"merchantId" binding:"required"`
@@ -1691,15 +1722,46 @@ func CreatePendingOrder(c *gin.Context) {
 		// If frontend supplied explicit items in payload (store page may not persist cart in DB), use them to create order_dishes/order_meals
 		if len(s.Items) > 0 {
 			for _, it := range s.Items {
-				if it.DishID != 0 {
-					od := models.OrderDish{OrderID: int(order.ID), DishID: int(it.DishID), Num: it.Qty}
+				// parse DishID / MealID which may come as number or string (e.g. "m-123")
+				var dishID uint = 0
+				var mealID uint = 0
+				if it.DishID != nil {
+					switch v := it.DishID.(type) {
+					case float64:
+						dishID = uint(v)
+					case string:
+						// support formats like "m-123" or numeric string
+						if strings.HasPrefix(v, "m-") || strings.HasPrefix(v, "m") {
+							sstr := strings.TrimPrefix(v, "m-")
+							sstr = strings.TrimPrefix(sstr, "m")
+							if n, err := strconv.Atoi(sstr); err == nil {
+								mealID = uint(n)
+							}
+						} else if n, err := strconv.Atoi(v); err == nil {
+							dishID = uint(n)
+						}
+					}
+				}
+				if it.MealID != nil {
+					switch v := it.MealID.(type) {
+					case float64:
+						mealID = uint(v)
+					case string:
+						if n, err := strconv.Atoi(v); err == nil {
+							mealID = uint(n)
+						}
+					}
+				}
+
+				if dishID != 0 {
+					od := models.OrderDish{OrderID: int(order.ID), DishID: int(dishID), Num: it.Qty}
 					if err := tx.Create(&od).Error; err != nil {
 						tx.Rollback()
 						c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to create order dish from payload"})
 						return
 					}
-				} else if it.MealID != 0 {
-					om := models.OrderMeal{OrderID: int(order.ID), MealID: int(it.MealID), Num: it.Qty}
+				} else if mealID != 0 {
+					om := models.OrderMeal{OrderID: int(order.ID), MealID: int(mealID), Num: it.Qty}
 					if err := tx.Create(&om).Error; err != nil {
 						tx.Rollback()
 						c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to create order meal from payload"})
@@ -1714,11 +1776,20 @@ func CreatePendingOrder(c *gin.Context) {
 				var items []models.CartItem
 				if err := tx.Where("cart_id = ? AND merchant_id = ?", cart.ID, s.MerchantID).Find(&items).Error; err == nil {
 					for _, it := range items {
-						od := models.OrderDish{OrderID: int(order.ID), DishID: int(it.DishID), Num: it.Qty}
-						if err := tx.Create(&od).Error; err != nil {
-							tx.Rollback()
-							c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to create order dish"})
-							return
+						if it.MealID != 0 {
+							om := models.OrderMeal{OrderID: int(order.ID), MealID: int(it.MealID), Num: it.Qty}
+							if err := tx.Create(&om).Error; err != nil {
+								tx.Rollback()
+								c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to create order meal"})
+								return
+							}
+						} else {
+							od := models.OrderDish{OrderID: int(order.ID), DishID: int(it.DishID), Num: it.Qty}
+							if err := tx.Create(&od).Error; err != nil {
+								tx.Rollback()
+								c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to create order dish"})
+								return
+							}
 						}
 					}
 					// 删除已迁移的购物车项，避免后续重复迁移

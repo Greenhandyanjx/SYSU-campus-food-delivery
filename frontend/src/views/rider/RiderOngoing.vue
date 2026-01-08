@@ -107,7 +107,7 @@
                 </el-button>
                 <div class="delivery-tip">
                   <i class="iconfont icon-location"></i>
-                  <span>送达需在收货点附近（1km内）</span>
+                  <span>送达需在收货点附近</span>
                 </div>
               </div>
 
