@@ -207,6 +207,9 @@ func CopyOrdersToOrderWithDishnames(orders []models.Order, consigneeMap map[uint
 		dstOrder.Ordertime = srcOrder.PickupPoint
 		dstOrder.Dropofpoint = srcOrder.DropofPoint
 		dstOrder.ExpectedTime = srcOrder.ExpectedTime
+		// map finish time so frontend can display delivery/finish timestamp
+		dstOrder.FinishAt = srcOrder.FinishAt
+		// keep an alternative snake_case field mapping via JSON tag on the struct
 		dstOrder.Status = srcOrder.Status
 		dstOrder.TablewareNumber = srcOrder.Numberoftableware
 		dstOrder.TotalPrice = srcOrder.TotalPrice

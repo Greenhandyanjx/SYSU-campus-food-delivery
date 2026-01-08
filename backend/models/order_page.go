@@ -11,6 +11,8 @@ type OrderWithDishnames struct {
 	Ordertime          time.Time `json:"orderTime"`
 	Dropofpoint        time.Time `json:"dropofpoint"`
 	ExpectedTime       time.Time `json:"expected_time"`
+	FinishAt           *time.Time `json:"finishAt"`
+	Finish_at          *time.Time `json:"finish_at"`
 	Status             int       `json:"status"`
 	TablewareNumber    int       `json:"quantity"`
 	TotalPrice         float64   `json:"totalprice"`

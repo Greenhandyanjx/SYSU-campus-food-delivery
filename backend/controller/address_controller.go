@@ -81,16 +81,11 @@ func AddUserAddress(c *gin.Context) {
 	street := req.Street
 	if prov == "" && req.Detail != "" {
 		parts := strings.Fields(req.Detail)
-		if len(parts) > 0 {
+		// Only auto-split when it looks like a full address (>=4 parts)
+		if len(parts) >= 4 {
 			prov = parts[0]
-		}
-		if len(parts) > 1 {
 			city = parts[1]
-		}
-		if len(parts) > 2 {
 			dist = parts[2]
-		}
-		if len(parts) > 3 {
 			street = strings.Join(parts[3:], " ")
 		}
 	}
@@ -182,16 +177,11 @@ func EditUserAddress(c *gin.Context) {
 	street := req.Street
 	if prov == "" && req.Detail != "" {
 		parts := strings.Fields(req.Detail)
-		if len(parts) > 0 {
+		// Only auto-split when it looks like a full address (>=4 parts)
+		if len(parts) >= 4 {
 			prov = parts[0]
-		}
-		if len(parts) > 1 {
 			city = parts[1]
-		}
-		if len(parts) > 2 {
 			dist = parts[2]
-		}
-		if len(parts) > 3 {
 			street = strings.Join(parts[3:], " ")
 		}
 	}
