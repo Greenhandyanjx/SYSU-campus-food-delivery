@@ -11,11 +11,12 @@ import (
 	"gorm.io/gorm"
 )
 
+//哈希辅助函数
 func Hpwd(pwd string) (string, error) {
 	hpwd, err := bcrypt.GenerateFromPassword([]byte(pwd), 12)
 	return string(hpwd), err
 }
-
+//JWT生成函数
 func GenerateJWT(username string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"username": username,
