@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -22,6 +23,27 @@ func GetOrderListByStatus(c *gin.Context) {
 	status := c.Query("status")
 	pageStr := c.Query("page")
 	sizeStr := c.Query("size")
+	// 兼容前端 `pageSize` 参数名
+	if sizeStr == "" {
+		sizeStr = c.Query("pageSize")
+	}
+	if sizeStr == "" {
+		sizeStr = c.Query("page_size")
+	}
+	// 支持前端常用的参数名 `pageSize` 和 `page_size`
+	if sizeStr == "" {
+		sizeStr = c.Query("pageSize")
+	}
+	if sizeStr == "" {
+		sizeStr = c.Query("page_size")
+	}
+	// 支持前端常用的参数名 `pageSize` 和 `page_size`
+	if sizeStr == "" {
+		sizeStr = c.Query("pageSize")
+	}
+	if sizeStr == "" {
+		sizeStr = c.Query("page_size")
+	}
 	page, err := strconv.Atoi(pageStr)
 	if err != nil || page < 1 {
 		page = 1
@@ -103,6 +125,13 @@ func GetOrderPage(c *gin.Context) {
 	// 获取请求参数
 	pageStr := c.Query("page")
 	sizeStr := c.Query("size")
+	// 兼容前端常用参数名 `pageSize` / `page_size`
+	if sizeStr == "" {
+		sizeStr = c.Query("pageSize")
+	}
+	if sizeStr == "" {
+		sizeStr = c.Query("page_size")
+	}
 	beginStr := c.Query("beginTime")
 	endStr := c.Query("endTime")
 	phonestr := c.Query("phone")
@@ -154,6 +183,9 @@ func GetOrderPage(c *gin.Context) {
 	utils.FetchDishnames(c, &ordersWithDetails)
 	// 准备返回数据
 	// 序列化数据并存入Redis
+	if ordersWithDetails == nil {
+		ordersWithDetails = make([]models.OrderWithDishnames, 0)
+	}
 	cachedData = struct {
 		Items []models.OrderWithDishnames
 		Total int64
@@ -170,11 +202,15 @@ func GetOrderPage(c *gin.Context) {
 		})
 		return
 	}
-	// 返回结果
+	// 返回结果（确保 items 为非 nil 的空数组）
+	itemsOut := ordersWithDetails
+	if itemsOut == nil {
+		itemsOut = make([]models.OrderWithDishnames, 0)
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"code": 1,
 		"data": gin.H{
-			"items": ordersWithDetails,
+			"items": itemsOut,
 			"total": count,
 		},
 	})
@@ -299,8 +335,8 @@ func GetOrderDetail(c *gin.Context) {
 	response := gin.H{
 		"code": 1,
 		"data": gin.H{
-			"deliveryFee":     order.DeliveryFee,
-			"delivery_fee":    order.DeliveryFee,
+			"deliveryFee": order.DeliveryFee,
+			// "delivery_fee":    order.DeliveryFee,
 			"id":              order.ID,
 			"orderId":         order.ID,
 			"number":          order.CreatedAt.Format("20060102") + fmt.Sprintf("%06d", order.ID),
@@ -320,13 +356,32 @@ func GetOrderDetail(c *gin.Context) {
 				}
 				return gin.H{"courierId": "r" + strconv.Itoa(int(rider.ID)), "courierName": rider.RealName, "courierPhone": rider.Phone}
 			}(),
-			"merchantId":     order.MerchantID,
-			"storeName":      merchant.ShopName,
-			"storeLogo":      merchant.Logo,
-			"payMethod":      order.PayInfo.Paymethod,
-			"checkoutTime":   order.PayInfo.CheckoutTime,
-			"packAmount":     order.PayInfo.Packamount,
-			"deliveryAmount": order.PayInfo.Deliveryamount,
+			"merchantId":   order.MerchantID,
+			"storeName":    merchant.ShopName,
+			"storeLogo":    merchant.Logo,
+			"payMethod":    order.PayInfo.Paymethod,
+			"checkoutTime": order.PayInfo.CheckoutTime,
+			"packAmount":   order.PayInfo.Packamount,
+			// finish/delivery time when available
+			"deliveryTime": func() interface{} {
+				if order.FinishAt != nil {
+					return order.FinishAt.Format(time.RFC3339)
+				}
+				return nil
+			}(),
+			"finishAt": func() interface{} {
+				if order.FinishAt != nil {
+					return order.FinishAt.Format(time.RFC3339)
+				}
+				return nil
+			}(),
+			"finish_at": func() interface{} {
+				if order.FinishAt != nil {
+					return order.FinishAt.Format(time.RFC3339)
+				}
+				return nil
+			}(),
+			// "deliveryAmount": order.PayInfo.Deliveryamount,
 		},
 	}
 	// 序列化数据并存入Redis
@@ -348,6 +403,13 @@ func GetUserOrderList(c *gin.Context) {
 	// 解析分页参数
 	pageStr := c.Query("page")
 	sizeStr := c.Query("size")
+	// 兼容 pageSize / page_size
+	if sizeStr == "" {
+		sizeStr = c.Query("pageSize")
+	}
+	if sizeStr == "" {
+		sizeStr = c.Query("page_size")
+	}
 	status := c.Query("status")
 	page, err := strconv.Atoi(pageStr)
 	if err != nil || page < 1 {
@@ -458,6 +520,11 @@ func GetUserOrderList(c *gin.Context) {
 			payDeadline = o.PayInfo.ExpiresAt.Format(time.RFC3339)
 		}
 
+		payInfoUpdatedAt := ""
+		if !o.PayInfo.UpdatedAt.IsZero() {
+			payInfoUpdatedAt = o.PayInfo.UpdatedAt.Format(time.RFC3339)
+		}
+
 		items = append(items, gin.H{
 			"id":              o.ID,
 			"number":          num,
@@ -469,13 +536,26 @@ func GetUserOrderList(c *gin.Context) {
 			"createdAt":       o.CreatedAt.Format(time.RFC3339),
 			"created_at":      o.CreatedAt.Format(time.RFC3339),
 			"time":            o.CreatedAt.Format(time.RFC3339),
-			"payDeadline":     payDeadline,
-			"merchantId":      o.MerchantID,
-			"storeName":       m.ShopName,
-			"storeLogo":       m.Logo,
-			"items":           itms,
-			"is_commented":    o.IsCommented,
-			"merchant_avg_score": m.AvgScore,
+			"finishAt": func() interface{} {
+				if o.FinishAt != nil {
+					return o.FinishAt.Format(time.RFC3339)
+				}
+				return nil
+			}(),
+			"finish_at": func() interface{} {
+				if o.FinishAt != nil {
+					return o.FinishAt.Format(time.RFC3339)
+				}
+				return nil
+			}(),
+			"payDeadline":          payDeadline,
+			"payInfoUpdatedAt":     payInfoUpdatedAt,
+			"merchantId":           o.MerchantID,
+			"storeName":            m.ShopName,
+			"storeLogo":            m.Logo,
+			"items":                itms,
+			"is_commented":         o.IsCommented,
+			"merchant_avg_score":   m.AvgScore,
 			"merchant_score_count": m.ScoreCount,
 		})
 	}
@@ -635,6 +715,11 @@ func GetUserOrderDetail(c *gin.Context) {
 		response["data"].(gin.H)["payDeadline"] = order.PayInfo.ExpiresAt.Format(time.RFC3339)
 		response["data"].(gin.H)["pay_deadline"] = order.PayInfo.ExpiresAt.Format(time.RFC3339)
 	}
+	// 同时返回 payinfo 的更新时间，供前端以此为倒计时基准
+	if !order.PayInfo.UpdatedAt.IsZero() {
+		response["data"].(gin.H)["payInfoUpdatedAt"] = order.PayInfo.UpdatedAt.Format(time.RFC3339)
+		response["data"].(gin.H)["pay_info_updated_at"] = order.PayInfo.UpdatedAt.Format(time.RFC3339)
+	}
 	c.JSON(http.StatusOK, response)
 }
 
@@ -790,7 +875,9 @@ func ReviewOrder(c *gin.Context) {
 		if err := tx.First(&m, order.MerchantID).Error; err == nil {
 			// 计算新的平均分
 			prevCount := m.ScoreCount
-			if prevCount < 0 { prevCount = 0 }
+			if prevCount < 0 {
+				prevCount = 0
+			}
 			total := m.AvgScore*float64(prevCount) + float64(body.MerchantScore)
 			newCount := prevCount + 1
 			m.ScoreCount = newCount
@@ -811,7 +898,9 @@ func ReviewOrder(c *gin.Context) {
 		var r models.Rider
 		if err := tx.First(&r, order.RiderID).Error; err == nil {
 			prevCount := r.ScoreCount
-			if prevCount < 0 { prevCount = 0 }
+			if prevCount < 0 {
+				prevCount = 0
+			}
 			total := r.AvgScore*float64(prevCount) + float64(body.RiderScore)
 			newCount := prevCount + 1
 			r.ScoreCount = newCount
@@ -1081,6 +1170,60 @@ func OrderCancel(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"success": true}})
 }
 
+// UpdateOrderNotes 更新订单的备注（notes 字段），用于 checkout 时更新已存在 pending 订单的商家备注
+func UpdateOrderNotes(c *gin.Context) {
+	var body struct {
+		ID    interface{} `json:"id"`
+		Notes string      `json:"notes"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid request body", "data": nil})
+		return
+	}
+	var oid int
+	switch v := body.ID.(type) {
+	case float64:
+		oid = int(v)
+	case string:
+		if n, err := strconv.Atoi(v); err == nil {
+			oid = n
+		}
+	case int:
+		oid = v
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid id", "data": nil})
+		return
+	}
+
+	baseUserIDIface, exists := c.Get("baseUserID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "message": "not authenticated"})
+		return
+	}
+	baseUserID := baseUserIDIface.(uint)
+
+	var order models.Order
+	if err := global.Db.First(&order, oid).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"code": 0, "message": "order not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "db error"})
+		return
+	}
+	if order.Userid != baseUserID {
+		c.JSON(http.StatusForbidden, gin.H{"code": 0, "message": "forbidden"})
+		return
+	}
+
+	if err := global.Db.Model(&models.Order{}).Where("id = ?", order.ID).Update("notes", body.Notes).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to update order notes"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"success": true}})
+}
+
 func OrderDelivery(c *gin.Context) {
 	// 支持 { id: 123 } 或 { orderId: 123 }
 	var body map[string]interface{}
@@ -1293,10 +1436,10 @@ func Orderadd(c *gin.Context) {
 // CreatePayOrder 创建一个支付订单（预下单），兼容单商家和批量 shops 格式
 func CreatePayOrder(c *gin.Context) {
 	type ItemReq struct {
-		DishID uint    `json:"dishId"`
-		MealID uint    `json:"mealId"`
-		Qty    int     `json:"qty"`
-		Price  float64 `json:"price"`
+		DishID interface{} `json:"dishId"`
+		MealID interface{} `json:"mealId"`
+		Qty    int         `json:"qty"`
+		Price  float64     `json:"price"`
 	}
 	type ShopReq struct {
 		MerchantID     uint      `json:"merchantId" binding:"required"`
@@ -1416,6 +1559,9 @@ func CreatePayOrder(c *gin.Context) {
 			// 升级现有 pending order
 			// total_price should reflect items + delivery fee
 			updates := map[string]interface{}{"status": 1, "pay_infoid": int(pay.ID), "total_price": s.TotalPrice + s.DeliveryAmount, "delivery_fee": s.DeliveryAmount}
+			if strings.TrimSpace(req.Remarks) != "" {
+				updates["notes"] = req.Remarks
+			}
 			if err := tx.Model(&models.Order{}).Where("id = ?", po.ID).Updates(updates).Error; err != nil {
 				tx.Rollback()
 				c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to upgrade pending order"})
@@ -1464,10 +1610,10 @@ func CreatePayOrder(c *gin.Context) {
 // CreatePendingOrder 创建一个“预览/待支付”订单，用于用户进入结算页时持久化未完成的尝试。
 func CreatePendingOrder(c *gin.Context) {
 	type ItemReq struct {
-		DishID uint    `json:"dishId"`
-		MealID uint    `json:"mealId"`
-		Qty    int     `json:"qty"`
-		Price  float64 `json:"price"`
+		DishID interface{} `json:"dishId"`
+		MealID interface{} `json:"mealId"`
+		Qty    int         `json:"qty"`
+		Price  float64     `json:"price"`
 	}
 	type ShopReq struct {
 		MerchantID     uint      `json:"merchantId" binding:"required"`
@@ -1537,8 +1683,8 @@ func CreatePendingOrder(c *gin.Context) {
 		CodeURL:        "",
 		Status:         "pending",
 	}
-	// 为便于调试，pending 订单设为 1 分钟后过期（生产环境请调整）
-	exp := time.Now().Add(1 * time.Minute)
+	// pending 订单过期时间：15 分钟
+	exp := time.Now().Add(15 * time.Minute)
 	pay.ExpiresAt = &exp
 	if err := tx.Create(&pay).Error; err != nil {
 		tx.Rollback()
@@ -1576,15 +1722,46 @@ func CreatePendingOrder(c *gin.Context) {
 		// If frontend supplied explicit items in payload (store page may not persist cart in DB), use them to create order_dishes/order_meals
 		if len(s.Items) > 0 {
 			for _, it := range s.Items {
-				if it.DishID != 0 {
-					od := models.OrderDish{OrderID: int(order.ID), DishID: int(it.DishID), Num: it.Qty}
+				// parse DishID / MealID which may come as number or string (e.g. "m-123")
+				var dishID uint = 0
+				var mealID uint = 0
+				if it.DishID != nil {
+					switch v := it.DishID.(type) {
+					case float64:
+						dishID = uint(v)
+					case string:
+						// support formats like "m-123" or numeric string
+						if strings.HasPrefix(v, "m-") || strings.HasPrefix(v, "m") {
+							sstr := strings.TrimPrefix(v, "m-")
+							sstr = strings.TrimPrefix(sstr, "m")
+							if n, err := strconv.Atoi(sstr); err == nil {
+								mealID = uint(n)
+							}
+						} else if n, err := strconv.Atoi(v); err == nil {
+							dishID = uint(n)
+						}
+					}
+				}
+				if it.MealID != nil {
+					switch v := it.MealID.(type) {
+					case float64:
+						mealID = uint(v)
+					case string:
+						if n, err := strconv.Atoi(v); err == nil {
+							mealID = uint(n)
+						}
+					}
+				}
+
+				if dishID != 0 {
+					od := models.OrderDish{OrderID: int(order.ID), DishID: int(dishID), Num: it.Qty}
 					if err := tx.Create(&od).Error; err != nil {
 						tx.Rollback()
 						c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to create order dish from payload"})
 						return
 					}
-				} else if it.MealID != 0 {
-					om := models.OrderMeal{OrderID: int(order.ID), MealID: int(it.MealID), Num: it.Qty}
+				} else if mealID != 0 {
+					om := models.OrderMeal{OrderID: int(order.ID), MealID: int(mealID), Num: it.Qty}
 					if err := tx.Create(&om).Error; err != nil {
 						tx.Rollback()
 						c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to create order meal from payload"})
@@ -1599,11 +1776,20 @@ func CreatePendingOrder(c *gin.Context) {
 				var items []models.CartItem
 				if err := tx.Where("cart_id = ? AND merchant_id = ?", cart.ID, s.MerchantID).Find(&items).Error; err == nil {
 					for _, it := range items {
-						od := models.OrderDish{OrderID: int(order.ID), DishID: int(it.DishID), Num: it.Qty}
-						if err := tx.Create(&od).Error; err != nil {
-							tx.Rollback()
-							c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to create order dish"})
-							return
+						if it.MealID != 0 {
+							om := models.OrderMeal{OrderID: int(order.ID), MealID: int(it.MealID), Num: it.Qty}
+							if err := tx.Create(&om).Error; err != nil {
+								tx.Rollback()
+								c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to create order meal"})
+								return
+							}
+						} else {
+							od := models.OrderDish{OrderID: int(order.ID), DishID: int(it.DishID), Num: it.Qty}
+							if err := tx.Create(&od).Error; err != nil {
+								tx.Rollback()
+								c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to create order dish"})
+								return
+							}
 						}
 					}
 					// 删除已迁移的购物车项，避免后续重复迁移
@@ -1759,7 +1945,9 @@ func PaymentNotify(c *gin.Context) {
 		// 对每个子订单执行迁移（在同一个事务内逐个处理）
 		for _, order := range orders {
 			tx := global.Db.Begin()
-			if err := tx.Model(&models.Order{}).Where("id = ?", order.ID).Update("status", 2).Error; err != nil {
+			// 设置订单为已支付，并写入预计送达时间（支付时间 +30 分钟）
+			expected := time.Now().Add(30 * time.Minute)
+			if err := tx.Model(&models.Order{}).Where("id = ?", order.ID).Updates(map[string]interface{}{"status": 2, "expected_time": expected}).Error; err != nil {
 				tx.Rollback()
 				c.String(http.StatusInternalServerError, "failed to update order status")
 				return
@@ -1985,8 +2173,9 @@ func PayOrder(c *gin.Context) {
 	}
 
 	tx := global.Db.Begin()
-	// update order status to 2
-	if err := tx.Model(&models.Order{}).Where("id = ?", order.ID).Update("status", 2).Error; err != nil {
+	// update order status to 2 and set expected delivery time = now + 30min
+	expected := time.Now().Add(30 * time.Minute)
+	if err := tx.Model(&models.Order{}).Where("id = ?", order.ID).Updates(map[string]interface{}{"status": 2, "expected_time": expected}).Error; err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to update order status"})
 		return

@@ -12,6 +12,25 @@ import (
 	"gorm.io/gorm"
 )
 
+// resolveUint 尝试从多种常见类型中解析无符号整数（兼容前端可能传的数字或字符串）
+func resolveUint(v interface{}) (uint, bool) {
+	switch t := v.(type) {
+	case float64:
+		return uint(t), true
+	case int:
+		return uint(t), true
+	case int64:
+		return uint(t), true
+	case uint:
+		return t, true
+	case string:
+		if parsed, err := strconv.ParseUint(t, 10, 32); err == nil {
+			return uint(parsed), true
+		}
+	}
+	return 0, false
+}
+
 type AddToCartRequest struct {
 	MerchantID uint `json:"merchantId" binding:"required"`
 	DishID     uint `json:"dishId" binding:"required"`
@@ -54,10 +73,15 @@ func GetUserCart(c *gin.Context) {
 		var merchant models.Merchant
 		global.Db.Where("id = ?", uint(merchantID)).First(&merchant)
 
-		// 批量查询菜品和分类以避免循环中逐条查询
+		// 批量查询菜品/套餐和分类以避免循环中逐条查询
 		dishIDs := make([]uint, 0, len(items))
+		mealIDs := make([]uint, 0, len(items))
 		for _, it := range items {
-			dishIDs = append(dishIDs, it.DishID)
+			if it.MealID != 0 {
+				mealIDs = append(mealIDs, it.MealID)
+			} else {
+				dishIDs = append(dishIDs, it.DishID)
+			}
 		}
 		var dishes []models.Dish
 		if len(dishIDs) > 0 {
@@ -65,12 +89,25 @@ func GetUserCart(c *gin.Context) {
 				dishes = []models.Dish{}
 			}
 		}
+		var meals []models.Meal
+		if len(mealIDs) > 0 {
+			if err := global.Db.Where("id IN ?", mealIDs).Find(&meals).Error; err != nil {
+				meals = []models.Meal{}
+			}
+		}
 		dishMap := make(map[uint]models.Dish)
+		mealMap := make(map[uint]models.Meal)
 		categoryIDs := make([]uint, 0)
 		for _, d := range dishes {
 			dishMap[uint(d.ID)] = d
 			if d.Category != 0 {
 				categoryIDs = append(categoryIDs, uint(d.Category))
+			}
+		}
+		for _, m := range meals {
+			mealMap[uint(m.ID)] = m
+			if m.Category != 0 {
+				categoryIDs = append(categoryIDs, uint(m.Category))
 			}
 		}
 		// 批量查询分类
@@ -90,6 +127,32 @@ func GetUserCart(c *gin.Context) {
 			var categoryName string = ""
 			var categoryId int = 0
 			var imagePath string = ""
+			// if this item refers to a Meal, prefer meal metadata
+			if it.MealID != 0 {
+				if m, ok := mealMap[it.MealID]; ok {
+					categoryId = m.Category
+					imagePath = m.ImagePath
+					if m.Category != 0 {
+						if cat, ok2 := catMap[uint(m.Category)]; ok2 {
+							categoryName = cat.Name
+						}
+					}
+					respItems = append(respItems, gin.H{
+						"dishId":     fmt.Sprintf("m-%d", m.ID),
+						"mealId":     m.ID,
+						"name":       m.Mealname,
+						"price":      m.Price,
+						"qty":        it.Qty,
+						"selected":   it.Selected,
+						"categoryId": categoryId,
+						"category":   categoryName,
+						"image":      imagePath,
+						"img":        imagePath,
+						"imageUrl":   imagePath,
+					})
+					continue
+				}
+			}
 			if d, ok := dishMap[it.DishID]; ok {
 				categoryId = d.Category
 				imagePath = d.ImagePath
@@ -107,10 +170,9 @@ func GetUserCart(c *gin.Context) {
 				"selected":   it.Selected,
 				"categoryId": categoryId,
 				"category":   categoryName,
-				// provide multiple keys for compatibility with frontend variants
-				"image":    imagePath,
-				"img":      imagePath,
-				"imageUrl": imagePath,
+				"image":      imagePath,
+				"img":        imagePath,
+				"imageUrl":   imagePath,
 			})
 		}
 
@@ -123,19 +185,28 @@ func GetUserCart(c *gin.Context) {
 	}
 	// 按商家分组：批量查询商家、菜品、分类以避免 N+1
 	shopsMap := make(map[uint]gin.H)
-	// 收集 merchantIds 与 dishIds
+	// 收集 merchantIds 与 dishIds/mealIds
 	merchantIDs := make([]uint, 0)
 	dishIDs := make([]uint, 0)
+	mealIDs := make([]uint, 0)
 	merchantSet := make(map[uint]struct{})
 	dishSet := make(map[uint]struct{})
+	mealSet := make(map[uint]struct{})
 	for _, item := range items {
 		if _, ok := merchantSet[item.MerchantID]; !ok {
 			merchantSet[item.MerchantID] = struct{}{}
 			merchantIDs = append(merchantIDs, item.MerchantID)
 		}
-		if _, ok := dishSet[item.DishID]; !ok {
-			dishSet[item.DishID] = struct{}{}
-			dishIDs = append(dishIDs, item.DishID)
+		if item.MealID != 0 {
+			if _, ok := mealSet[item.MealID]; !ok {
+				mealSet[item.MealID] = struct{}{}
+				mealIDs = append(mealIDs, item.MealID)
+			}
+		} else {
+			if _, ok := dishSet[item.DishID]; !ok {
+				dishSet[item.DishID] = struct{}{}
+				dishIDs = append(dishIDs, item.DishID)
+			}
 		}
 	}
 
@@ -164,6 +235,21 @@ func GetUserCart(c *gin.Context) {
 		dishMap[uint(d.ID)] = d
 		if d.Category != 0 {
 			categoryIDs = append(categoryIDs, uint(d.Category))
+		}
+	}
+
+	// 批量查询套餐（meals），并把其分类 id 加入 categoryIDs
+	var meals []models.Meal
+	if len(mealIDs) > 0 {
+		if err := global.Db.Where("id IN ?", mealIDs).Find(&meals).Error; err != nil {
+			meals = []models.Meal{}
+		}
+	}
+	mealMap := make(map[uint]models.Meal)
+	for _, m := range meals {
+		mealMap[uint(m.ID)] = m
+		if m.Category != 0 {
+			categoryIDs = append(categoryIDs, uint(m.Category))
 		}
 	}
 
@@ -198,6 +284,35 @@ func GetUserCart(c *gin.Context) {
 		var categoryName string = ""
 		var categoryId int = 0
 		var imagePath string = ""
+		// if this item refers to a Meal, prefer meal metadata
+		if item.MealID != 0 {
+			if m, ok := mealMap[item.MealID]; ok {
+				categoryId = m.Category
+				imagePath = m.ImagePath
+				if m.Category != 0 {
+					if cat, ok2 := catMap[uint(m.Category)]; ok2 {
+						categoryName = cat.Name
+					}
+				}
+				respItem := gin.H{
+					"dishId":     fmt.Sprintf("m-%d", m.ID),
+					"mealId":     m.ID,
+					"name":       m.Mealname,
+					"price":      m.Price,
+					"qty":        item.Qty,
+					"selected":   item.Selected,
+					"categoryId": categoryId,
+					"category":   categoryName,
+					"image":      imagePath,
+					"img":        imagePath,
+					"imageUrl":   imagePath,
+				}
+				shop := shopsMap[merchantID]
+				shop["items"] = append(shop["items"].([]gin.H), respItem)
+				shopsMap[merchantID] = shop
+				continue
+			}
+		}
 		if d, ok := dishMap[item.DishID]; ok {
 			categoryId = d.Category
 			imagePath = d.ImagePath
@@ -248,36 +363,27 @@ func AddToCart(c *gin.Context) {
 	// 从 map 中读取前端实际传的字段
 	// 解析前端传入的商家标识（兼容多种字段名与类型）
 	var merchantID uint = 0
-	// helper to resolve numeric value from interface
-	resolveUint := func(v interface{}) (uint, bool) {
-		switch t := v.(type) {
-		case float64:
-			return uint(t), true
-		case int:
-			return uint(t), true
-		case int64:
-			return uint(t), true
-		case uint:
-			return t, true
-		case string:
-			if parsed, err := strconv.ParseUint(t, 10, 32); err == nil {
-				return uint(parsed), true
-			}
-		}
-		return 0, false
-	}
+	// 使用文件级别的 resolveUint 帮助函数进行类型解析（保持变量名与逻辑不变）
 
 	var dishID uint
+	var mealID uint
 	var qty int
 
-	// dishId
+	// dishId (兼容前端可能传的字符串/数字)
 	if v, ok := req["dishId"]; ok {
 		if dv, ok2 := resolveUint(v); ok2 {
 			dishID = dv
 		}
 	}
-	if dishID == 0 {
-		utils.Fail(c, "dishId 参数错误")
+	// mealId (支持套餐加入购物车)
+	if v, ok := req["mealId"]; ok {
+		if mv, ok2 := resolveUint(v); ok2 {
+			mealID = mv
+		}
+	}
+	// 至少需要 dishId 或 mealId 其一
+	if dishID == 0 && mealID == 0 {
+		utils.Fail(c, "dishId 或 mealId 参数错误")
 		return
 	}
 
@@ -301,7 +407,7 @@ func AddToCart(c *gin.Context) {
 		return
 	}
 
-	// 尝试从多个可能的字段名解析商家标识，最终以商家主键 `id` 为准并存入购物车
+	// 尝试从多个可能的字段名解析商家标识，最终以商家主键 `id` 为准并存入购物车，赞
 	var storeCandidates = []interface{}{req["storeId"], req["merchantId"], req["merchant_id"], req["merchantID"], req["store_id"]}
 	var found bool
 	for _, cand := range storeCandidates {
@@ -345,12 +451,14 @@ func AddToCart(c *gin.Context) {
 		fmt.Println("Found cart:", cart)
 	}
 
-	// 2. 是否已经存在同商家 + 同菜品？
+	// 2. 是否已经存在同商家 + 同菜品/套餐？
 	var item models.CartItem
-	err := global.Db.Where(
-		"cart_id = ? AND merchant_id = ? AND dish_id = ?",
-		cart.ID, merchantID, dishID,
-	).First(&item).Error
+	var err error
+	if mealID != 0 {
+		err = global.Db.Where("cart_id = ? AND merchant_id = ? AND meal_id = ?", cart.ID, merchantID, mealID).First(&item).Error
+	} else {
+		err = global.Db.Where("cart_id = ? AND merchant_id = ? AND dish_id = ?", cart.ID, merchantID, dishID).First(&item).Error
+	}
 
 	if err == nil {
 		fmt.Println("CartItem exists, increasing quantity:", item)
@@ -369,14 +477,34 @@ func AddToCart(c *gin.Context) {
 		return
 	}
 
-	// 3. 获取菜品信息（可选，如果前端传了 name 和 price 可直接用）
+	// 3. 获取菜品/套餐信息（可选，如果前端传了 name 和 price 可直接用）
 	var dish models.Dish
-	if err := global.Db.Where("id = ?", dishID).First(&dish).Error; err != nil {
-		fmt.Println("Dish not found, using frontend data")
-		dish.DishName, _ = req["name"].(string)
-		dish.Price, _ = req["price"].(string)
+	var meal models.Meal
+	if mealID != 0 {
+		if err := global.Db.Where("id = ?", mealID).First(&meal).Error; err != nil {
+			fmt.Println("Meal not found, using frontend data")
+			meal.Mealname, _ = req["name"].(string)
+			// price may be number or string; convert to string
+			if p, ok := req["price"].(string); ok {
+				meal.Price = p
+			} else if pf, ok := req["price"].(float64); ok {
+				meal.Price = fmt.Sprintf("%v", pf)
+			}
+		} else {
+			fmt.Println("Found meal in DB:", meal)
+		}
 	} else {
-		fmt.Println("Found dish in DB:", dish)
+		if err := global.Db.Where("id = ?", dishID).First(&dish).Error; err != nil {
+			fmt.Println("Dish not found, using frontend data")
+			dish.DishName, _ = req["name"].(string)
+			if p, ok := req["price"].(string); ok {
+				dish.Price = p
+			} else if pf, ok := req["price"].(float64); ok {
+				dish.Price = fmt.Sprintf("%v", pf)
+			}
+		} else {
+			fmt.Println("Found dish in DB:", dish)
+		}
 	}
 
 	// 4. 新增购物车 item
@@ -384,10 +512,18 @@ func AddToCart(c *gin.Context) {
 		CartID:     cart.ID,
 		MerchantID: merchantID,
 		DishID:     dishID,
-		Name:       dish.DishName,
-		Price:      dish.Price, // 已经是 string
+		MealID:     mealID,
+		Name:       "",
+		Price:      "",
 		Qty:        qty,
 		Selected:   true,
+	}
+	if mealID != 0 {
+		newItem.Name = meal.Mealname
+		newItem.Price = meal.Price
+	} else {
+		newItem.Name = dish.DishName
+		newItem.Price = dish.Price
 	}
 
 	fmt.Println("Inserting new CartItem:", newItem)

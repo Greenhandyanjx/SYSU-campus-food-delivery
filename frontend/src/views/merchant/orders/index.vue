@@ -50,7 +50,7 @@
       </div>
       <el-table
         v-if="tableData.length"
-        :data="tableData"
+        :data="visibleTableData"
         stripe
         class="tableBox"
       >
@@ -124,7 +124,12 @@
           key="deliveryTime"
           prop="deliveryTime"
           label="送达时间"
-        />
+          min-width="110"
+        >
+          <template #default="{ row }">
+            <span>{{formatDateToCN(row.finishAt) }}</span>
+          </template>
+        </el-table-column>
         <el-table-column
           v-if="[2, 3, 4].includes(orderStatus)"
           key="expected_time"
@@ -133,7 +138,7 @@
           min-width="110"
         >
           <template #default="{ row }">
-            <span>{{ formatDateToCN(row.expected_time || row.estimatedDeliveryTime || row.deliveryTime) }}</span>
+            <span>{{formatDateToCN(row.expected_time) }}</span>
           </template>
         </el-table-column>
         <el-table-column
@@ -243,7 +248,7 @@
       </el-table>
       <Empty v-else :is-search="isSearch" />
       <el-pagination
-        v-if="counts > 10"
+        v-if="counts > pageSize"
         class="pageList"
         :page-sizes="[10, 20, 30, 40]"
         :page-size="pageSize"
@@ -257,7 +262,7 @@
     <!-- 查看弹框部分 -->
     <!-- 原生模态替代 el-dialog -->
     <div v-if="dialogVisible" class="native-modal-overlay" @click.self="dialogVisible = false">
-      <div class="native-modal" role="dialog" aria-modal="true">
+      <div class="native-modal" :key="modalKey" role="dialog" aria-modal="true">
         <div class="modal-header">
           <div>
             <label style="font-size:16px">订单号：</label>
@@ -267,6 +272,7 @@
         </div>
 
         <div class="modal-body">
+          <div v-if="modalLoading" class="modal-loading-overlay">加载中...</div>
           <div class="order-top">
             <p><label>下单时间：</label>{{ diaForm.orderTime || diaForm.createTime || diaForm.createdAt }}</p>
           </div>
@@ -278,7 +284,7 @@
                 <div class="user-phone"><label>手机号：</label><span>{{ diaForm.phone }}</span></div>
                 <div v-if="[2,3,4,5].includes(dialogOrderStatus)" class="user-getTime">
                   <label>{{ dialogOrderStatus === 5 ? '送达时间：' : '预计送达时间：' }}</label>
-                  <span>{{ dialogOrderStatus === 5 ? (diaForm.deliveryTime || diaForm.delivery_time) : (diaForm.estimatedDeliveryTime || diaForm.expectedtime) }}</span>
+                  <span>{{ dialogOrderStatus === 5 ? formatDateToCN(diaForm.deliveryTime || diaForm.delivery_time) : formatDateToCN(diaForm.estimatedDeliveryTime || diaForm.expected_time) }}</span>
                 </div>
                 <div class="user-address"><label>地址：</label><span>{{ diaForm.address }}</span></div>
               </div>
@@ -299,7 +305,7 @@
                   <span class="dish-price">￥{{ item.amount ? Number(item.amount).toFixed(2) : (item.price ? Number(item.price).toFixed(2) : '') }}</span>
                 </div>
               </div>
-              <div class="dish-all-amount"><label>菜品小计</label><span>￥{{ ((Number(diaForm.amount || 0) - 6 - Number(diaForm.packAmount || 0)).toFixed(2)) }}</span></div>
+              <div class="dish-all-amount"><label>菜品小计</label><span>￥{{ ((Number(diaForm.amount || 0) - diaForm.deliveryFee - Number(diaForm.packAmount || 0)).toFixed(2)) }}</span></div>
             </div>
           </div>
 
@@ -307,9 +313,9 @@
             <div class="amount-info">
               <div class="amount-label">费用</div>
               <div class="amount-list">
-                <div class="dish-amount"><span class="amount-name">菜品小计：</span><span class="amount-price">￥{{ (Number(Number(diaForm.amount || 0) - 6 - Number(diaForm.packAmount || 0)).toFixed(2)) }}</span></div>
-                <div class="send-amount"><span class="amount-name">派送费：</span><span class="amount-price">￥{{ diaForm.deliveryAmount ? Number(diaForm.deliveryAmount).toFixed(2) : '' }}</span></div>
-                <div class="package-amount"><span class="amount-name">打包费：</span><span class="amount-price">￥{{ diaForm.packAmount ? Number(diaForm.packAmount).toFixed(2) : '' }}</span></div>
+                <div class="dish-amount"><span class="amount-name">菜品小计：</span><span class="amount-price">￥{{ (Number(Number(diaForm.amount || 0) - diaForm.deliveryFee - Number(diaForm.packAmount || 0)).toFixed(2)) }}</span></div>
+                <div class="send-amount"><span class="amount-name">派送费：</span><span class="amount-price">￥{{ diaForm.deliveryFee ? Number(diaForm.deliveryFee).toFixed(2) : '' }}</span></div>
+                <div class="package-amount"><span class="amount-name">打包费：</span><span class="amount-price">￥{{ diaForm.packAmount ? Number(diaForm.packAmount||0).toFixed(2) : '0.00' }}</span></div>
                 <div class="all-amount"><span class="amount-name">合计：</span><span class="amount-price">￥{{ diaForm.amount ? Number(diaForm.amount).toFixed(2) : '' }}</span></div>
                 <div class="pay-type"><span class="pay-name">支付渠道：</span><span class="pay-value">{{ diaForm.payMethod === 1 ? '微信支付' : '支付宝支付' }}</span></div>
                 <div class="pay-time"><span class="pay-name">支付时间：</span><span class="pay-value">{{ diaForm.checkoutTime }}</span></div>
@@ -373,7 +379,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, watch, computed, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getMerchantProfile } from '@/api/merchant/profile'
@@ -384,6 +390,7 @@ import Empty from '@/components/Empty/index.vue'
 import {
   getOrderDetailPage,
   queryOrderDetailById,
+  queryOrderDetailByIdCoalesced,
   completeOrder,
   deliveryOrder,
   orderCancel,
@@ -417,8 +424,22 @@ const counts = ref(0)
 const page = ref(1)
 const pageSize = ref(10)
 const tableData = ref<any[]>([])
+// key 用于强制重渲染详情模态，避免请求返回但 DOM 未更新的情况
+const modalKey = ref(0)
+
+// 表格只展示当前页的数据，防止后端返回全部项导致表格显示超过 pageSize
+const visibleTableData = computed(() => {
+  if (!Array.isArray(tableData.value)) return []
+  // If backend returns only the current page (common), avoid slicing
+  if (tableData.value.length <= pageSize.value) return tableData.value
+  // Otherwise assume tableData contains full dataset and slice for page
+  const start = (page.value - 1) * pageSize.value
+  const end = start + pageSize.value
+  return tableData.value.slice(start, end)
+})
 const currentMerchantId = ref<any>(null)
 const diaForm = ref<any>({})
+const modalLoading = ref(false)
 const isSearch = ref(false)
 const orderStatus = ref(0)
 const dialogOrderStatus = ref(0)
@@ -478,17 +499,7 @@ function formatDateToCN(s: any) {
   const MM = pad(dt.getMinutes())
   return `${yyyy}年${mm}月${dd}日 ${HH}:${MM}`
 }
-
-onMounted(() => {
-  const status = Number(route.query.status) || 0
-  defaultActivity.value = status
-  init(status)
-
-  if (route.query.orderId && route.query.orderId !== 'undefined') {
-    goDetail(route.query.orderId as string, 2)
-  }
-  // 监听 route.query.orderId 的变化（通过其他组件路由跳转携带 orderId）
-  watch(() => route.query.orderId, (val) => {
+watch(() => route.query.orderId, (val) => {
     try {
       if (val && String(val) !== 'undefined') goDetail(String(val), 2)
     } catch (e) { console.warn('route query orderId watch failed', e) }
@@ -502,7 +513,17 @@ onMounted(() => {
     } catch (e) {
       // defensive: ignore, backend should already filter
     }
-  })()
+})()
+onMounted(() => {
+  const status = Number(route.query.status) || 0
+  defaultActivity.value = status
+  init(status)
+
+  if (route.query.orderId && route.query.orderId !== 'undefined') {
+    goDetail(route.query.orderId as string, 2)
+  }
+  // 监听 route.query.orderId 的变化（通过其他组件路由跳转携带 orderId）
+ 
 
   // 监听 order:changed，去抖刷新页面数据
   let __orders_refreshTimer: any = null
@@ -520,8 +541,19 @@ onMounted(() => {
 
 })
 
+
+  // 监听外部打开指定订单的事件（作为路由 query 打开失败的回退）
+  const __merchant_open_handler = (ev: any) => {
+    try {
+      const id = ev && ev.detail && (ev.detail.orderId || ev.detail.orderId === 0 ? ev.detail.orderId : null)
+      if (id) goDetail(String(id), 2)
+    } catch (e) { console.warn('merchant open handler failed', e) }
+  }
+  try { window.addEventListener('merchant:open_order', __merchant_open_handler) } catch (e) {}
+  ;(window as any).__merchant_open_handler = __merchant_open_handler
 onBeforeUnmount(() => {
   try { window.removeEventListener('order:changed', (window as any).__orders_refreshHandler || __orders_refreshHandler) } catch (e) {}
+  try { window.removeEventListener('merchant:open_order', (window as any).__merchant_open_handler || __merchant_open_handler) } catch (e) {}
 })
 
 function initFun(st: number) {
@@ -657,10 +689,10 @@ endTime: valueTime.value[1] ? formatForApi(valueTime.value[1]) : undefined,
             it.DeliveredAt
           ),
 
-          estimatedDeliveryTime: safeFormat(
+          expected_time: safeFormat(
             it.estimatedDeliveryTime ??
             it.estimated_delivery_time ??
-            it.expectedtime ??
+            it.expected_time ??
             it.Expectedtime ??
             it.expectedTime ??
             it.ExpectedTime
@@ -686,7 +718,7 @@ endTime: valueTime.value[1] ? formatForApi(valueTime.value[1]) : undefined,
             it.pack_amount ??
             it.packageFee ??
             it.packFee ??
-            ''
+            0,
         }
 
       })
@@ -720,7 +752,9 @@ endTime: valueTime.value[1] ? formatForApi(valueTime.value[1]) : undefined,
 async function goDetail(id: any, status: number, r?: any) {
   if (!id) return
   try {
-    if (window.__merchant_open_order_lock && window.__merchant_open_order_lock === String(id)) {
+    // 如果已有锁但不是当前要打开的订单，则阻止重复打开；
+    // 如果锁正是当前 id（由触发方设置），允许继续处理。
+    if (window.__merchant_open_order_lock && window.__merchant_open_order_lock !== String(id)) {
       return
     }
   } catch (e) {}
@@ -728,42 +762,33 @@ async function goDetail(id: any, status: number, r?: any) {
   // 自动在 3 秒后解锁，避免死锁
   setTimeout(() => { try { if (window.__merchant_open_order_lock === String(id)) window.__merchant_open_order_lock = null } catch (e) {} }, 3000)
 
-  diaForm.value = {}
-  dialogVisible.value = true
+  // 显示加载状态，等数据准备好再显示弹窗，避免空白需要手动刷新
+  modalLoading.value = true
   dialogOrderStatus.value = status
-
   orderId.value = id
   try {
-    const { data } = await queryOrderDetailById({ orderId: id })
-    const raw = data.data || {}
+    // add client-side timeout to avoid hanging UI
+    const fetchPromise = queryOrderDetailByIdCoalesced({ orderId: id })
+    const timeoutPromise = new Promise((_, rej) => setTimeout(() => rej(new Error('请求超时（客户端）')), 8000))
+    // be defensive: some API wrappers return `response` while others return `response.data`
+    const resp = await Promise.race([fetchPromise, timeoutPromise])
+    // normalize response shape
+    const respData = resp && (resp.data || resp)
+    const raw = (respData && (respData.data || respData)) || {}
 
     const safeFormat = (v: any) => {
-    if (!v) return ''
-
-    // 将非字符串类型统一转为字符串（避免对 Date 或对象调用 startsWith/includes 抛错）
-    let s: string
-    if (typeof v === 'string') s = v
-    else if (v instanceof Date) s = v.toISOString()
-    else s = String(v)
-
-    // 过滤无效时间
-    if (s === '0001-01-01T00:00:00Z' || s.startsWith('0001-01-01')) {
-      return ''
+      if (!v) return ''
+      let s: string
+      if (typeof v === 'string') s = v
+      else if (v instanceof Date) s = v.toISOString()
+      else s = String(v)
+      if (s === '0001-01-01T00:00:00Z' || s.startsWith('0001-01-01')) return ''
+      if (s.includes(' ') && !s.includes('T')) s = s.replace(' ', 'T')
+      const d = new Date(s)
+      if (isNaN(d.getTime())) return ''
+      const pad = (n: number) => String(n).padStart(2, '0')
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
     }
-
-    // 修正非 ISO 格式（空格改为 T）
-    if (s.includes(' ') && !s.includes('T')) {
-      s = s.replace(' ', 'T')
-    }
-
-    const d = new Date(s)
-    if (isNaN(d.getTime())) return ''
-
-    // 返回 ElementPlus 可识别格式：yyyy-MM-dd HH:mm:ss
-    const pad = (n: number) => String(n).padStart(2, '0')
-
-    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-  }
 
     const idVal = raw.id ?? raw.ID ?? raw.orderId ?? raw.orderID ?? raw.orderid ?? raw.OrderID
     const numberVal = raw.number ?? raw.orderNumber ?? raw.orderNo ?? raw.orderid ?? raw.orderId ?? idVal
@@ -775,7 +800,7 @@ async function goDetail(id: any, status: number, r?: any) {
       id: idVal,
       number: numberVal,
       orderDetailList: orderDetailListVal,
-      orderTime: safeFormat(raw.orderTime ?? raw.createTime ?? raw.createdAt ?? raw.created_at ?? raw.create_time ?? raw.expectedtime ?? raw.expectedTime),
+      orderTime: safeFormat(raw.orderTime ?? raw.createTime ?? raw.createdAt ?? raw.created_at ?? raw.create_time),
       cancelTime: safeFormat(raw.cancelTime ?? raw.cancel_time ?? raw.cancelAt),
       deliveryTime: safeFormat(raw.deliveryTime ?? raw.delivery_time ?? raw.deliveredAt),
       estimatedDeliveryTime: safeFormat(raw.estimatedDeliveryTime ?? raw.expectedtime ?? raw.expectedTime),
@@ -783,11 +808,22 @@ async function goDetail(id: any, status: number, r?: any) {
       amount: typeof amountVal === 'number' ? amountVal : amountVal ? Number(amountVal) : 0,
       packAmount: raw.packAmount ?? raw.pack_amount ?? raw.packageFee ?? raw.packFee ?? '',
     }
+
     row.value = r || { id: route.query.orderId, status }
-    if (route.query.orderId) router.push('/merchant/orders')
+    // 清理 URL 中的 orderId 查询参数：使用 history.replaceState 避免通过 router 触发组件重渲染
+    try {
+      if (route.query.orderId) window.history.replaceState(undefined, '', '/merchant/orders')
+    } catch (e) {}
+
+    // 强制刷新 modal 渲染并在数据准备好后显示弹窗
+    try { modalKey.value = Date.now(); await nextTick() } catch (e) {}
+    dialogVisible.value = true
   } catch (err: any) {
-    ElMessage.error('请求出错了：' + err.message)
+    ElMessage.error('请求出错了：' + (err?.message || err))
+    // 仍然尝试显示弹窗以便用户看到错误信息或手动重试
+    dialogVisible.value = true
   } finally {
+    modalLoading.value = false
     try { if (window.__merchant_open_order_lock === String(id)) window.__merchant_open_order_lock = null } catch (e) {}
   }
 }
@@ -1410,6 +1446,19 @@ async function openChatForOrder(row: any) {
 .modal-footer .auto-next {
   margin-right: auto;
   font-size: 13px;
+  color: #333;
+}
+
+/* 弹窗加载遮罩 */
+.modal-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.85);
+  z-index: 30;
+  font-size: 16px;
   color: #333;
 }
 
