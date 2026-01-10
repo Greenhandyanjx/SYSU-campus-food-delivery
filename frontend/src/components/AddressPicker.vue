@@ -104,8 +104,8 @@ watch(
 
 const formatted = ref(props.modelValue?.formatted || '')
 const detail = ref(props.modelValue?.detail || '')
-const lng = ref(props.modelValue?.lng || 113.582)
-const lat = ref(props.modelValue?.lat || 22.352)
+const lng = ref(props.modelValue?.lng || 113.58399174)
+const lat = ref(props.modelValue?.lat || 22.34937810)
 
 /* ===================== AMap objects ===================== */
 

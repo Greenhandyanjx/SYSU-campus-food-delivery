@@ -522,11 +522,11 @@ function setupMap() {
 
   map = new AMap.Map('mapContainer', {
     zoom: 15,
-    center: [113.582, 22.352],
+    center: [113.58399174, 22.34937810],
   })
 
   marker = new AMap.Marker({
-    position: [113.582, 22.352],
+    position: [113.58399174, 22.34937810],
     draggable: true,
     map,
   })

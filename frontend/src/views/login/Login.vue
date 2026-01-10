@@ -75,8 +75,8 @@ import { loginApi } from "@/api/auth";
 const router = useRouter();
 const loginFormRef = ref<FormInstance>();
 const loginForm = ref({
-  username: "yjx",
-  password: "123456",
+  // username: "yjx",
+  // password: "123456",
   role: "merchant", // 默认
   code: "0", // 默认
 });

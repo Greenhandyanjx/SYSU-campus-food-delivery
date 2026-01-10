@@ -411,9 +411,9 @@ onBeforeUnmount(() => {
 .message-row.me { flex-direction: row-reverse; justify-content: flex-end }
 
 /* 头像 */
-.msg-avatar { width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0 }
-.message-row:not(.me) .msg-avatar { margin-right: 10px }
-.message-row.me .msg-avatar { margin-left: 10px }
+.msg-avatar { width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0 ;margin-bottom: 20px;}
+.message-row:not(.me) .msg-avatar { margin-right: 0px }
+.message-row.me .msg-avatar { margin-left: 0px }
 
 /* 气泡容器 */
 .bubble-wrapper {

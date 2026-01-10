@@ -234,9 +234,9 @@ onBeforeUnmount(() => {
 .m-row { display:flex; margin-bottom:12px; align-items:flex-end; width:100% }
 .m-row:not(.me) { flex-direction:row; justify-content:flex-start }
 .m-row.me { flex-direction:row-reverse; justify-content:flex-end }
-.m-msg-avatar { width:36px; height:36px; border-radius:50%; flex-shrink:0 }
-.m-row:not(.me) .m-msg-avatar { margin-right:10px }
-.m-row.me .m-msg-avatar { margin-left:10px }
+.m-msg-avatar { width:36px; height:36px; border-radius:50%; flex-shrink:0 ;margin-bottom: 20px;}
+.m-row:not(.me) .m-msg-avatar { margin-right:6px }
+.m-row.me .m-msg-avatar { margin-left:0px }
 .m-bubble-wrapper { max-width:72%; position:relative; display:block }
 .m-bubble { display:inline-block; position:relative; padding:10px 14px; border-radius:16px; background:#fff; border:1px solid #e8e8e8; word-break:break-word; white-space:pre-wrap; max-width:100%; }
 .m-row.me .m-bubble { background:#ffe563 }

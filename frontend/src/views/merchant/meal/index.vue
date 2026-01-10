@@ -243,8 +243,9 @@ function handleStartOrStop(row: any) {
   const current = Number(row.status);
   const newStatus = current === 1 ? 0 : 1;
   const p = {
-    id: row.ID,
-    status: newStatus,
+    id: row.ID || row.id,
+    // 后端 Edit_Meal_Status 期望接收字符串状态："on"/"off"/"recommended"
+    status: newStatus === 1 ? "on" : "off",
   };
   console.log("发送前参数:", p);
   ElMessageBox.confirm("确认调整当前套餐的售卖状态, 是否继续?", "提示", {
@@ -295,12 +296,13 @@ function handleDelete(type: string, id?: string) {
       if (type === "B") {
         const arr: any[] = [];
         multipleSelection.value.forEach((element) => {
-          arr.push(element.ID);
+          arr.push(element.ID || element.id);
         });
         param = arr.join(",");
         console.log("批量删除参数:", param); // 调试信息
       } else {
-        param = (id as string) || "";
+        // 支持传入的 id 参数为 row.ID 或 row.id
+        param = String((id as any) || "");
         console.log("单个删除参数:", param); // 调试信息
       }
       deleteSetmeal(param).then((res: any) => {

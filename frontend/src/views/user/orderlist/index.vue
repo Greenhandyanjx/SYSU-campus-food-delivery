@@ -199,7 +199,11 @@ function mapBackendOrder(o) {
     id: o.id || o.order_no || o.orderNo || '',
     storeId: o.store_id || o.storeId || o.merchant_id || o.merchantId || '',
     storeName: o.store_name || o.storeName || o.shop_name || '',
-    storeLogo: safeImage(o.store_logo || o.logo, noImg),
+    // 支持多种后端命名：store_logo / storeLogo / logo / merchant.logo 等
+    storeLogo: safeImage(
+      o.storeLogo || o.store_logo || o.store_logo_url || o.logo || (o.merchant && (o.merchant.logo || o.merchant.logoUrl)) || o.merchantLogo || '',
+      noImg
+    ),
     status: statusNum,
     statusText: o.status_text || o.statusText || mapStatusText(statusNum),
     time: formatFriendlyTime(rawTime),

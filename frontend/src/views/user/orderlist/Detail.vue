@@ -356,7 +356,10 @@ async function fetch() {
           id: payload.id || payload.order_no || payload.orderNo || id,
           storeId: payload.store_id || payload.storeId || payload.merchant_id || payload.merchantId || null,
           storeName: payload.store_name || payload.storeName || payload.shop_name || '',
-          storeLogo: safeImage(payload.store_logo || payload.logo || '', noImg),
+          storeLogo: safeImage(
+            payload.storeLogo || payload.store_logo || payload.store_logo_url || payload.logo || (payload.merchant && (payload.merchant.logo || payload.merchant.logoUrl)) || payload.merchantLogo || '',
+            noImg
+          ),
           items,
           status: statusNum,
           statusText: payload.statusText || payload.status_text || mapStatusText(statusNum),
