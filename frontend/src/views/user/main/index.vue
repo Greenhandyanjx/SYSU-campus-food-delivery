@@ -105,7 +105,7 @@
 
 							<!-- 底部信息 -->
 							<div class="row foot">
-  			        <div class="rating">⭐ {{ s.rating }} • 月售 {{ s.sales }}</div>
+  			        <div class="rating">⭐ {{ s.rating }} • 月售 {{ formatSales(s.sales) }}</div>
   			        <div class="price">起送 ¥{{ s.minOrder }} • 配送 ¥{{ s.deliveryFee }}</div>
   			      </div>
   			    </div>
@@ -202,6 +202,10 @@ const route = useRoute()
 const query = ref('')
 
 const categories = ref([])
+const formatSales = (sales) => {
+  const ranges = ['10+', '100+', '1000+']
+  return ranges[Math.floor(Math.random() * ranges.length)]
+}
 
 // 本地图标映射（以 id 为 key），用于将后端返回的分类 id 映射到前端图标
 const iconMap: Record<number, string> = {

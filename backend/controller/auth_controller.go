@@ -89,6 +89,41 @@ func Register(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, gin.H{"code": "500", "msg": "create user error"})
 			return
 		}
+
+		// 如果前端传入了 address/phone/nickname，尽量在注册时为用户创建一个默认的 consignee 与 address
+		addrDetail := getString("address")
+		phone := getString("phone")
+		name := getString("nickname", "nick")
+
+		// 创建 Address（如果提供了 address 字段）并创建 Consignee 记录，Consignee.Userid 使用 base.ID（base_user 的 ID）
+		var addr models.Address
+		if addrDetail != "" {
+			addr = models.Address{
+				UserID: int(base.ID),
+				Detail: addrDetail,
+			}
+			if err := tx.Create(&addr).Error; err != nil {
+				tx.Rollback()
+				log.Printf("create address error: %v", err)
+				ctx.JSON(http.StatusInternalServerError, gin.H{"code": "500", "msg": "create address error"})
+				return
+			}
+		}
+
+		con := models.Consignee{
+			Userid:    base.ID,
+			Name:      name,
+			Phone:     phone,
+			Addressid: addr.ID,
+			IsDefault: true,
+		}
+		// 即使没有地址，也可以创建一个 consignee（地址 id 为 0）以便用户登录后已有一个样例
+		if err := tx.Create(&con).Error; err != nil {
+			tx.Rollback()
+			log.Printf("create consignee error: %v", err)
+			ctx.JSON(http.StatusInternalServerError, gin.H{"code": "500", "msg": "create consignee error"})
+			return
+		}
 	case "rider":
 		realName := getString("realname", "real_name")
 		if realName == "" {

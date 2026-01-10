@@ -57,8 +57,8 @@
       </el-popover>
 
       <el-dropdown trigger="click" @command="handleCommand">
-        <span class="el-dropdown-link" style="display:flex;align-items:center;gap:8px;cursor:pointer">
-          <el-avatar :size="32" :src="logoSrc" />
+        <span class="el-dropdown-link" style="display:flex;align-items:center;gap:8px;cursor:pointer;background-color: #409EFF;">
+          <el-avatar :size="35" :src="logoSrc" />
           <span class="username">{{ username || '用户' }}</span>
         </span>
         <template #dropdown>
@@ -259,6 +259,25 @@ const logout = () => {
   border-radius: 50%;
   background: #f56c6c;
   margin-top: 6px;
+}
+
+/* 修复 el-avatar 默认白色背景/图片未铺满导致的左侧白色轮廓问题 */
+::v-deep(.el-avatar) {
+  background-color: transparent !important;
+  border-radius: 50% !important;
+  overflow: hidden !important;
+}
+::v-deep(.el-avatar__inner) {
+  background-color: transparent !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+::v-deep(.el-avatar__inner img) {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  display: block !important;
 }
 
 

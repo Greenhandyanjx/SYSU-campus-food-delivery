@@ -586,7 +586,7 @@ function setupMap() {
     console.warn('AMap geocoder failed', e)
   }
 
-  map = new AMap.Map('mapContainer', { center: [113.582, 22.352], zoom: 15 })
+  map = new AMap.Map('mapContainer', { center: [113.58399174, 22.34937810], zoom: 15 })
   marker = new AMap.Marker({ draggable: true, map })
   map.on('click', (e: any) => updateLocation(e.lnglat))
   marker.on('dragend', (e: any) => updateLocation(e.lnglat))
