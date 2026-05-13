@@ -50,6 +50,7 @@
 				<template #dropdown>
 					<el-dropdown-menu>
 						<el-dropdown-item command="profile">个人信息</el-dropdown-item>
+						<el-dropdown-item command="agent">🤖 AI 助手</el-dropdown-item>
 						<el-dropdown-item command="logout">退出登录</el-dropdown-item>
 					</el-dropdown-menu>
 				</template>
@@ -231,6 +232,8 @@ function handleCommand(command: string) {
     router.push('/login')
   } else if (command === 'profile') {
     router.push('/user/my')
+  } else if (command === 'agent') {
+    router.push('/user/agent')
   }
 }
 
