@@ -1,4 +1,5 @@
 // backend/models/rider_extra.go
+// 本函数已不再使用
 package models
 
 import "time"

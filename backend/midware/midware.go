@@ -71,5 +71,6 @@ func AuthMiddleware() gin.HandlerFunc {
 		// 将用户ID存入上下文
 		c.Set("baseUserID", baseUser.ID)
 		c.Next()
+		//后面许多接口都用这个baseUserID；
 	}
 }
