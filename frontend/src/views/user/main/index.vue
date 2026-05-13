@@ -119,10 +119,13 @@
   <img src="@/assets/icons/top-arrow.svg" alt="回到顶部" class="back-icon" />
   </button> 
   </div>
+  <!-- 引入 AgentPanel 浮动聊天面板 -->
+  <AgentPanel />
 </template>
 
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import AgentPanel from '@/views/user/agent/AgentPanel.vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { addToCart, removeFromCart } from '@/api/user/store'

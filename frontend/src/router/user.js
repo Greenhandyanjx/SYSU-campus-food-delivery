@@ -40,6 +40,7 @@ const routes = [
       { path: 'cart', component: () => import('@/views/user/cart/index.vue') },
       { path: 'payment/success', component: () => import('@/views/user/payment/Success.vue'), meta: { hidden: true } },
       { path: 'my', component: () => import('@/views/user/my/index.vue') },
+      { path: 'agent', component: () => import('@/views/user/agent/index.vue'), meta: { title: 'AI 助手', icon: 'robot' } },
     ]
   },
   {

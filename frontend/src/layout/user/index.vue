@@ -7,10 +7,11 @@
 			<!-- 底部 tab（仿美团） -->
 			<footer class="bottom-nav fixed-bottom">
 				<el-row type="flex" justify="space-around" align="middle">
-					<el-col :span="6" class="tab" :class="{ active: route.path === '/user/home' }" @click="go('/user/home')">首页</el-col>
-					<el-col :span="6" class="tab" :class="{ active: route.path === '/user/orderlist' }" @click="go('/user/orderlist')">订单</el-col>
-					<el-col :span="6" class="tab" :class="{ active: route.path === '/user/cart' }" @click="go('/user/cart')">购物车</el-col>
-					<el-col :span="6" class="tab" :class="{ active: route.path === '/user/my' }" @click="go('/user/my')">我的</el-col>
+					<el-col :span="5" class="tab" :class="{ active: route.path === '/user/home' }" @click="go('/user/home')">🏠 首页</el-col>
+					<el-col :span="5" class="tab" :class="{ active: route.path === '/user/orderlist' }" @click="go('/user/orderlist')">📋 订单</el-col>
+					<el-col :span="5" class="tab" :class="{ active: route.path === '/user/cart' }" @click="go('/user/cart')">🛒 购物车</el-col>
+					<el-col :span="5" class="tab" :class="{ active: route.path === '/user/agent' }" @click="go('/user/agent')">🤖 AI 助手</el-col>
+					<el-col :span="4" class="tab" :class="{ active: route.path === '/user/my' }" @click="go('/user/my')">👤 我的</el-col>
 				</el-row>
 			</footer>
 	</div>
