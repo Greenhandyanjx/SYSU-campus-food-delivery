@@ -1,0 +1,58 @@
+# ─────────────────────────────────────────────────────────
+# Redis 缓存配置 — 四层缓存架构
+# ─────────────────────────────────────────────────────────
+#
+# 四层缓存的定位：
+# ① LLM Response Cache — 省 API 费用。相同上下文命中后跳过 ReAct 循环
+# ② RAG Cache         — 省向量检索时间。相同 query 避免重复多路召回
+# ③ Rate Limiter      — 防刷。滑动窗口控制每个 session 的请求频率
+# ④ Session Cache     — 减少 PG 读。L1(内存)→L2(Redis)→L3(PG)→L4(JSONL)
+#
+# 环境变量 REDIS_URL 可覆盖本配置（用于不同环境切换）
+# ─────────────────────────────────────────────────────────
+
+redis:
+  # 连接字符串（优先级：① 环境变量 REDIS_URL > ② 本配置的 url）
+  # 格式: redis://[[username]:[password]]@host:port/db
+  # 本地开发默认连 localhost:6379
+  url: "redis://localhost:6379/0"
+
+  # 连接池配置
+  pool_max_size: 20         # 最大连接数（async 连接池）
+  pool_timeout: 5.0         # 获取连接的超时秒数
+  socket_timeout: 3.0       # socket 读写超时（防 Redis 慢查询拖垮整个进程）
+  retry_on_timeout: true    # 超时后自动重试一次
+
+  # key 前缀 → 所有 Redis key 都带此前缀，实现命名空间隔离
+  # 多个项目共享同一 Redis 实例时防止 key 冲突
+  key_prefix: "jdagent:"
+
+# TTL 配置（单位：秒）
+ttl:
+  # ① LLM 回复缓存：1 小时
+  # 目的：同个问题短时间内重复问（如页面刷新），直接返回缓存，不调 API
+  llm_response: 3600
+
+  # ② RAG 检索缓存：5 分钟
+  # 目的：同一个 RAG query 短时间重复检索时秒回
+  rag_result: 300
+
+  # ③ Session 缓存：30 分钟
+  # 目的：对话 session 在 30 分钟内的活跃期，Redis 命中可避免查 PG
+  session_cache: 1800
+
+# 速率限制配置（每个 session 独立计算）
+rate_limit:
+  # 每个 session 每 60 秒最多 30 次请求（用户级别限流）
+  # 计算：30 次 / 60 秒 = 0.5 QPS，正常对话完全够用
+  default_limit: 30
+  default_window: 60        # 滑动窗口大小（秒）
+
+  # LLM 调用限流：每分钟最多 20 次 API 调用
+  # 这是更严格的限制，用于控制 API 费用
+  llm_limit: 20
+  llm_window: 60
+
+# RAG 缓存开关
+rag_cache:
+  enabled: true

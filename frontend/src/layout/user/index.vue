@@ -29,16 +29,13 @@ function go(path: string) {
 </script>
 
 <style scoped>
-.user-layout { display:flex; flex-direction:column; min-height:100vh }
+.user-layout { display:flex; flex-direction:column; min-height:100vh; background-image: url('/src/assets/login/img_denglu_bj.jpg'); background-size:cover; background-position:center; background-attachment:fixed; background-color:#fffbe6 }
 .content { flex:1; overflow: visible; padding: 0px }
 .page-wrap { display:flex; justify-content:center; position:relative }
 .page-wrap::before,
 .page-wrap::after {
 	content: '';
 	width: calc((100% - 1100px)/2);
-	background-image: url('/src/assets/login/img_denglu_bj.jpg');
-	background-size: cover;
-	background-position: center;
 }
 .page-wrap::before { margin-right: 0 }
 .page-wrap::after { margin-left: 0 }

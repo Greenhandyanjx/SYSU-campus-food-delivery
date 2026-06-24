@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"path": "../../nanobot-main"
+		},
+		{
+			"path": "../../../软件工程中级实训/SYSU-campus-food-delivery"
+		},
+		{
+			"path": "../../openclaw_traj_results"
+		}
+	],
+	"settings": {}
+}

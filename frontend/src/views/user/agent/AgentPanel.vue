@@ -97,8 +97,8 @@
           class="message-row"
           :class="msg.role"
         >
-          <!-- AI 消息头像 -->
-          <div v-if="msg.role === 'assistant'" class="msg-avatar">
+          <!-- AI 消息头像：流式加载时最后一条 AI 消息的头像由下方 loading 动画展示，避免重复 -->
+          <div v-if="msg.role === 'assistant' && !(showLoadingDots && idx === messages.length - 1)" class="msg-avatar">
             <svg viewBox="0 0 24 24" width="28" height="28" fill="none">
               <circle cx="12" cy="12" r="10" fill="#FF6B35"/>
               <circle cx="9" cy="10" r="1.5" fill="white"/>

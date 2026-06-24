@@ -79,7 +79,13 @@ const route = useRoute()
 const q = ref('')
 const city = ref(localStorage.getItem('city') || '定位中...')
 const username = ref(localStorage.getItem('username') || '')
-const avatar = ref(localStorage.getItem('avatar') || '')
+// 检查 localStorage 中的头像 URL 是否有效，无效则清除
+let storedAvatar = localStorage.getItem('avatar') || ''
+if (storedAvatar && !storedAvatar.startsWith('/') && !storedAvatar.startsWith('http://localhost:3000') && !storedAvatar.startsWith('data:')) {
+  storedAvatar = ''
+  localStorage.removeItem('avatar')
+}
+const avatar = ref(storedAvatar)
 const defaultAvatar = userPng
 
 // site logo style (small, aligns with left controls)
@@ -266,8 +272,9 @@ onMounted(() => {
   myApi.getProfile().then((p: any) => {
     if (!p) return
     username.value = p.nickname || p.username || localStorage.getItem('username') || username.value
-    avatar.value = p.avatar_url || p.avatar || avatar.value
+    avatar.value = p.avatar_url || p.avatar || ''
     if (avatar.value) localStorage.setItem('avatar', avatar.value)
+    else localStorage.removeItem('avatar')
   }).catch(() => {})
 })
 onUnmounted(() => { window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll); if (rafId != null) cancelAnimationFrame(rafId) })

@@ -1,0 +1,148 @@
+# ─────────────────────────────────────────────────────────
+# Docker Compose — JD-Agent 前后端分离部署
+# ─────────────────────────────────────────────────────────
+#
+# 使用方式:
+#   1. 复制 .env.example 为 .env 并填入 API Key
+#   2. docker compose up -d
+#   3. 访问 http://localhost:8501 (Streamlit UI)
+#
+# 如需单独调试 API:
+#   curl http://localhost:8000/api/v1/health
+#
+# 环境变量参考 (.env):
+#   DEEPSEEK_API_KEY=sk-xxx          # 你的 API Key
+#   DEFAULT_MODEL=deepseek-chat       # 模型名
+#   DATABASE_URL=...                  # PostgreSQL 连接串（可选，不配则用 JSONL）
+#   API_PORT=8000                     # API 端口
+#   STREAMLIT_PORT=8501               # Streamlit 端口
+# ─────────────────────────────────────────────────────────
+
+version: '3.8'
+
+services:
+  # ── API 后端（FastAPI） ──
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: jd-agent:latest
+    container_name: jd-agent-api
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-deepseek-chat}
+      - DATABASE_URL=postgresql://jdagent:${PG_PASSWORD:-devpassword}@postgres:5432/jdagent
+      - PYTHONPATH=/app
+      - LOG_LEVEL=info
+    volumes:
+      - jd-agent-db:/app/db
+      - jd-agent-logs:/app/logs
+      - jd-agent-sessions:/app/sessions
+      - jd-agent-memory:/app/memory
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    command: uvicorn api.app:app --host 0.0.0.0 --port 8000 --log-level info
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ── 前端（Streamlit） ──
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: jd-agent:latest
+    ports:
+      - "${STREAMLIT_PORT:-8501}:8501"
+    environment:
+      - JD_AGENT_API_URL=http://api:8000
+      - PYTHONPATH=/app
+    depends_on:
+      api:
+        condition: service_healthy
+    command: >
+      streamlit run main.py
+      --server.port 8501
+      --server.address 0.0.0.0
+      --server.headless true
+    restart: unless-stopped
+
+  # ── Redis 缓存（四层缓存：LLM 响应/RAG/限流/Session） ──
+  redis:
+    image: redis:7-alpine
+    container_name: jd-agent-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --save 300 10
+    # appendonly yes = AOF 持久化（重启不丢数据）
+    # save 300 10 = 300 秒内至少 10 次写入就触发 RDB 快照
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # ── PostgreSQL 数据库 ──
+  postgres:
+    image: postgres:16-alpine
+    container_name: jd-agent-postgres
+    environment:
+      POSTGRES_DB: jdagent
+      POSTGRES_USER: jdagent
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-devpassword}
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/migrations/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jdagent -d jdagent"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # ── RabbitMQ 消息队列（异步后台任务） ──
+  rabbitmq:
+    image: rabbitmq:3-management-alpine     # 带 Management UI 的管理版
+    container_name: jd-agent-rabbitmq
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"       # AMQP 协议端口
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672" # Management UI（http://localhost:15672）
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq     # 持久化消息
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    # Management UI 默认凭据: guest/guest
+    # 访问地址: http://localhost:15672
+
+volumes:
+  jd-agent-db:
+  jd-agent-logs:
+  jd-agent-sessions:
+  jd-agent-memory:
+  pgdata:
+  redis-data:
+  rabbitmq-data:

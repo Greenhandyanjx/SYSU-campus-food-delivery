@@ -34,8 +34,8 @@
             class="msg-row"
             :class="msg.role"
           >
-            <!-- AI 头像 -->
-            <div v-if="msg.role === 'assistant'" class="msg-avatar">🤖</div>
+            <!-- AI 头像：流式加载时最后一条 AI 消息的头像由下方 loading 动画展示，避免重复 -->
+            <div v-if="msg.role === 'assistant' && !(showLoading && idx === messages.length - 1)" class="msg-avatar">🤖</div>
             <!-- 气泡：跳过空内容 AI 消息（由下方 loading 展示） -->
             <div
               v-if="shouldShowBubble(msg, idx)"
@@ -214,7 +214,7 @@ onMounted(() => {
 }
 
 .agent-page .page-main {
-  width: 1100px;
+  width: 60%;
   max-width: calc(100% - 40px);
   background: #fff;
   border-radius: 8px;

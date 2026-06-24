@@ -1,0 +1,63 @@
+# ─────────────────────────────────────────────────────────
+# RabbitMQ 配置 — 异步任务队列
+# ─────────────────────────────────────────────────────────
+#
+# 把非关键路径的耗时任务丢到后台 Worker：
+#   - Dream 归档          → agent.dream
+#   - 记忆 Consolidation  → agent.consolidation
+#
+# 关于 RabbitMQ 核心概念（面试常考）：
+#   Exchange（交换器）：
+#     消息路由器，决定消息去哪个队列
+#     - Direct：routing_key 完全匹配 → 对应队列
+#     - Topic：routing_key 通配符匹配
+#     - Fanout：广播到所有绑定的队列
+#   Queue（队列）：消息的缓冲区，Worker 从中消费
+#   Binding：Exchange → Queue 的绑定关系
+#   Routing Key：消息的路由标签，决定消息去向
+#   ACK：消费成功后的确认（RabbitMQ 收到 ACK 才删除消息）
+#   NACK：消费失败后的拒绝（可选 requeue 或进死信队列）
+#
+# 环境变量 MQ_URL 可覆盖本配置（用于 Docker 环境）
+# ─────────────────────────────────────────────────────────
+
+rabbitmq:
+  # 连接字符串（优先级：① 环境变量 MQ_URL > ② 本配置 url）
+  # 格式: amqp://[[username]:[password]]@host:port/[vhost]
+  # 本地开发默认连接 localhost:5672
+  url: "amqp://guest:guest@localhost:5672/"
+
+  # 连接参数
+  connection_timeout: 5.0       # 连接超时（秒）
+  reconnect_interval: 3.0       # 断线重连间隔（秒）
+
+  # 交换器（Exchange）：消息路由的中枢
+  # Direct Exchange = routing_key 完全匹配 → 对应队列
+  exchange: "agent.tasks"
+  exchange_type: "direct"
+
+  # 重试策略
+  retry:
+    max_retries: 3               # 最大重试次数
+    requeue_delay_ms: 5000       # 重试间隔（毫秒，通过死信 + TTL 实现）
+
+  # 队列定义
+  # 每个队列绑定一个 routing_key，对应一种任务类型
+  queues:
+    dream:
+      routing_key: "dream"
+      prefetch: 1                # 每次只拉 1 条（串行处理，避免冲突）
+      durable: true              # 队列持久化（RabbitMQ 重启不丢队列）
+    consolidation:
+      routing_key: "consolidation"
+      prefetch: 1
+      durable: true
+
+    # ── LLM 请求队列（核心队列） ──
+    # 将 LLM API 调用通过 MQ 进行速率控制。
+    # prefetch=1 保证 Worker 同时只处理一个 LLM 请求，
+    # 多个用户同时发消息时，请求在队列里排队，不会同时调 LLM。
+    llm_request:
+      routing_key: "llm_request"
+      prefetch: 1
+      durable: true

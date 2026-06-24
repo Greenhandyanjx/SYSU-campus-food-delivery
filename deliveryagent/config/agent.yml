@@ -1,0 +1,13 @@
+# JD-Agent 配置文件
+
+external_data_path: data/external/records.csv
+max_iterations: 10
+enable_task_planner: true
+enable_long_term_memory: true
+
+# 技能系统配置
+skills:
+  enabled: true                        # 是否启用技能自动发现（默认 true）
+  directory: skills                    # 技能目录（相对于 workspace）
+  auto_register: true                  # 自动将 Skill 下的 Tool 注册到 ToolRegistry
+  max_matched_skills: 3                # 每轮对话最多匹配的技能数

@@ -30,6 +30,22 @@ function getSessionId(): string {
 }
 
 /**
+ * 从 localStorage 获取 JWT token，并构造 Authorization 请求头
+ */
+function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  try {
+    const token = localStorage.getItem('token')
+    if (token) {
+      headers['Authorization'] = token.startsWith('Bearer ') ? token : `Bearer ${token}`
+    }
+  } catch {
+    // localStorage 不可用时（SSR等），不传 auth
+  }
+  return headers
+}
+
+/**
  * ChatMessage 接口
  * 表示聊天中的一条消息
  */
@@ -79,9 +95,7 @@ export async function sendMessage(message: string): Promise<ChatResponse> {
 
   const response = await fetch(CHAT_ENDPOINT, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: getAuthHeaders(),
     body: JSON.stringify(body),
   })
 
@@ -151,7 +165,7 @@ async function _doStreamFetch(
   try {
     const response = await fetch(CHAT_ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(body),
       signal,
     })

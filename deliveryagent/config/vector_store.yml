@@ -1,0 +1,11 @@
+# FAISS 向量存储配置（替代原 ChromaDB）
+
+persist_directory: db/faiss_index
+k: 5
+data_path: data/knowledge
+md5_hex_store: db/md5.text
+allow_knowledge_file_type: ["txt", "pdf"]
+
+chunk_size: 200
+chunk_overlap: 20
+separators: ["\n\n", "\n", ".", "!", "?", "，", "。", "；", " ", ""]

@@ -109,6 +109,8 @@ onMounted(async () => {
   couponCount.value = p.couponCount || 0
   // avatar
   avatar.value = p.avatar_url || p.avatar || ''
+  if (avatar.value) localStorage.setItem('avatar', avatar.value)
+  else localStorage.removeItem('avatar')
   // 获取用户未读会话总数
   try {
     const r = await request.get('/user/chats')

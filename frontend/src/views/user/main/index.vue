@@ -493,18 +493,12 @@ function onCategoryClick(c: any) {
 .user-home-bg {
   width: 100%;
   min-height: 100vh;
-  background-color: #fffbe6; /* 主色调：柔和黄 */
-  background-image: url('/src/assets/login/img_denglu_bj.jpg');
-  background-repeat: no-repeat;
-  background-size: cover;
-  background-position: center;
   display: flex;
   justify-content: center;
   align-items: flex-start;
   /* Keep a small gap so search is visible initially but can scroll under sticky navbar */
   padding-top: 16px;
   padding-bottom: 60px;
-  background-attachment: fixed;
 }
 
 /* 中间内容卡片 */
@@ -655,8 +649,6 @@ function onCategoryClick(c: any) {
 
 .store-banner {
   height: 160px;
-  background-size: cover;
-  background-position: center;
 }
 
 .store-body {
