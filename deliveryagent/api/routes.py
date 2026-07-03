@@ -266,7 +266,7 @@ async def chat(
         try:
             async for chunk in orch.chat_stream_async(
                 request.message,
-                session_key=f"api:{session_id}",
+                session_key=session_id,
                 jwt_token=jwt_token,
             ):
                 # JSON 编码确保换行符等特殊字符不出问题

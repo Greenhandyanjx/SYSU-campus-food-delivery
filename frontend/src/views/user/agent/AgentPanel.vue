@@ -115,6 +115,18 @@
             :class="{ 'is-streaming': msg.role === 'assistant' && idx === messages.length - 1 && isLoading }"
             v-html="formatMessage(msg.content)"
           ></div>
+
+          <!-- 订单卡片（仅 AI 消息且包含解析后的卡片数据） -->
+          <template v-if="msg.role === 'assistant' && msg.orderCards && msg.orderCards.length > 0">
+            <div class="order-cards-wrap">
+              <AgentOrderCard
+                v-for="(card, ci) in msg.orderCards"
+                :key="'card-' + ci"
+                :data="card"
+                @send-message="onCardAction"
+              />
+            </div>
+          </template>
         </div>
 
         <!-- 加载中的三点动画（替代空白气泡） -->
@@ -189,21 +201,16 @@
  * =========================================
  * 使用 <script setup> 语法，依赖 @/composables/useAgentChat 共享状态。
  */
-import { ref, nextTick, computed, onBeforeUnmount } from 'vue'
+import { ref, nextTick, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useAgentChat } from '@/composables/useAgentChat'
+import AgentOrderCard from '@/components/Chat/AgentOrderCard.vue'
 
 // ── Props ──
-//
-// fullPage: 是否以全屏模式渲染
-//   false = 浮动 FAB + 侧滑面板（默认行为）
-//   true  = 填充父容器，无 FAB，无固定定位
 const props = withDefaults(
   defineProps<{
     fullPage?: boolean
   }>(),
-  {
-    fullPage: false,
-  },
+  { fullPage: false },
 )
 
 // ── 使用共享聊天状态（单例） ──
@@ -211,14 +218,18 @@ const {
   messages,
   isLoading,
   isConnected,
+  sessionGroups,
+  currentSessionId,
   sendMessage,
   clearMessages,
+  loadSessions,
+  loadSession,
+  newSession,
+  setToken,
 } = useAgentChat()
 
 // ── 本地状态 ──
-
-/** 面板是否可见（仅浮动模式使用） */
-const panelVisible = ref(props.fullPage) // 全屏模式默认可见
+const panelVisible = ref(props.fullPage)
 
 /** 输入框消息文本 */
 const inputMessage = ref('')
@@ -257,12 +268,30 @@ const suggestions = [
 
 // ── 面板控制（仅浮动模式） ──
 
-function openPanel() {
+async function openPanel() {
   panelVisible.value = true
-  nextTick(() => {
-    inputRef.value?.focus()
-    scrollToBottom()
-  })
+  setToken()
+  await loadSessions()
+  // 查找今天的会话
+  const today = new Date()
+  const todayStr = today.toISOString().split('T')[0]
+  const groups = sessionGroups.value
+
+  let loadedToday = false
+  for (const [date, sessions] of Object.entries(groups)) {
+    if (date === todayStr && sessions.length > 0) {
+      const latest = sessions[0] // 最新一条
+      await loadSession(latest.session_id)
+      loadedToday = true
+      break
+    }
+  }
+  if (!loadedToday) {
+    newSession()
+  }
+  await nextTick()
+  inputRef.value?.focus()
+  scrollToBottom()
 }
 
 function closePanel() {
@@ -292,6 +321,16 @@ function shouldShowBubble(msg: { role: string; content: string }, idx: number): 
 function sendQuickMessage(text: string) {
   // 直接发送传入的文字，不经过 inputMessage 中转
   // 避免 handleSend 被 @keydown.enter 和 @click 同时触发导致的重复问题
+  if (!text.trim() || isLoading.value) return
+  scrollToBottom()
+  sendMessage(text)
+  setTimeout(() => scrollToBottom(), 150)
+}
+
+/**
+ * 处理订单卡片按钮触发的消息发送（如"支付订单"、"取消订单"等）
+ */
+function onCardAction(text: string) {
   if (!text.trim() || isLoading.value) return
   scrollToBottom()
   sendMessage(text)
@@ -718,6 +757,11 @@ onBeforeUnmount(() => {
   color: inherit;
   text-decoration: underline;
   opacity: 0.9;
+}
+
+/* 订单卡片容器 */
+.order-cards-wrap {
+  width: 100%;
 }
 
 .message-row.assistant .message-bubble strong {

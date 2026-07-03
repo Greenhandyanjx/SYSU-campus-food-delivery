@@ -15,6 +15,7 @@ Agent Tools: 外卖配送业务工具
   9. get_user_default_info   — 获取用户默认收货信息
 """
 
+import json
 from typing import Any
 
 import httpx
@@ -113,7 +114,8 @@ class GetStoresTool(Tool):
         lines = ["🏪 **全部商家列表**", "━━━━━━━━━━━━━━━━━━━━━"]
         for s in items:
             name = _safe_text(s, "name", "shop_name", "shopName")
-            sid = s.get("base_id") or s.get("baseId") or s.get("id") or ""
+            # ⚠️ 使用 id（1-13）而非 base_id，因为 /api/store/dishes 的 storeId 参数使用 id
+            sid = s.get("id") or s.get("base_id") or s.get("baseId") or ""
             rating = _safe_float(s, "avg_score", "avgScore", "rating")
             sales = _safe_int(s, "sales")
             lines.append(f"  🆔 {sid} | {name} | ⭐ {rating} | 月售 {sales}")
@@ -170,7 +172,8 @@ class SearchStoreTool(Tool):
         lines = [f"🔍 **搜索「{query}」结果**", "━━━━━━━━━━━━━━━━━━━━━"]
         for s in items if isinstance(items, list) else [items]:
             name = _safe_text(s, "name", "shop_name", "shopName")
-            sid = s.get("base_id") or s.get("baseId") or s.get("id") or ""
+            # ⚠️ 使用 id（1-13）而非 base_id，与 /api/store/dishes 的 storeId 保持一致
+            sid = s.get("id") or s.get("base_id") or s.get("baseId") or ""
             desc = _safe_text(s, "shop_location", "desc", "description", default="—")
             lines.append(f"  🆔 {sid} | {name}")
             if desc and desc != "—":
@@ -200,7 +203,7 @@ class GetDishesTool(Tool):
         return {
             "merchant_id": {
                 "type": "integer",
-                "description": "商家 ID（base_id），可通过 get_stores 获取",
+                "description": "商家 ID，例如 4=麦当劳、1=夯肉先生炭烤店。可通过 get_stores 获取各商家的 ID",
                 "required": True,
             },
         }
@@ -453,11 +456,13 @@ class QueryOrderTool(Tool):
 
         lines = [f"📋 **订单详情** (ID: {order_id})", "━━━━━━━━━━━━━━━━━━━━━"]
 
+        # 订单状态：1=待支付 2=已支付 3=已接单 4=配送中 5=已完成 6=已取消
         status_map = {
-            0: "⏳ 待支付", 1: "✅ 已支付", 2: "🚴 配送中", 3: "✅ 已完成", 4: "❌ 已取消",
-            "pending": "⏳ 待处理", "accepted": "✅ 已接单", "preparing": "👨‍🍳 准备中",
-            "delivering": "🚴 配送中", "delivered": "📦 已送达", "completed": "✅ 已完成",
-            "cancelled": "❌ 已取消",
+            1: "⏳ 待支付", 2: "✅ 已支付", 3: "👨‍🍳 已接单（准备中）",
+            4: "🚴 配送中", 5: "✅ 已完成", 6: "❌ 已取消",
+            "pending": "⏳ 待支付", "paid": "✅ 已支付", "accepted": "👨‍🍳 已接单",
+            "preparing": "👨‍🍳 准备中", "delivering": "🚴 配送中",
+            "delivered": "📦 已送达", "completed": "✅ 已完成", "cancelled": "❌ 已取消",
         }
         status = info.get("status")
         status_str = status_map.get(status) if status is not None else str(status or "未知")
@@ -533,11 +538,15 @@ class CheckDeliveryStatusTool(Tool):
 
         lines = [f"🚚 **配送跟踪** (订单: {order_id})", "━━━━━━━━━━━━━━━━━━━━━"]
 
+        # 订单状态：1=待支付 2=已支付 3=已接单 4=配送中 5=已完成 6=已取消
         status_map = {
-            "pending": "⏳ 等待接单", "accepted": "✅ 商家已接单",
-            "preparing": "👨‍🍳 准备中", "looking_rider": "🔍 分配骑手",
-            "rider_accepted": "🚴 骑手已接单", "delivering": "🚴 配送中",
-            "delivered": "📦 已送达", "completed": "✅ 已完成", "cancelled": "❌ 已取消",
+            1: "⏳ 待支付", 2: "✅ 已支付", 3: "👨‍🍳 已接单（准备中）",
+            4: "🚴 配送中", 5: "✅ 已完成", 6: "❌ 已取消",
+            "pending": "⏳ 等待接单", "paid": "✅ 已支付",
+            "accepted": "✅ 商家已接单", "preparing": "👨‍🍳 准备中",
+            "looking_rider": "🔍 分配骑手", "rider_accepted": "🚴 骑手已接单",
+            "delivering": "🚴 配送中", "delivered": "📦 已送达",
+            "completed": "✅ 已完成", "cancelled": "❌ 已取消",
         }
         status = info.get("status") or info.get("deliveryStatus") or "unknown"
         lines.append(f"**状态**: {status_map.get(status, str(status))}")
@@ -596,7 +605,7 @@ class PlaceOrderTool(Tool):
         return {
             "merchant_id": {
                 "type": "integer",
-                "description": "商家 ID（base_id），例如 4=麦当劳、18=川菜馆。通过 get_stores 或 search_store 获取",
+                "description": "商家 ID，例如 1=夯肉先生炭烤店、4=麦当劳、9=一点点。通过 get_stores 获取",
                 "required": True,
             },
             "items": {
@@ -705,12 +714,15 @@ class PlaceOrderTool(Tool):
             for it in resolved_items
         )
 
+        total_with_delivery = total_price + 2.0
         result_lines = [
             "✅ **订单已创建！**",
             "━━━━━━━━━━━━━━━━━━━━━",
             f"**订单号**: #{order_id}",
             f"**菜品**:\n{item_detail}",
-            f"**总计**: ¥{total_price:.2f}（含配送费 ¥2.00）",
+            f"**菜品小计**: ¥{total_price:.2f}",
+            f"**配送费**: ¥2.00",
+            f"**总计**: ¥{total_with_delivery:.2f}",
         ]
         if notes:
             result_lines.append(f"**备注**: {notes}")
@@ -1248,11 +1260,11 @@ class GetUserOrdersTool(Tool):
             return "⚠️ 无法查询订单：未检测到登录状态。"
 
         status_map_rev = {
-            "pending": "", "paid": "", "delivering": "", "completed": "", "cancelled": "",
+            "pending": "1", "paid": "2", "delivering": "4", "completed": "5", "cancelled": "6",
         }
         params = f"?page={page}&size=20"
-        if status and status in ("pending", "paid", "delivering", "completed", "cancelled"):
-            params += f"&status={status}"
+        if status and status in status_map_rev:
+            params += f"&status={status_map_rev[status]}"
 
         logger.info(f"[GetUserOrdersTool] 获取订单列表, params={params}")
         try:
@@ -1412,8 +1424,45 @@ class PayOrderTool(Tool):
             return f"⚠️ 请求出错: {type(e).__name__}"
 
         if data.get("code") == 1 or data.get("code") == "1":
+            # 支付成功后主动查询订单状态和预计送达时间
+            detail = await self._query_order_detail(order_id, jwt_token)
+            if detail:
+                return (
+                    f"✅ **订单 #{order_id} 支付成功！**\n"
+                    f"📋 当前状态: {detail['status_text']}\n"
+                    f"🕐 预计送达: {detail['expected_time']}\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"商家正在准备您的餐品，请耐心等待 😊"
+                )
             return f"✅ **订单 #{order_id} 支付成功！** 商家正在准备您的餐品 😊"
         return f"⚠️ 支付失败: {data.get('msg') or data.get('message') or '未知错误'}"
+
+    async def _query_order_detail(self, order_id: int, jwt_token: str) -> dict | None:
+        """支付后查询订单状态和预计送达时间"""
+        try:
+            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+                resp = await client.get(
+                    f"{DELIVERY_BACKEND_URL}/api/user/order/{order_id}",
+                    headers={"Authorization": f"Bearer {jwt_token}"},
+                    follow_redirects=True,
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    raw = _extract_data(data)
+                    if raw:
+                        status = raw.get("status", 0)
+                        status_names = {1: "待支付", 2: "已支付/待接单", 3: "已接单", 4: "配送中", 5: "已完成", 6: "已取消"}
+                        expected = raw.get("expected_time") or raw.get("expectedtime", "")
+                        et = expected[:19] if expected else "下单后约 30 分钟"
+                        if isinstance(expected, str) and len(expected) > 19:
+                            et = expected[:19]
+                        return {
+                            "status_text": status_names.get(status, f"未知({status})"),
+                            "expected_time": et,
+                        }
+        except Exception as e:
+            logger.info(f"[PayOrderTool] 查询订单详情失败(不影响支付结果): {e}")
+        return None
 
 
 class CustomerServiceTool(Tool):

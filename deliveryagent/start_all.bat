@@ -151,7 +151,7 @@ if %ERRORLEVEL% equ 1 (
 ) else (
     if exist "%FRONTEND_DIR%\package.json" (
         echo   %YELLOW%[~]%RESET% 启动 Vite 开发服务器...
-        start "Vue-Frontend-5173" cmd /c "cd /d %FRONTEND_DIR% && npm run dev"
+        start "Vue-Frontend-5173" /D "%FRONTEND_DIR%" npm run dev
         timeout /t 5 /nobreak >nul
         python -c "import socket; exit(0 if socket.connect_ex(('127.0.0.1',5173))!=0 else 1)" >nul 2>&1
         if !ERRORLEVEL! equ 0 (

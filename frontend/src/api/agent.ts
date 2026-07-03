@@ -11,7 +11,7 @@
  * 默认值为 http://127.0.0.1:8000
  */
 
-const AGENT_API_BASE = import.meta.env.VITE_AGENT_API_URL || 'http://127.0.0.1:8000'
+const AGENT_API_BASE = import.meta.env.VITE_AGENT_API_URL || 'http://127.0.0.1:8001'
 const CHAT_ENDPOINT = `${AGENT_API_BASE}/api/v1/chat`
 
 // 会话 ID（首次调用时自动生成）
@@ -83,13 +83,13 @@ export interface StreamCallbacks {
  * 发送用户消息到 Agent API，返回完整的回复文本。
  *
  * @param message  - 用户消息内容
- * @param stream   - 是否流式（默认 false）
+ * @param sessionId - 会话 ID（可选，不传则自动生成）
  * @returns         - 完整的 ChatResponse 响应
  */
-export async function sendMessage(message: string): Promise<ChatResponse> {
+export async function sendMessage(message: string, sessionId?: string): Promise<ChatResponse> {
   const body = {
     message,
-    session_id: getSessionId(),
+    session_id: sessionId || getSessionId(),
     stream: false,
   }
 
@@ -119,30 +119,21 @@ export async function sendMessage(message: string): Promise<ChatResponse> {
  * =================
  * 使用 fetch + ReadableStream 实现 SSE 流式解析。
  *
- * 调用方式：
- * ```typescript
- * sendMessageStream('你好', {
- *   onMessage: (text) => console.log('收到:', text),
- *   onDone: () => console.log('完成'),
- *   onError: (err) => console.error('错误:', err),
- * })
- * ```
- *
- * 如果浏览器不支持 ReadableStream，会降级到非流式模式。
- *
  * @param message   - 用户消息内容
  * @param callbacks - 流式回调
+ * @param sessionId - 会话 ID（可选，不传则自动生成）
  * @returns         - AbortController，可用于取消请求
  */
 export function sendMessageStream(
   message: string,
   callbacks: StreamCallbacks,
+  sessionId?: string,
 ): AbortController {
   const controller = new AbortController()
 
   const body = {
     message,
-    session_id: getSessionId(),
+    session_id: sessionId || getSessionId(),
     stream: true,
   }
 

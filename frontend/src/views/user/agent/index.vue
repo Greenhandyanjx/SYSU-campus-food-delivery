@@ -1,50 +1,79 @@
 <template>
-  <!--
-    index.vue — 全屏外卖助手页面（/user/agent 路由）
-    ======================================================
-    与主页左下角 AgentPanel 共享同一份聊天状态（useAgentChat 单例），
-    保证两个入口的聊天历史完全同步。
-
-    此页面在 layout 的 .content 直接渲染。
-    为了保证宽度 / 背景与主站一致，这里使用 .page-wrap + .page-main 结构，
-    并保留底部安全区域防止导航栏遮挡输入框。
-  -->
   <div class="page-wrap agent-page">
-    <div class="page-main">
-      <div class="agent-fullpage">
-        <!-- 顶部栏 -->
+    <div class="page-main agent-layout">
+      <!-- ═══ 左侧：会话列表（WeChat 风格） ═══ -->
+      <aside class="sidebar">
+        <header class="sidebar-header">
+          <h2>💬 消息</h2>
+        </header>
+        <div class="session-list">
+          <template v-for="day in sidebarDays" :key="day.dateStr">
+            <div class="date-divider">{{ day.dateLabel }}</div>
+            <div
+              class="session-item"
+              :class="{ active: day.dateStr === activeDate }"
+              @click="onSelectDay(day)"
+            >
+              <div class="session-avatar">🤖</div>
+              <div class="session-info">
+                <div class="session-title">{{ day.sessions[0].last_message || '新会话' }}</div>
+                <div class="session-preview">{{ day.totalMessages }} 条消息</div>
+              </div>
+            </div>
+          </template>
+          <div v-if="sidebarDays.length === 0" class="empty-sessions">
+            暂无历史记录
+          </div>
+        </div>
+      </aside>
+
+      <!-- ═══ 右侧：聊天区域 ═══ -->
+      <main class="chat-main">
         <header class="agent-header">
           <button class="back-btn" @click="goBack">‹ 返回</button>
           <h2>🤖 外卖助手</h2>
           <button class="clear-btn" @click="confirmClear">🗑️ 清空</button>
         </header>
 
-        <!-- 聊天主体 -->
-        <div class="chat-body" ref="messagesRef" @scroll="onScroll">
-          <!-- 欢迎页 -->
-          <div v-if="messages.length === 0" class="welcome">
+        <div class="chat-body" ref="messagesRef">
+          <div v-if="messages.length === 0 && currentSessionId" class="welcome">
             <div class="welcome-icon">🤖</div>
             <p>你好！我是你的外卖助手 🎉<br />查订单、推荐菜品、配送进度、售后问题都可以问我～</p>
           </div>
-
-          <!-- 消息列表 -->
-          <div
-            v-for="(msg, idx) in messages"
-            :key="idx"
-            class="msg-row"
-            :class="msg.role"
-          >
-            <!-- AI 头像：流式加载时最后一条 AI 消息的头像由下方 loading 动画展示，避免重复 -->
-            <div v-if="msg.role === 'assistant' && !(showLoading && idx === messages.length - 1)" class="msg-avatar">🤖</div>
-            <!-- 气泡：跳过空内容 AI 消息（由下方 loading 展示） -->
-            <div
-              v-if="shouldShowBubble(msg, idx)"
-              class="msg-bubble"
-              v-html="formatContent(msg.content)"
-            ></div>
+          <div v-if="!currentSessionId" class="welcome">
+            <div class="welcome-icon">💬</div>
+            <p>选择一个会话或新建一个对话</p>
           </div>
 
-          <!-- 三点加载动画 -->
+          <template v-for="(group, gi) in messageGroups" :key="gi">
+            <!-- 日期间隔（类似微信的日期条） -->
+            <div v-if="group.dateLabel" class="date-separator">{{ group.dateLabel }}</div>
+
+            <div
+              v-for="(msg, mi) in group.items"
+              :key="gi + '-' + mi"
+              class="msg-row"
+              :class="msg.role"
+            >
+              <div v-if="msg.role === 'assistant' && msg.content" class="msg-avatar">🤖</div>
+              <div class="msg-content-wrap">
+                <!-- 时间戳（类似微信：同 sender 5分钟内不重复） -->
+                <div v-if="msg.showTime" class="msg-time">{{ formatTime(msg.timestamp) }}</div>
+                <div v-if="shouldShowBubble(msg, mi, group.items)" class="msg-bubble" v-html="formatContent(msg.content)"></div>
+                <template v-if="msg.role === 'assistant' && msg.orderCards && msg.orderCards.length > 0">
+                  <div class="order-cards-wrap">
+                    <AgentOrderCard
+                      v-for="(card, ci) in msg.orderCards"
+                      :key="'card-' + ci"
+                      :data="card"
+                      @send-message="onCardAction"
+                    />
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+
           <div v-if="showLoading" class="msg-row assistant">
             <div class="msg-avatar">🤖</div>
             <div class="msg-bubble loading">
@@ -53,18 +82,15 @@
               <span class="dot"></span>
             </div>
           </div>
-
           <div ref="bottomRef"></div>
         </div>
 
-        <!-- 快捷建议 -->
-        <div v-if="messages.length === 0" class="suggestions">
+        <div v-if="messages.length === 0 && currentSessionId" class="suggestions">
           <button v-for="(s, i) in suggestions" :key="i" class="chip" @click="sendQuick(s.text)">
             {{ s.label }}
           </button>
         </div>
 
-        <!-- 输入区域 — padding-bottom 防底部导航栏遮挡 -->
         <div class="input-area">
           <textarea
             ref="inputRef"
@@ -85,59 +111,160 @@
             </svg>
           </button>
         </div>
-      </div>
+      </main>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-/**
- * index.vue — Vue 3 <script setup>
- * ================================
- * 使用 useAgentChat 单例与浮动面板共享同一份聊天状态。
- */
-import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, nextTick, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAgentChat } from '@/composables/useAgentChat'
+import { useAgentChat, ChatMsg, SessionItem } from '@/composables/useAgentChat'
+import AgentOrderCard from '@/components/Chat/AgentOrderCard.vue'
 
 const router = useRouter()
-const { messages, isLoading, sendMessage, clearMessages } = useAgentChat()
+const {
+  messages, isLoading, currentSessionId, sessionGroups,
+  sendMessage, clearMessages, loadSessions, loadSession,
+  loadDaySessions, newSession, setToken,
+} = useAgentChat()
 
-// ── 本地状态 ──
 const inputMsg = ref('')
 const messagesRef = ref<HTMLDivElement | null>(null)
 const bottomRef = ref<HTMLDivElement | null>(null)
 const inputRef = ref<HTMLTextAreaElement | null>(null)
 
-// ── 是否显示三点 loading 动画 ──
-// 条件：当前正在加载，且最后一条消息是 AI 占位（content === ''）
+const suggestions = [
+  { label: '📋 查订单', text: '帮我查一下我的订单' },
+  { label: '🍽️ 推荐菜品', text: '今天有什么好吃的推荐？' },
+  { label: '🚚 配送进度', text: '我的订单配送进度如何了？' },
+  { label: '❓ 售后问题', text: '我有售后问题要处理' },
+]
+
 const showLoading = computed(() => {
   if (!isLoading.value) return false
   const last = messages.value[messages.value.length - 1]
   return last && last.role === 'assistant' && last.content === ''
 })
 
-// ── 判断消息气泡是否应该渲染 ──
-// 如果当前 AI 消息是最后一条且内容为空且正在加载中，跳过（用三点动画代替）
-function shouldShowBubble(msg: { role: string; content: string }, idx: number): boolean {
+interface SidebarDay {
+  dateLabel: string
+  dateStr: string
+  sessions: SessionItem[]
+  count: number
+  totalMessages: number
+}
+
+const sidebarDays = computed<SidebarDay[]>(() => {
+  const days: SidebarDay[] = []
+  const keys = Object.keys(sessionGroups.value).sort().reverse()
+  for (const dateStr of keys) {
+    const sessions = sessionGroups.value[dateStr]
+    if (!sessions || sessions.length === 0) continue
+    days.push({
+      dateLabel: formatDateLabel(dateStr),
+      dateStr,
+      sessions,
+      count: sessions.length,
+      totalMessages: sessions.reduce((sum, s) => sum + (s.message_count || 0), 0),
+    })
+  }
+  return days
+})
+
+const activeDate = computed(() => {
+  for (const [dateStr, sessions] of Object.entries(sessionGroups.value)) {
+    if (sessions.some(s => s.session_id === currentSessionId.value)) return dateStr
+  }
+  return null
+})
+
+interface MessageGroup {
+  dateLabel: string
+  items: ChatMsg[]
+}
+
+const messageGroups = computed<MessageGroup[]>(() => {
+  const groups: MessageGroup[] = []
+  let currentDateStr = ''
+  let currentGroup: MessageGroup | null = null
+
+  // 显式追踪所有消息属性，确保 orderCards/content 变更时重新计算
+  for (const m of messages.value) {
+    void m.content
+    void m.orderCards
+  }
+
+  for (let i = 0; i < messages.value.length; i++) {
+    const msg = messages.value[i]
+    const msgDate = msg.timestamp ? new Date(msg.timestamp * 1000) : new Date()
+    const dateStr = msgDate.toDateString()
+
+    if (dateStr !== currentDateStr) {
+      currentDateStr = dateStr
+      currentGroup = {
+        dateLabel: formatChatDateLabel(msgDate),
+        items: [],
+      }
+      groups.push(currentGroup)
+    }
+
+    // 在每个问答（用户消息）前面显示 HH:MM 时间戳
+    const showTime = msg.role === 'user'
+
+    currentGroup!.items.push({ ...msg, showTime })
+  }
+
+  return groups
+})
+
+function shouldShowBubble(msg: ChatMsg, idx: number, group: ChatMsg[]): boolean {
   if (!msg.role) return false
   if (msg.content === '') {
-    // 如果是最后一条 AI 占位消息且正在加载，隐藏气泡
-    if (showLoading.value && idx === messages.value.length - 1) {
-      return false
-    }
+    if (showLoading.value && idx === messages.value.length - 1) return false
     return false
   }
   return true
 }
 
-// ── 操作 ──
+function formatTime(ts?: number): string {
+  if (!ts) return ''
+  const d = new Date(ts * 1000)
+  const h = d.getHours().toString().padStart(2, '0')
+  const m = d.getMinutes().toString().padStart(2, '0')
+  return `${h}:${m}`
+}
+
+function formatChatDateLabel(d: Date): string {
+  const today = new Date()
+  if (d.toDateString() === today.toDateString()) return '今天'
+  const yesterday = new Date(today)
+  yesterday.setDate(yesterday.getDate() - 1)
+  if (d.toDateString() === yesterday.toDateString()) return '昨天'
+  if (d.getFullYear() === today.getFullYear()) {
+    return `${d.getMonth() + 1}月${d.getDate()}日`
+  }
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
+}
+
 function goBack() { router.back() }
 
 function confirmClear() {
-  if (window.confirm('确定清空所有对话？')) {
+  if (window.confirm('确定清空当前对话？')) {
     clearMessages()
   }
+}
+
+async function onSelectSession(s: { session_id: string }) {
+  await loadSession(s.session_id)
+  await nextTick()
+  scrollDown()
+}
+
+async function onSelectDay(day: SidebarDay) {
+  await loadDaySessions(day.sessions)
+  await nextTick()
+  scrollDown()
 }
 
 function sendQuick(text: string) {
@@ -150,24 +277,39 @@ function onSend() {
   if (!t || isLoading.value) return
   inputMsg.value = ''
   resetHeight()
-  scrollDown()
   sendMessage(t)
   setTimeout(() => scrollDown(), 150)
 }
 
+function onCardAction(text: string) {
+  if (!text.trim() || isLoading.value) return
+  inputMsg.value = text
+  onSend()
+}
+
 function formatContent(c: string): string {
   if (!c) return ''
-  let html = c
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
+  let html = c.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
   html = html.replace(/\n/g, '<br />')
-  html = html.replace(
-    /(https?:\/\/[^\s<]+)/g,
-    '<a href="$1" target="_blank" rel="noopener">$1</a>',
-  )
+  html = html.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
   return html
+}
+
+function formatDateLabel(date: string): string {
+  const today = new Date()
+  const d = new Date(date)
+  if (isNaN(d.getTime())) return date
+  if (d.toDateString() === today.toDateString()) return '今天'
+  const yesterday = new Date(today)
+  yesterday.setDate(yesterday.getDate() - 1)
+  if (d.toDateString() === yesterday.toDateString()) return '昨天'
+  return `${d.getMonth() + 1}月${d.getDate()}日`
+}
+
+function formatSessionPreview(text: string): string {
+  if (!text) return '新会话'
+  return text.length > 40 ? text.substring(0, 40) + '...' : text
 }
 
 async function scrollDown() {
@@ -186,57 +328,150 @@ function resetHeight() {
   if (inputRef.value) inputRef.value.style.height = 'auto'
 }
 
-function onScroll() {
-  // 预留
-}
+onMounted(async () => {
+  setToken()
+  await loadSessions()
 
-onMounted(() => {
-  nextTick(() => {
-    inputRef.value?.focus()
-    scrollDown()
-  })
+  // 检测今天是否有会话，有则加载，无则新建空白窗口
+  const todayStr = new Date().toISOString().split('T')[0]  // YYYY-MM-DD
+  const todaySessions = sessionGroups.value[todayStr]
+  if (todaySessions && todaySessions.length > 0) {
+    await loadDaySessions(todaySessions)
+  } else {
+    newSession()
+  }
+
+  await nextTick()
+  inputRef.value?.focus()
+  scrollDown()
 })
 </script>
 
 <style scoped>
-/* ================================================================
-   全屏 Agent 页面样式
-   使用 .page-wrap 和 .page-main 结构与首页一致，
-   背景和宽度自动继承 layout 的 :before / :after 装饰列。
-   ================================================================ */
-
-/* ── 页面容器 ── */
-.agent-page.page-wrap {
-  display: flex;
-  justify-content: center;
-  position: relative;
-  min-height: calc(100vh - 64px - 56px);
-}
-
-.agent-page .page-main {
-  width: 60%;
-  max-width: calc(100% - 40px);
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
-  padding: 20px;
-  margin-top: 12px;
-  display: flex;
-  flex-direction: column;
-}
-
-/* ── 全屏聊天容器 ── */
-.agent-fullpage {
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - 64px - 56px - 72px - 24px);  /* navbar(64) + bottomNav(56) + page-main padding(40+bottomPadding) + mt(12) */
-  height: calc(100dvh - 64px - 56px - 72px - 24px);
+/* ── 左右布局容器 ── */
+.agent-layout {
+  display: flex !important;
+  flex-direction: row !important;
+  padding: 0 !important;
+  width: 85% !important;
+  max-width: 1100px !important;
+  height: calc(100vh - 64px - 56px - 24px);
+  height: calc(100dvh - 64px - 56px - 24px);
   overflow: hidden;
   border-radius: 12px;
   background: #fff;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
 }
 
-/* ── 顶部栏 ── */
+/* ═══ 左侧栏 ═══ */
+.sidebar {
+  width: 300px;
+  min-width: 260px;
+  border-right: 1px solid #f0f0f0;
+  display: flex;
+  flex-direction: column;
+  background: #fafafa;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid #f0f0f0;
+  flex-shrink: 0;
+}
+.sidebar-header h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.new-chat-btn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+.new-chat-btn:hover { background: #f0f0f0; }
+
+.session-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.date-divider {
+  padding: 6px 16px 4px;
+  font-size: 12px;
+  color: #999;
+  font-weight: 600;
+}
+
+.session-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-left: 3px solid transparent;
+}
+.session-item:hover { background: #f0f0f0; }
+.session-item.active {
+  background: #fff3e8;
+  border-left-color: #FF6B35;
+}
+
+.session-avatar {
+  font-size: 28px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.session-info {
+  flex: 1;
+  min-width: 0;
+}
+.session-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-preview {
+  font-size: 12px;
+  color: #999;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+.empty-sessions {
+  text-align: center;
+  color: #bbb;
+  padding: 32px 16px;
+  font-size: 14px;
+}
+
+/* ═══ 右侧聊天区 ═══ */
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 .agent-header {
   display: flex;
   align-items: center;
@@ -244,18 +479,15 @@ onMounted(() => {
   padding: 12px 16px;
   background: linear-gradient(135deg, #FF6B35, #FF8C42);
   color: white;
-  border-radius: 12px 12px 0 0;
   flex-shrink: 0;
 }
-
 .agent-header h2 {
   font-size: 16px;
   font-weight: 700;
   margin: 0;
 }
-
 .back-btn {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255,255,255,0.15);
   border: none;
   color: white;
   padding: 4px 12px;
@@ -263,24 +495,19 @@ onMounted(() => {
   font-size: 14px;
   cursor: pointer;
 }
-.back-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
-
+.back-btn:hover { background: rgba(255,255,255,0.3); }
 .clear-btn {
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.3);
   color: white;
   padding: 4px 12px;
   border-radius: 20px;
   font-size: 13px;
   cursor: pointer;
 }
-.clear-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
+.clear-btn:hover { background: rgba(255,255,255,0.3); }
 
-/* ── 聊天消息区域 ── */
+/* ── 聊天消息 ── */
 .chat-body {
   flex: 1;
   overflow-y: auto;
@@ -290,16 +517,9 @@ onMounted(() => {
   gap: 12px;
   background: #F8F9FA;
 }
+.chat-body::-webkit-scrollbar { width: 5px; }
+.chat-body::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
 
-.chat-body::-webkit-scrollbar {
-  width: 5px;
-}
-.chat-body::-webkit-scrollbar-thumb {
-  background: #ddd;
-  border-radius: 3px;
-}
-
-/* 欢迎消息 */
 .welcome {
   text-align: center;
   padding: 48px 16px 16px;
@@ -307,24 +527,15 @@ onMounted(() => {
   font-size: 14px;
   line-height: 1.8;
 }
-.welcome-icon {
-  font-size: 48px;
-  margin-bottom: 12px;
-}
+.welcome-icon { font-size: 48px; margin-bottom: 12px; }
 
-/* ── 消息行 ── */
 .msg-row {
   display: flex;
   gap: 8px;
   max-width: 85%;
 }
-.msg-row.user {
-  flex-direction: row-reverse;
-  align-self: flex-end;
-}
-.msg-row.assistant {
-  align-self: flex-start;
-}
+.msg-row.user { flex-direction: row-reverse; align-self: flex-end; }
+.msg-row.assistant { align-self: flex-start; }
 
 .msg-avatar {
   font-size: 24px;
@@ -335,7 +546,6 @@ onMounted(() => {
   text-align: center;
 }
 
-/* ── 消息气泡 ── */
 .msg-bubble {
   padding: 10px 14px;
   border-radius: 14px;
@@ -343,31 +553,58 @@ onMounted(() => {
   line-height: 1.65;
   word-break: break-word;
 }
-
 .msg-row.user .msg-bubble {
   background: linear-gradient(135deg, #FF6B35, #FF8C42);
   color: white;
   border-bottom-right-radius: 4px;
 }
-
 .msg-row.assistant .msg-bubble {
   background: white;
   color: #333;
   border: 1px solid #eee;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
   border-bottom-left-radius: 4px;
 }
+.msg-bubble strong { color: #FF6B35; }
+.msg-bubble a { color: #FF6B35; text-decoration: underline; }
 
-.msg-bubble strong {
-  color: #FF6B35;
+/* ── 日期分隔条（类似微信） ── */
+.date-separator {
+  text-align: center;
+  font-size: 12px;
+  color: #999;
+  margin: 8px 0;
+  position: relative;
+}
+.date-separator::before,
+.date-separator::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 20%;
+  height: 1px;
+  background: #e0e0e0;
+}
+.date-separator::before { left: 8%; }
+.date-separator::after { right: 8%; }
+
+/* ── 消息时间戳 ── */
+.msg-time {
+  text-align: center;
+  font-size: 11px;
+  color: #b0b0b0;
+  margin-bottom: 4px;
 }
 
-.msg-bubble a {
-  color: #FF6B35;
-  text-decoration: underline;
+/* ── 消息内容外层 ── */
+.msg-content-wrap {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
-/* ── 三点加载动画 ── */
+.order-cards-wrap { width: 100%; }
+
 .msg-bubble.loading {
   display: flex;
   align-items: center;
@@ -375,10 +612,8 @@ onMounted(() => {
   padding: 14px 18px;
   min-width: 56px;
 }
-
 .dot {
-  width: 8px;
-  height: 8px;
+  width: 8px; height: 8px;
   background: #FF6B35;
   border-radius: 50%;
   animation: bounce 1.4s infinite ease-in-out both;
@@ -386,13 +621,11 @@ onMounted(() => {
 .dot:nth-child(1) { animation-delay: -0.32s; }
 .dot:nth-child(2) { animation-delay: -0.16s; }
 .dot:nth-child(3) { animation-delay: 0s; }
-
 @keyframes bounce {
-  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  0%,80%,100% { transform: scale(0.6); opacity: 0.4; }
   40% { transform: scale(1); opacity: 1; }
 }
 
-/* ── 快捷建议 ── */
 .suggestions {
   display: flex;
   gap: 8px;
@@ -401,7 +634,6 @@ onMounted(() => {
   justify-content: center;
   flex-shrink: 0;
 }
-
 .chip {
   padding: 6px 14px;
   border-radius: 20px;
@@ -413,23 +645,17 @@ onMounted(() => {
   transition: all 0.2s;
   white-space: nowrap;
 }
-.chip:hover {
-  background: #FFF3E8;
-  border-color: #FF6B35;
-}
+.chip:hover { background: #FFF3E8; border-color: #FF6B35; }
 
-/* ── 输入区域 ── */
 .input-area {
   flex-shrink: 0;
   padding: 12px 16px;
-  /* 底部留出足够的 padding 防止被导航栏（56px）遮挡 */
   padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   background: white;
   border-top: 1px solid #f0f0f0;
   display: flex;
   align-items: center;
 }
-
 .input-field {
   flex: 1;
   border: 1px solid #e0e0e0;
@@ -443,17 +669,12 @@ onMounted(() => {
   font-family: inherit;
   transition: border-color 0.2s;
 }
-.input-field:focus {
-  border-color: #FF6B35;
-}
-.input-field:disabled {
-  background: #f5f5f5;
-}
+.input-field:focus { border-color: #FF6B35; }
+.input-field:disabled { background: #f5f5f5; }
 
 .send-btn {
   margin-left: 10px;
-  width: 42px;
-  height: 42px;
+  width: 42px; height: 42px;
   border-radius: 50%;
   border: none;
   background: linear-gradient(135deg, #FF6B35, #FF8C42);
@@ -465,33 +686,15 @@ onMounted(() => {
   flex-shrink: 0;
   transition: all 0.2s;
 }
-.send-btn:hover:not(:disabled) {
-  transform: scale(1.08);
-}
-.send-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.spin {
-  animation: rotate 1s linear infinite;
-}
-@keyframes rotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
+.send-btn:hover:not(:disabled) { transform: scale(1.08); }
+.send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.spin { animation: rotate 1s linear infinite; }
+@keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
 /* ── 移动端适配 ── */
-@media (max-width: 640px) {
-  .agent-page .page-main {
-    max-width: 100%;
-    padding: 12px;
-    border-radius: 0;
-  }
-  .agent-fullpage {
-    height: calc(100vh - 64px - 56px);
-    height: calc(100dvh - 64px - 56px);
-    border-radius: 0;
-  }
+@media (max-width: 768px) {
+  .agent-layout { width: 100% !important; flex-direction: column !important; height: auto; border-radius: 0; }
+  .sidebar { width: 100%; max-height: 200px; border-right: none; border-bottom: 1px solid #f0f0f0; }
+  .chat-main { height: calc(100vh - 64px - 56px - 200px); }
 }
 </style>

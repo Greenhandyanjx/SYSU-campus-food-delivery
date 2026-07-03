@@ -1,11 +1,13 @@
 package controller
 
 import (
+	"context"
 	"backend/global"
 	"backend/models"
 	"backend/utils"
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -13,6 +15,14 @@ import (
 )
 
 // resolveUint 尝试从多种常见类型中解析无符号整数（兼容前端可能传的数字或字符串）
+
+
+// invalidateCartCache 购物车变更时清理用户的购物车缓存
+func invalidateCartCache(ctx context.Context, userID uint) {
+	_ = utils.Del(ctx, fmt.Sprintf("cart:user:%d:full", userID))
+	_ = utils.ScanAndDeleteKeys(ctx, fmt.Sprintf("cart:user:%d:store:*", userID))
+}
+
 func resolveUint(v interface{}) (uint, bool) {
 	switch t := v.(type) {
 	case float64:
@@ -41,6 +51,15 @@ type AddToCartRequest struct {
 func GetUserCart(c *gin.Context) {
 	userID := c.MustGet("baseUserID").(uint)
 	storeID := c.Query("storeId")
+	// try cache first (only for non-store-specific request)
+	if storeID == "" {
+		var cachedFull map[string]interface{}
+		fullKey := fmt.Sprintf("cart:user:%d:full", userID)
+		if ok, _ := utils.GetJSON(context.Background(), fullKey, &cachedFull); ok {
+			c.JSON(http.StatusOK, gin.H{"code": 1, "data": cachedFull})
+			return
+		}
+	}
 	// 查询用户购物车，如果不存在则创建
 	var cart models.Cart
 	if err := global.Db.Where("user_id = ?", userID).First(&cart).Error; err != nil {
@@ -534,6 +553,7 @@ func AddToCart(c *gin.Context) {
 	}
 
 	fmt.Println("Create CartItem success")
+	invalidateCartCache(context.Background(), userID)
 	utils.Success(c, "添加成功")
 }
 
@@ -627,6 +647,7 @@ func UpdateCartItem(c *gin.Context) {
 		}
 	}
 
+	invalidateCartCache(context.Background(), userID)
 	// 返回成功响应
 	utils.Success(c, gin.H{
 		"success": true,
@@ -709,14 +730,27 @@ func SelectItem(c *gin.Context) {
 		selectedInt = 1
 	}
 
-	// 更新数据库
+	// 解析 merchantId 用于过滤
+	var merchantID uint = 0
+	if sid, err := strconv.ParseUint(storeIDStr, 10, 32); err == nil {
+		merchantID = uint(sid)
+	}
+
+	// 更新数据库（必须按 cart + dish + merchant 精确匹配）
+	whereClause := "cart_id = ? AND dish_id = ?"
+	whereArgs := []interface{}{cart.ID, dishID}
+	if merchantID != 0 {
+		whereClause += " AND merchant_id = ?"
+		whereArgs = append(whereArgs, merchantID)
+	}
 	if err := global.Db.Model(&models.CartItem{}).
-		Where("cart_id = ? AND dish_id = ?", cart.ID, dishID).
+		Where(whereClause, whereArgs...).
 		Update("selected", selectedInt).Error; err != nil {
 		utils.Error(c, err)
 		return
 	}
 
+	invalidateCartCache(context.Background(), userID)
 	// 返回成功，字段保持和前端一致
 	utils.Success(c, gin.H{
 		"storeId":  storeIDStr,
@@ -796,6 +830,7 @@ func SelectShop(c *gin.Context) {
 		}
 	}
 
+	invalidateCartCache(context.Background(), userID)
 	// 返回成功
 	utils.Success(c, gin.H{
 		"storeId":  storeIDStr,
@@ -849,6 +884,7 @@ func SelectAll(c *gin.Context) {
 		utils.Error(c, err)
 		return
 	}
+	invalidateCartCache(context.Background(), userID)
 
 	// 返回成功
 	utils.Success(c, gin.H{
@@ -878,5 +914,6 @@ func DeleteSelected(c *gin.Context) {
 		return
 	}
 
+	invalidateCartCache(context.Background(), userID)
 	utils.Success(c, gin.H{"success": true, "removed": res.RowsAffected})
 }

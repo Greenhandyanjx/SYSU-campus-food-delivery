@@ -100,10 +100,9 @@ func GetStores(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": stores})
 }
 
-// GetStoreByQuery 支持通过 id 或 name 或 base_id 查询单个店铺并返回基础信息（带缓存）
+// GetStoreByQuery 支持通过 id 或 name 或 base_id 查询店铺并返回基础信息列表（带缓存）
 func GetStoreByQuery(c *gin.Context) {
 	ctx := context.Background()
-	// prefer id, then base_id, then name
 	id := c.Query("id")
 	baseID := c.Query("base_id")
 	name := c.Query("name")
@@ -120,46 +119,41 @@ func GetStoreByQuery(c *gin.Context) {
 		return
 	}
 
-	var cached map[string]interface{}
+	var cached []map[string]interface{}
 	if ok, _ := utils.GetJSON(ctx, key, &cached); ok {
 		c.JSON(http.StatusOK, gin.H{"code": 1, "data": cached})
 		return
 	}
 
-	var m models.Merchant
-	var err error
+	var merchants []models.Merchant
 	if id != "" {
-		err = global.Db.First(&m, id).Error
+		global.Db.First(&merchants, id)
 	} else if baseID != "" {
 		var bid uint
-		// parse uint
-		_, err = fmt.Sscan(baseID, &bid)
-		if err == nil {
-			err = global.Db.Where("base_id = ?", bid).First(&m).Error
+		if _, err := fmt.Sscan(baseID, &bid); err == nil {
+			global.Db.Where("base_id = ?", bid).Find(&merchants)
 		}
 	} else {
-		err = global.Db.Where("shop_name = ?", name).First(&m).Error
-	}
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"code": 0, "msg": "merchant not found", "err": err.Error()})
-		return
+		global.Db.Where("shop_name LIKE ?", "%"+name+"%").Find(&merchants)
 	}
 
-	resp := map[string]interface{}{
-		"id":            m.ID,
-		"base_id":       m.BaseID,
-		"name":          m.ShopName,
-		"desc":          m.ShopLocation,
-		"shop_location": m.ShopLocation,
-		"logo":          m.Logo,
-		"phone":         m.Phone,
-		"menu_count":    m.MenuCount,
-		"avg_score":     m.AvgScore,
-		"score_count":   m.ScoreCount,
+	resp := make([]map[string]interface{}, 0, len(merchants))
+	for _, m := range merchants {
+		resp = append(resp, map[string]interface{}{
+			"id":            m.ID,
+			"base_id":       m.BaseID,
+			"name":          m.ShopName,
+			"desc":          m.ShopLocation,
+			"shop_location": m.ShopLocation,
+			"logo":          m.Logo,
+			"phone":         m.Phone,
+			"menu_count":    m.MenuCount,
+			"avg_score":     m.AvgScore,
+			"score_count":   m.ScoreCount,
+		})
 	}
 
-	// cache for 60s
-	go utils.SetJSON(context.Background(), key, resp, 60*time.Second)
+	go utils.SetJSON(context.Background(), key, resp, 300*time.Second)
 
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": resp})
 }
@@ -290,7 +284,7 @@ func GetStoreDishes(c *gin.Context) {
 		"meals":    mealsOut,
 	}
 
-	go utils.SetJSON(context.Background(), key, resp, 60*time.Second)
+	go utils.SetJSON(context.Background(), key, resp, 300*time.Second)
 
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": resp})
 }

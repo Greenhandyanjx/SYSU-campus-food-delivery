@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -19,25 +20,20 @@ import (
 )
 
 // 根据status查询order
+
+// invalidateOrderCache 订单状态变更时清理相关缓存
+func invalidateOrderCache(ctx context.Context, orderID int) {
+	_ = utils.Del(ctx, fmt.Sprintf("order_id=%d", orderID))
+	key := fmt.Sprintf("user:orders:detail:%d", orderID)
+	_ = utils.Del(ctx, key)
+	_ = utils.ScanAndDeleteKeys(ctx, "user:orders:*")
+}
+
 func GetOrderListByStatus(c *gin.Context) {
 	status := c.Query("status")
 	pageStr := c.Query("page")
 	sizeStr := c.Query("size")
 	// 兼容前端 `pageSize` 参数名
-	if sizeStr == "" {
-		sizeStr = c.Query("pageSize")
-	}
-	if sizeStr == "" {
-		sizeStr = c.Query("page_size")
-	}
-	// 支持前端常用的参数名 `pageSize` 和 `page_size`
-	if sizeStr == "" {
-		sizeStr = c.Query("pageSize")
-	}
-	if sizeStr == "" {
-		sizeStr = c.Query("page_size")
-	}
-	// 支持前端常用的参数名 `pageSize` 和 `page_size`
 	if sizeStr == "" {
 		sizeStr = c.Query("pageSize")
 	}
@@ -152,12 +148,7 @@ func GetOrderPage(c *gin.Context) {
 	}
 	found, err := utils.GetJSON(context.Background(), queryConditions, &cachedData)
 	if err != nil {
-		log.Printf("Redis读取错误: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code": "500",
-			"msg":  "服务器内部错误",
-		})
-		return
+		log.Printf("Redis读取错误(降级到DB): %v", err)
 	}
 	if found {
 		// 如果成功从Redis获取缓存数据，则直接返回
@@ -193,14 +184,9 @@ func GetOrderPage(c *gin.Context) {
 		Items: ordersWithDetails,
 		Total: count,
 	}
-	err = utils.SetJSON(context.Background(), queryConditions, cachedData, 5*time.Minute)
+	_ = utils.SetJSON(context.Background(), queryConditions, cachedData, 5*time.Minute)
 	if err != nil {
-		log.Printf("Redis写入错误: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code": "500",
-			"msg":  "服务器内部错误",
-		})
-		return
+		log.Printf("Redis写入错误(降级，忽略): %v", err)
 	}
 	// 返回结果（确保 items 为非 nil 的空数组）
 	itemsOut := ordersWithDetails
@@ -234,12 +220,7 @@ func GetOrderDetail(c *gin.Context) {
 	var cachedData gin.H
 	found, err := utils.GetJSON(context.Background(), queryConditions, &cachedData)
 	if err != nil {
-		log.Printf("Redis读取错误: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code": "500",
-			"msg":  "服务器内部错误",
-		})
-		return
+		log.Printf("Redis读取错误(降级到DB): %v", err)
 	}
 	if found {
 		// 如果成功从Redis获取缓存数据，则直接返回
@@ -316,22 +297,28 @@ func GetOrderDetail(c *gin.Context) {
 			"price": priceNum,
 		})
 	}
-	// 获取配送员信息（如果没有找到骑手，不应导致接口 500，前端显示“未找到骑手”即可）
+	// 并行查询骑手和商家信息（与上述数据查询互不依赖）
 	var rider models.Rider
-	result = global.Db.First(&rider, order.RiderID)
-	riderNotFound := false
-	if result.Error != nil {
-		if result.Error == gorm.ErrRecordNotFound {
-			riderNotFound = true
-		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to get rider detail", "data": nil})
-			return
-		}
-	}
-	// 构建最终返回的数据（注意：id 不再带前缀 o，使用纯数字 id）
-	// 同时返回商家信息以便前端展示
 	var merchant models.Merchant
-	_ = global.Db.First(&merchant, order.MerchantID)
+	riderNotFound := false
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		if err := global.Db.First(&rider, order.RiderID).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				riderNotFound = true
+			} else {
+				log.Printf("查询骑手信息失败: %v", err)
+				riderNotFound = true
+			}
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		_ = global.Db.First(&merchant, order.MerchantID)
+	}()
+	wg.Wait()
 	response := gin.H{
 		"code": 1,
 		"data": gin.H{
@@ -385,14 +372,9 @@ func GetOrderDetail(c *gin.Context) {
 		},
 	}
 	// 序列化数据并存入Redis
-	err = utils.SetJSON(context.Background(), queryConditions, response, 5*time.Minute)
+	_ = utils.SetJSON(context.Background(), queryConditions, response, 5*time.Minute)
 	if err != nil {
-		log.Printf("Redis写入错误: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code": "500",
-			"msg":  "服务器内部错误",
-		})
-		return
+		log.Printf("Redis写入错误(降级，忽略): %v", err)
 	}
 	// 返回结果
 	c.JSON(http.StatusOK, response)
@@ -428,6 +410,14 @@ func GetUserOrderList(c *gin.Context) {
 		return
 	}
 	baseUserID := baseUserIDIface.(uint)
+
+	// Try cache first
+	userOrderKey := fmt.Sprintf("user:orders:%d:p%d:s%d:st%s", baseUserID, page, size, status)
+	var cachedOrders map[string]interface{}
+	if ok, _ := utils.GetJSON(context.Background(), userOrderKey, &cachedOrders); ok {
+		c.JSON(http.StatusOK, gin.H{"code": 1, "data": cachedOrders})
+		return
+	}
 
 	var orders []models.Order
 	var count int64
@@ -560,6 +550,7 @@ func GetUserOrderList(c *gin.Context) {
 		})
 	}
 
+	go utils.SetJSON(context.Background(), userOrderKey, gin.H{"items": items, "total": count}, 30*time.Second)
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"items": items, "total": count}})
 }
 
@@ -583,6 +574,14 @@ func GetUserOrderDetail(c *gin.Context) {
 		return
 	}
 	baseUserID := baseUserIDIface.(uint)
+
+	// Try cache first
+	userDetailKey := fmt.Sprintf("user:orders:detail:%d", oid)
+	var cachedDetail map[string]interface{}
+	if ok, _ := utils.GetJSON(context.Background(), userDetailKey, &cachedDetail); ok {
+		c.JSON(http.StatusOK, cachedDetail)
+		return
+	}
 
 	var order models.Order
 	if err := global.Db.Preload("PayInfo").First(&order, oid).Error; err != nil {
@@ -720,6 +719,7 @@ func GetUserOrderDetail(c *gin.Context) {
 		response["data"].(gin.H)["payInfoUpdatedAt"] = order.PayInfo.UpdatedAt.Format(time.RFC3339)
 		response["data"].(gin.H)["pay_info_updated_at"] = order.PayInfo.UpdatedAt.Format(time.RFC3339)
 	}
+	go utils.SetJSON(context.Background(), userDetailKey, response, 30*time.Second)
 	c.JSON(http.StatusOK, response)
 }
 
@@ -800,7 +800,7 @@ func OrderAccept(c *gin.Context) {
 		return
 	}
 	// 触发配送流程（这里假设配送流程是一个简单的消息通知）
-	triggerDeliveryProcess(order)
+	invalidateOrderCache(context.Background(), int(order.ID))
 	c.JSON(http.StatusOK, gin.H{
 		"code": 1,
 		"data": gin.H{"success": true},
@@ -1043,6 +1043,7 @@ func OrderReject(c *gin.Context) {
 		return
 	}
 	// 通知用户（这里假设通知用户是一个简单的消息通知）
+	invalidateOrderCache(context.Background(), orderID)
 	notifyUser(order, reason)
 	// 返回结果
 	c.JSON(http.StatusOK, gin.H{
@@ -1166,6 +1167,7 @@ func OrderCancel(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to update order", "data": nil})
 		return
 	}
+	invalidateOrderCache(context.Background(), orderID)
 	notifyUser(order, reason)
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"success": true}})
 }
@@ -1201,6 +1203,14 @@ func UpdateOrderNotes(c *gin.Context) {
 		return
 	}
 	baseUserID := baseUserIDIface.(uint)
+
+	// Try cache first
+	userDetailKey := fmt.Sprintf("user:orders:detail:%d", oid)
+	var cachedDetail map[string]interface{}
+	if ok, _ := utils.GetJSON(context.Background(), userDetailKey, &cachedDetail); ok {
+		c.JSON(http.StatusOK, cachedDetail)
+		return
+	}
 
 	var order models.Order
 	if err := global.Db.First(&order, oid).Error; err != nil {
@@ -1301,6 +1311,7 @@ func OrderDelivery(c *gin.Context) {
 		return
 	}
 	// 触发配送流程（这里假设配送流程是一个简单的消息通知）
+	invalidateOrderCache(context.Background(), orderID)
 	triggerDeliveryProcess(order)
 	// 返回结果
 	c.JSON(http.StatusOK, gin.H{
@@ -1406,12 +1417,17 @@ func OrderComplete(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"code": 1, "message": "sales stats updated successfully"})
-	// 返回结果
+		invalidateOrderCache(context.Background(), orderID)
 	c.JSON(http.StatusOK, gin.H{
 		"code": 1,
 		"msg":  "success",
 	})
+
+
+
+
+
+
 }
 
 func Orderadd(c *gin.Context) {
@@ -2052,7 +2068,7 @@ func PaymentNotify(c *gin.Context) {
 	c.String(http.StatusOK, "success")
 }
 
-// CancelOrder 用户取消订单（删除订单及相关明细）
+// CancelOrder 用户取消订单（将状态置为已取消，不再硬删除）
 func CancelOrder(c *gin.Context) {
 	var body struct {
 		ID interface{} `json:"id"`
@@ -2061,7 +2077,6 @@ func CancelOrder(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid request body", "data": nil})
 		return
 	}
-	// parse id
 	var oid int
 	switch v := body.ID.(type) {
 	case float64:
@@ -2077,13 +2092,20 @@ func CancelOrder(c *gin.Context) {
 		return
 	}
 
-	// auth
 	baseUserIDIface, exists := c.Get("baseUserID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"code": 0, "message": "not authenticated"})
 		return
 	}
 	baseUserID := baseUserIDIface.(uint)
+
+	// Try cache first
+	userDetailKey := fmt.Sprintf("user:orders:detail:%d", oid)
+	var cachedDetail map[string]interface{}
+	if ok, _ := utils.GetJSON(context.Background(), userDetailKey, &cachedDetail); ok {
+		c.JSON(http.StatusOK, cachedDetail)
+		return
+	}
 
 	var order models.Order
 	if err := global.Db.First(&order, oid).Error; err != nil {
@@ -2099,31 +2121,35 @@ func CancelOrder(c *gin.Context) {
 		return
 	}
 
-	tx := global.Db.Begin()
-	// delete order_meals and order_dishes
-	_ = tx.Where("order_id = ?", order.ID).Delete(&models.OrderMeal{}).Error
-	_ = tx.Where("order_id = ?", order.ID).Delete(&models.OrderDish{}).Error
-	// delete order
-	if err := tx.Delete(&models.Order{}, order.ID).Error; err != nil {
-		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to delete order"})
+	// 只允许取消待支付(status=1)或已支付/待接单(status=2)的订单
+	if order.Status != 1 && order.Status != 2 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "该订单状态不允许取消", "data": nil})
 		return
 	}
 
-	// If associated payinfo has no other orders, mark expired
-	var pay models.PayInfo
+	// 改为软取消：将状态置为 6（已取消），而非硬删除
+	invalidateOrderCache(context.Background(), oid)
+	order.Status = 6
+	if err := global.Db.Save(&order).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "failed to cancel order", "data": nil})
+		return
+	}
+
+	// 如果有关联的支付记录且无其他有效订单，标记为 expired
 	if order.PayInfoid != 0 {
-		if err := tx.First(&pay, order.PayInfoid).Error; err == nil {
-			var cnt int64
-			tx.Model(&models.Order{}).Where("pay_infoid = ?", pay.ID).Count(&cnt)
-			if cnt == 0 {
-				pay.Status = "expired"
-				_ = tx.Save(&pay).Error
+		var pay models.PayInfo
+		if err := global.Db.First(&pay, order.PayInfoid).Error; err == nil {
+			if pay.Status == "pending" {
+				var cnt int64
+				global.Db.Model(&models.Order{}).Where("pay_infoid = ? AND status != 6", pay.ID).Count(&cnt)
+				if cnt == 0 {
+					pay.Status = "expired"
+					_ = global.Db.Save(&pay).Error
+				}
 			}
 		}
 	}
 
-	_ = tx.Commit().Error
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"success": true}})
 }
 
@@ -2157,6 +2183,14 @@ func PayOrder(c *gin.Context) {
 		return
 	}
 	baseUserID := baseUserIDIface.(uint)
+
+	// Try cache first
+	userDetailKey := fmt.Sprintf("user:orders:detail:%d", oid)
+	var cachedDetail map[string]interface{}
+	if ok, _ := utils.GetJSON(context.Background(), userDetailKey, &cachedDetail); ok {
+		c.JSON(http.StatusOK, cachedDetail)
+		return
+	}
 
 	var order models.Order
 	if err := global.Db.First(&order, oid).Error; err != nil {
@@ -2227,6 +2261,7 @@ func PayOrder(c *gin.Context) {
 	}
 	// 在本地测试/伪支付路径也触发商家通知（与 PaymentNotify 保持一致）
 	go notifyMerchantOrderPending(order)
+	invalidateOrderCache(context.Background(), oid)
 
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"success": true}})
 }
@@ -2308,6 +2343,14 @@ func UpdateOrderAddress(c *gin.Context) {
 		return
 	}
 	baseUserID := baseUserIDIface.(uint)
+
+	// Try cache first
+	userDetailKey := fmt.Sprintf("user:orders:detail:%d", oid)
+	var cachedDetail map[string]interface{}
+	if ok, _ := utils.GetJSON(context.Background(), userDetailKey, &cachedDetail); ok {
+		c.JSON(http.StatusOK, cachedDetail)
+		return
+	}
 
 	var order models.Order
 	if err := global.Db.First(&order, oid).Error; err != nil {
