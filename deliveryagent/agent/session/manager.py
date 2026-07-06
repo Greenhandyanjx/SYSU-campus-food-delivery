@@ -565,22 +565,30 @@ class SessionManager:
             try:
                 data = await self._pg.load(key)
                 if data:
-                    session = Session(
-                        key=data["key"],
-                        messages=data["messages"],
-                        created_at=data["created_at"],
-                        updated_at=data["updated_at"],
-                        metadata=data["metadata"],
-                        last_consolidated=data["last_consolidated"],
-                    )
-                    self._cache[key] = session
-                    # 同步写入 Redis 缓存（下次查 L2 就能命中）
-                    if self._redis:
-                        await self._redis.set_session_cache(
-                            key, self._session_to_cache_dict(session)
+                    if data["messages"]:
+                        # 正常情况：PG 有消息数据，直接使用
+                        session = Session(
+                            key=data["key"],
+                            messages=data["messages"],
+                            created_at=data["created_at"],
+                            updated_at=data["updated_at"],
+                            metadata=data["metadata"],
+                            last_consolidated=data["last_consolidated"],
                         )
-                    logger.debug(f"[SessionManager] 从 PG 加载会话 {key}")
-                    return session
+                        self._cache[key] = session
+                        # 同步写入 Redis 缓存（下次查 L2 就能命中）
+                        if self._redis:
+                            await self._redis.set_session_cache(
+                                key, self._session_to_cache_dict(session)
+                            )
+                        logger.debug(f"[SessionManager] 从 PG 加载会话 {key}")
+                        return session
+                    else:
+                        # PG 有会话行但消息为空——可能是 asave 残留的空会话，
+                        # 继续查 JSONL（L4），JSONL 保底数据更可靠
+                        logger.debug(
+                            f"[SessionManager] PG 会话 {key} 消息为空，尝试 JSONL"
+                        )
             except Exception as e:
                 logger.warning(f"[SessionManager] PG 加载失败，尝试 JSONL: {e}")
 
@@ -684,6 +692,82 @@ class SessionManager:
                 logger.warning(f"[SessionManager] PG 列出会话失败，回退 JSONL: {e}")
         return self._jsonl.list_sessions()
 
+    async def alist_user_sessions(self, username: str) -> list[dict]:
+        """
+        异步列出指定用户的所有会话。
+
+        从 PG + JSONL 两边合并去重，按 updated_at 降序排列。
+        这样在 JSONL 数据尚未迁移到 PG 时，旧会话依然可见。
+        """
+        seen: set[str] = set()
+        result: list[dict] = []
+
+        # 1. 从 PG 获取
+        if self._pg:
+            try:
+                pg_result = await self._pg.list_user_sessions(username)
+                for s in pg_result:
+                    key = s.get("key", "")
+                    if key and key not in seen:
+                        seen.add(key)
+                        result.append(s)
+            except Exception as e:
+                logger.warning(f"[SessionManager] PG 列出用户会话失败: {e}")
+
+        # 2. 从 JSONL 获取（补全 PG 没有的会话）
+        for s in self._list_jsonl_user_sessions(username):
+            key = s.get("key", "")
+            if key and key not in seen:
+                seen.add(key)
+                result.append(s)
+
+        # 按 updated_at 降序
+        result.sort(key=lambda x: x.get("updated_at", ""), reverse=True)
+        return result
+
+    def _list_jsonl_user_sessions(self, username: str) -> list[dict]:
+        """JSONL 文件扫描回退：按前缀 u_{username}_ 扫描会话文件"""
+        prefix = f"u_{username}_"
+        sessions: list[dict] = []
+        for fpath in sorted(self.sessions_dir.glob(f"{prefix}*.jsonl"), reverse=True):
+            try:
+                with open(fpath, encoding="utf-8") as f:
+                    first = f.readline().strip()
+                    meta = json.loads(first) if first else {}
+                    preview = ""
+                    msg_count = 0
+                    pending_user = False
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            msg = json.loads(line)
+                            role = msg.get("role", "")
+                            if role == "user":
+                                pending_user = True
+                                content = msg.get("content", "") or ""
+                                if content:
+                                    preview = content[:120]
+                            elif role == "assistant":
+                                content = msg.get("content", "") or ""
+                                if content and pending_user:
+                                    msg_count += 1
+                                    pending_user = False
+                        except json.JSONDecodeError:
+                            continue
+                sessions.append({
+                    "key": meta.get("key", ""),
+                    "created_at": meta.get("created_at", ""),
+                    "updated_at": meta.get("updated_at", ""),
+                    "last_message": preview,
+                    "message_count": msg_count,
+                })
+            except Exception as e:
+                logger.debug(f"[SessionManager] 读取会话文件失败 {fpath.name}: {e}")
+                continue
+        return sessions
+
     # ─── 缓存专用工具 ───────────────────────────────
 
     @staticmethod
@@ -695,12 +779,32 @@ class SessionManager:
         - 避免序列化全部消息（可能几百条，浪费带宽）
         - 只保留最近 50 条（Redis 内存有限，且 LLM 通常只看最近 N 条）
         - 确保存储格式是纯 JSON 可序列化的（Session 中的 datetime 需要转字符串）
+
+        时间戳规范化：
+        loop.py 中 entry.setdefault("timestamp", time.time()) 写入的
+        是 Unix 浮点数，而 PG 返回的是 datetime 对象转的 ISO 字符串。
+        Redis 缓存中统一存 ISO 格式，避免下游消费时类型混乱。
         """
         MAX_CACHED_MESSAGES = 50
         messages = session.messages[-MAX_CACHED_MESSAGES:] if len(session.messages) > MAX_CACHED_MESSAGES else session.messages
+
+        # 规范化每条消息的时间戳为 ISO 字符串
+        normalized = []
+        for m in messages:
+            if "timestamp" in m:
+                ts = m["timestamp"]
+                if isinstance(ts, (int, float)):
+                    # Unix 时间戳 → ISO 字符串
+                    m = {**m, "timestamp": datetime.fromtimestamp(ts).isoformat()}
+                elif hasattr(ts, "isoformat"):
+                    # datetime 对象 → ISO 字符串
+                    m = {**m, "timestamp": ts.isoformat()}
+                # str 类型保持不变（已经是 ISO 或数值字符串）
+            normalized.append(m)
+
         return {
             "key": session.key,
-            "messages": messages,
+            "messages": normalized,
             "created_at": session.created_at.isoformat(),
             "updated_at": session.updated_at.isoformat(),
             "metadata": session.metadata,

@@ -288,6 +288,22 @@ class PgBackend:
         """  # noqa: E501
         import asyncio
 
+        total = len(messages)
+
+        # 无消息且 PG 中无记录 → 跳过保存，避免产生空会话行
+        if total == 0:
+            try:
+                conn = await self._get_connection()
+                count = await conn.fetchval(
+                    "SELECT COUNT(*) FROM messages WHERE session_key = $1", key
+                )
+                await self._pool.release(conn)
+                if (count or 0) == 0:
+                    return True
+            except Exception:
+                pass  # 查询失败则继续执行正常保存流程
+        # fall through to normal save if messages exist or PG has existing data
+
         max_retries = 3
         for attempt in range(max_retries):
             conn = await self._get_connection()
@@ -311,7 +327,6 @@ class PgBackend:
                         "SELECT COUNT(*) FROM messages WHERE session_key = $1", key
                     )
                     count = count or 0
-                    total = len(messages)
 
                     # ── Step 3: 确定需要写入的消息 ──
                     if total >= count:
@@ -395,6 +410,57 @@ class PgBackend:
         except Exception as e:
             logger.warning(f"[PgBackend] 删除会话 {key} 失败: {e}")
             return False
+        finally:
+            await self._pool.release(conn)
+
+    async def list_user_sessions(self, username: str) -> list[dict]:
+        """
+        列出某个用户的所有会话，包含最后一条消息预览。
+
+        使用 SQL LIKE 模糊匹配 key 前缀 u:{username}:%
+        每个会话额外查询最后一条 user/assistant 消息作为预览。
+
+        参数:
+            username: 用户名（从 JWT 提取）
+
+        返回:
+            [{"key", "created_at", "updated_at", "last_message"}, ...]
+            按 updated_at 降序排列
+        """
+        pattern = f"u:{username}:%"
+        conn = await self._get_connection()
+        try:
+            rows = await conn.fetch("""
+                SELECT s.key, s.created_at, s.updated_at,
+                       (SELECT content FROM messages
+                        WHERE session_key = s.key
+                          AND role IN ('user', 'assistant')
+                          AND content != ''
+                        ORDER BY id DESC LIMIT 1) as last_message,
+                       (SELECT COUNT(*) FROM messages m1
+                        WHERE m1.session_key = s.key AND m1.role = 'user'
+                          AND EXISTS (SELECT 1 FROM messages m2
+                                       WHERE m2.session_key = m1.session_key
+                                         AND m2.id > m1.id
+                                         AND m2.role = 'assistant'
+                                         AND m2.content != '')) as message_count
+                FROM sessions s
+                WHERE s.key LIKE $1
+                ORDER BY s.updated_at DESC
+            """, pattern)
+            return [
+                {
+                    "key": r["key"],
+                    "created_at": r["created_at"].isoformat(),
+                    "updated_at": r["updated_at"].isoformat(),
+                    "last_message": r["last_message"] or "",
+                    "message_count": r["message_count"] or 0,
+                }
+                for r in rows
+            ]
+        except Exception as e:
+            logger.warning(f"[PgBackend] 列出用户 {username} 会话失败: {e}")
+            return []
         finally:
             await self._pool.release(conn)
 

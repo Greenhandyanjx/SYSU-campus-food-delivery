@@ -16,7 +16,7 @@ database:
   # 格式: postgresql://user:password@host:port/dbname
   # Docker 内: postgresql://jdagent:devpassword@postgres:5432/jdagent
   # 本地开发: postgresql://jdagent:devpassword@localhost:5432/jdagent
-  dsn: null
+  dsn: postgresql://jdagent:devpassword@localhost:5432/jdagent
 
   # 连接池：最小/最大连接数
   pool_min_size: 1

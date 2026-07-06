@@ -41,6 +41,7 @@ from agent.memory.context_builder import ContextBuilder
 from agent.memory.memory_store import MemoryConsolidator
 from agent.memory.dream import Dream
 from agent.memory.chat_memory import ChatMemory
+from agent.memory.user_profile import UserProfileStore
 from agent.skills.manager import SkillManager
 from agent.skills.loader import SkillLoader
 
@@ -177,6 +178,9 @@ class AgentLoop:
         self.chat_memory = ChatMemory(workspace=workspace)
         self.dream = self.chat_memory.dream
 
+        # 用户画像存储（个性化记忆）
+        self.user_profiles = UserProfileStore(workspace)
+
         # MQ Producer（由 Orchestrator 注入）
         # 用于将非关键路径任务（Dream/Consolidation）投递到 RabbitMQ
         self.mq_producer = None
@@ -287,6 +291,9 @@ class AgentLoop:
         tools_used: list[str] = []
         _cache_miss = False          # track iteration-1 cache miss for stampede protection
         _stampede_lock_name = None   # distributed lock name for stampede protection
+        # 收集当前 ReAct 循环中产生的订单卡片（按 orderId 去重）
+        _order_cards: list[str] = []
+        _seen_card_ids: set = set()
 
         while iteration < self.max_iterations:
             iteration += 1
@@ -460,6 +467,20 @@ class AgentLoop:
                         messages, tool_call.id, tool_call.name, result
                     )
 
+                # 从工具结果中提取 ORDER_CARD 数据（本循环内去重，同 orderId 替换为新卡）
+                _extracted_cards = self._extract_order_cards_from_result(results)
+                logger.info(f"[Agent] ORDER_CARDS: iteration={iteration}, results_count={len(results)}, extracted={len(_extracted_cards)}, seen_ids={_seen_card_ids}")
+                for oid, card_text in _extracted_cards:
+                    if oid not in _seen_card_ids:
+                        _seen_card_ids.add(oid)
+                        _order_cards.append(card_text)
+                    else:
+                        # 同 orderId 已存在，新数据（来自更晚的工具调用）更完整，替换之
+                        for i, existing in enumerate(_order_cards):
+                            if f'"orderId": {oid}' in existing or f'"orderId":"{oid}"' in existing:
+                                _order_cards[i] = card_text
+                                break
+
                 # 释放分布式锁（工具执行路径走到这里，解锁后继续下一轮迭代）
                 if _stampede_lock_name:
                     await self.redis_cache.unlock(_stampede_lock_name)
@@ -489,6 +510,13 @@ class AgentLoop:
                     await self.redis_cache.unlock(_stampede_lock_name)
                     _stampede_lock_name = None
                 final_content = response.content
+
+                # 自动追加 ORDER_CARD 标记（从本轮工具执行结果中提取）
+                # LLM 经常忽略将其包含在回复中的指令，所以程序化追加确保前端能渲染订单卡片
+                # 但如果 LLM 已经包含了卡片（响应中已有 [ORDER_CARD_START]），则不再重复添加
+                logger.info(f"[Agent] ORDER_CARDS_FINAL: _order_cards={len(_order_cards)}, seen_ids={_seen_card_ids}")
+                if _order_cards and "[ORDER_CARD_START]" not in (final_content or ""):
+                    final_content = (final_content or "") + "\n\n" + "\n\n".join(_order_cards)
                 break
 
         # 超过最大迭代次数
@@ -500,6 +528,80 @@ class AgentLoop:
             )
 
         return final_content, tools_used, messages
+
+    # ─── 辅助方法 ──────────────────────────────
+
+    @staticmethod
+    def _get_username_from_session_key(session_key: str) -> str | None:
+        """
+        从会话 key 中提取用户名。
+
+        会话 key 格式: u:{username}:{session_id}
+        如果不符合此格式（如 cli:direct），返回 None。
+        """
+        if session_key.startswith("u:"):
+            parts = session_key.split(":", 2)
+            if len(parts) == 3 and parts[1]:
+                return parts[1]
+        return None
+
+    async def _extract_preferences_async(self, username: str, messages: list[dict]) -> None:
+        """
+        异步提取用户偏好（后台任务，不阻塞响应）。
+
+        分析最近几轮对话，提取用户的饮食偏好、忌口等，
+        增量合并到用户的画像文件中。
+
+        仅在用户有实际对话内容时才提取，避免空会话触发无意义调用。
+        """
+        if not username or not messages:
+            return
+
+        try:
+            # 取最近 4 条 user/assistant 消息（约 2 轮对话）
+            recent = []
+            for m in messages:
+                if m.get("role") in ("user", "assistant"):
+                    content = m.get("content", "")
+                    if content and len(content) < 800:
+                        recent.append(f"{m['role']}: {content}")
+
+            if len(recent) < 2:
+                return
+
+            dialogue = "\n".join(recent)
+            prompt = f"""从以下对话中提取用户的饮食偏好，以 JSON 格式返回（只返回纯 JSON，不要其他内容）：
+
+{{
+  "cuisines": [],        // 用户喜欢的菜系，如 ["粤菜", "日料", "川菜"]
+  "dislikes": [],        // 用户不吃的、忌口的、过敏的，如 ["辣", "香菜", "海鲜"]
+  "favorite_stores": [], // 用户常去的店铺ID（数字），如 [12, 35]
+  "price_range": "",     // 价格偏好："经济" / "中等" / "高端"，不明确则留空
+  "notes": ""            // 其他有用的饮食偏好信息，如"喜欢尝试新店""喜欢奶茶"等
+}}
+
+对话：
+{dialogue}
+
+JSON："""
+
+            response = await self.provider.chat_with_retry(
+                messages=[{"role": "user", "content": prompt}],
+                model=self.model,
+            )
+
+            content = response.content.strip() if response.content else ""
+            if "{" in content and "}" in content:
+                import json as _json
+                json_str = content[content.index("{"):content.rindex("}") + 1]
+                updates = _json.loads(json_str)
+                # 只保留我们关心的字段
+                filtered = {k: updates.get(k) for k in ["cuisines", "dislikes", "favorite_stores", "price_range", "notes"] if k in updates}
+                if any(v for v in filtered.values()):
+                    self.user_profiles.merge(username, filtered)
+                    logger.info(f"[Profile] 已更新 {username} 偏好: {filtered}")
+        except Exception as e:
+            logger.debug(f"[Profile] 提取偏好跳过: {e}")
 
     # ─── 消息处理工具方法 ────────────────────
 
@@ -542,6 +644,68 @@ class AgentLoop:
             "content": content,
         })
         return messages
+
+    @staticmethod
+    def _extract_order_cards(messages: list[dict]) -> str:
+        """从工具结果消息中提取 ORDER_CARD 标记并拼接。
+
+        循环扫描所有 tool 角色的消息，查找匹配 [ORDER_CARD_START]...[ORDER_CARD_END]
+        或老格式 <!--ORDER_CARD-->...<!--END--> 的标记，拼接所有卡片内容返回。
+        这使得前端能可靠地渲染交互式订单卡片，不依赖 LLM 是否遵守提示词规则。
+
+        注意：messages 可能包含多轮历史中的工具结果，因此按 orderId 去重。
+        """
+        import re
+        import json as _json
+        seen_ids: set = set()
+        cards: list[str] = []
+        pattern = r'(?:\[ORDER_CARD_START\]|<!--ORDER_CARD-->)([\s\S]*?)(?:\[ORDER_CARD_END\]|<!--END-->)'
+        for msg in messages:
+            if msg.get("role") == "tool":
+                content = msg.get("content", "")
+                found = re.findall(pattern, content)
+                for card_json in found:
+                    json_str = card_json.strip()
+                    try:
+                        data = _json.loads(json_str)
+                        oid = data.get("orderId")
+                        if oid is not None and oid not in seen_ids:
+                            seen_ids.add(oid)
+                            cards.append(f"[ORDER_CARD_START]\n{json_str}\n[ORDER_CARD_END]")
+                    except Exception:
+                        pass
+        return "\n\n".join(cards) if cards else ""
+
+    @staticmethod
+    def _extract_order_cards_from_result(results: list) -> list[tuple]:
+        """从工具执行结果中提取 ORDER_CARD 数据。
+
+        对每个结果字符串扫描 [ORDER_CARD_START]...[ORDER_CARD_END] 标记，
+        返回 [(orderId, card_text), ...] 列表供调用方去重和拼接。
+
+        Args:
+            results: 工具执行结果列表（字符串或异常）
+
+        Returns:
+            去重前的 [(orderId, card_text)] 列表
+        """
+        import re
+        import json as _json
+        extracted: list[tuple] = []
+        pattern = r'(?:\[ORDER_CARD_START\]|<!--ORDER_CARD-->)([\s\S]*?)(?:\[ORDER_CARD_END\]|<!--END-->)'
+        for r in results:
+            content = str(r) if not isinstance(r, BaseException) else ""
+            found = re.findall(pattern, content)
+            for card_json in found:
+                json_str = card_json.strip()
+                try:
+                    data = _json.loads(json_str)
+                    oid = data.get("orderId")
+                    if oid is not None:
+                        extracted.append((oid, f"[ORDER_CARD_START]\n{json_str}\n[ORDER_CARD_END]"))
+                except Exception:
+                    pass
+        return extracted
 
     # ─── 主循环 ─────────────────────────────
 
@@ -649,10 +813,14 @@ class AgentLoop:
         # 获取或创建 session（异步：优先从 PG 加载）
         session = await self.sessions.aget_or_create(msg.session_key)
 
+        # ── 提取用户名 + 加载用户画像 ──
+        username = self._get_username_from_session_key(msg.session_key)
+        user_profile = self.user_profiles.get(username) if username else None
+
         # ── 技能匹配：根据用户意图匹配最相关的技能 ──
         skill_context = await self._match_skills(msg.content)
 
-        # 构建初始消息（ContextBuilder 统管身份 + 长期记忆 + 中期记忆 + 技能上下文）
+        # 构建初始消息（ContextBuilder 统管身份 + 长期记忆 + 中期记忆 + 技能上下文 + 用户画像）
         history = session.get_history(max_messages=30)
         initial_messages = self.context.build_messages(
             history=history,
@@ -662,6 +830,7 @@ class AgentLoop:
             chat_id=msg.chat_id,
             chat_memory=self.chat_memory,  # 注入中期记忆摘要
             skill_context=skill_context,   # 注入技能上下文
+            user_profile=user_profile,     # 注入用户偏好画像
         )
 
         # 运行 ReAct 循环
@@ -683,6 +852,10 @@ class AgentLoop:
         # 使 LLM 缓存失效：新消息意味着对话上下文已变，旧缓存不再适用
         if self.redis_cache:
             await self.redis_cache.invalidate_llm_cache(msg.session_key)
+
+        # ── 后台偏好提取（不阻塞用户响应）──
+        if username:
+            asyncio.create_task(self._extract_preferences_async(username, all_msgs))
 
         # ── 后台任务（异步执行，不阻塞用户响应）──
         if self.mq_producer:

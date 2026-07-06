@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from agent.memory.memory_store import MemoryStore
+from utils.prompt_loader import load_system_prompts
 
 if TYPE_CHECKING:
     from agent.memory.chat_memory import ChatMemory
@@ -40,14 +41,23 @@ class ContextBuilder:
     def build_system_prompt(self) -> str:
         """
         构建完整的 System Prompt。
-        
+
         顺序：
         1. 核心身份（名称 + 运行时信息）
-        2. Workspace 文件（AGENTS.md 等）
-        3. 长期记忆（MEMORY.md）
-        4. 平台策略
+        2. 主提示词（main_prompt.txt，含业务规则和工具说明）
+        3. Workspace 文件（AGENTS.md 等）
+        4. 长期记忆（MEMORY.md）
+        5. 平台策略
         """
         parts = [self._get_identity()]
+
+        # 加载主提示词（main_prompt.txt），提供业务规则和工具使用说明
+        try:
+            main_prompt = load_system_prompts()
+            if main_prompt:
+                parts.append(main_prompt)
+        except Exception:
+            pass
 
         # 读取 workspace 文件
         bootstrap = self._load_bootstrap_content()
@@ -70,6 +80,7 @@ class ContextBuilder:
         chat_id: str = "direct",
         chat_memory: "ChatMemory | None" = None,
         skill_context: str | None = None,
+        user_profile: dict | None = None,
     ) -> list[dict[str, Any]]:
         """
         构建发送给 LLM 的完整消息列表。
@@ -82,6 +93,7 @@ class ContextBuilder:
         3. 长期记忆（MEMORY.md）
         4. 中期记忆（history.jsonl 摘要，传入 chat_memory 时生效）
         5. 技能上下文（传入 skill_context 时生效）
+        6. 用户画像（传入 user_profile 时生效）
 
         参数：
             history: Session 中的历史消息
@@ -91,6 +103,7 @@ class ContextBuilder:
             chat_id: 会话ID
             chat_memory: 传入后自动注入中期记忆摘要到 system prompt
             skill_context: 传入后自动注入技能上下文到 system prompt
+            user_profile: 传入后自动注入用户偏好画像到 system prompt
         """
         # 构建 system prompt
         system_prompt = self.build_system_prompt()
@@ -104,6 +117,12 @@ class ContextBuilder:
         # 注入技能上下文
         if skill_context:
             system_prompt += "\n\n" + skill_context
+
+        # 注入用户画像
+        if user_profile:
+            profile_section = self._build_profile_section(user_profile)
+            if profile_section:
+                system_prompt += "\n\n" + profile_section
 
         # 如果有 media 信息，追加到 system prompt
         if media:
@@ -144,6 +163,42 @@ class ContextBuilder:
         if not summary_lines:
             return ""
         return "# 对话历史摘要\n\n" + "\n\n".join(summary_lines)
+
+    @staticmethod
+    def _build_profile_section(profile: dict) -> str:
+        """构建用户画像部分的 System Prompt。"""
+        if not profile:
+            return ""
+
+        # 检查是否有实际数据
+        has_data = False
+        for key, value in profile.items():
+            if key == "updated_at":
+                continue
+            if isinstance(value, list) and value:
+                has_data = True
+                break
+            if isinstance(value, str) and value.strip():
+                has_data = True
+                break
+        if not has_data:
+            return ""
+
+        lines = ["## 用户偏好画像", "以下是你对这位用户的了解，请用这些信息个性化你的回复："]
+        if profile.get("cuisines"):
+            lines.append(f"- 偏好菜系：{'、'.join(profile['cuisines'])}")
+        if profile.get("dislikes"):
+            lines.append(f"- 忌口/不喜欢的：{'、'.join(profile['dislikes'])}")
+        if profile.get("favorite_stores"):
+            store_ids = [str(s) for s in profile['favorite_stores']]
+            lines.append(f"- 常去店铺：ID {'、'.join(store_ids)}")
+        if profile.get("price_range"):
+            lines.append(f"- 价格偏好：{profile['price_range']}")
+        if profile.get("notes"):
+            lines.append(f"- 备注：{profile['notes']}")
+
+        lines.append("\n推荐菜品和店铺时请优先考虑以上偏好。偏好可能随时间变化，以用户最新要求为准。")
+        return "\n".join(lines)
 
     def _get_identity(self) -> str:
         """构建核心身份部分"""
