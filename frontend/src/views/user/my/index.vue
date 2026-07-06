@@ -11,7 +11,7 @@
             </el-avatar>
             <div class="info">
               <div class="name">{{ username }}</div>
-              <div class="meta">会员：<span class="vip">普通用户</span> · 积分 <strong>{{ points }}</strong></div>
+              <div class="meta">会员：<span class="vip">普通用户</span> · 积分 <strong>{{ points }}</strong> · 余额 <strong style="color:#f59e0b">¥{{ walletBalance.toFixed(2) }}</strong></div>
               <div class="quick-links">
                 <div class="badge"><img :src="vipIcon" alt="vip" @error="onImgError"/> 会员中心</div>
                 <div class="badge"><img :src="pointsIcon" alt="points" @error="onImgError"/> 积分</div>
@@ -100,6 +100,7 @@ const points = ref(0)
 const orderCount = ref(0)
 const couponCount = ref(0)
 const unreadSupport = ref(0)
+const walletBalance = ref(0)
 
 onMounted(async () => {
   const p = await myApi.getProfile()
@@ -107,6 +108,7 @@ onMounted(async () => {
   points.value = p.points || 0
   orderCount.value = p.orderCount || 0
   couponCount.value = p.couponCount || 0
+  walletBalance.value = p.walletBalance || 0
   // avatar
   avatar.value = p.avatar_url || p.avatar || ''
   if (avatar.value) localStorage.setItem('avatar', avatar.value)

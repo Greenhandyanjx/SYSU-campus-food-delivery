@@ -15,8 +15,9 @@ DELIVERY_BACKEND_URL = os.environ.get(
     "http://localhost:3000",
 )
 
-# 系统中可用的商家 base_id 列表（来自数据库 merchants 表）
-AVAILABLE_MERCHANT_IDS = [1, 4, 9, 10, 42, 68, 69, 70, 71, 72, 73, 74, 75]
+# 系统中可用的商家 ID 列表（Merchant.id，即店铺ID，非 base_id）
+# 通过 GET /api/user/stores 返回的 id 字段获取
+AVAILABLE_MERCHANT_IDS = [1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13]
 
 # 菜品推荐最大请求数量（每个商家）
 DISHES_PAGE_SIZE = 50

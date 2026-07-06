@@ -51,6 +51,19 @@ func Initalldb() error {
 		return nil
 	}
 
+	// Wallet tables
+	if err := migrate("UserWallet", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.UserWallet{})
+	}); err != nil {
+		return err
+	}
+
+	if err := migrate("WalletTransaction", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.WalletTransaction{})
+	}); err != nil {
+		return err
+	}
+
 	// 1. dish + flavor
 	if err := migrate("Dish + Flavor", func(db *gorm.DB) error {
 		return db.AutoMigrate(&models.Dish{}, &models.Flavor{})
@@ -294,5 +307,18 @@ func Initalldb() error {
 		return err
 	}
 
+
+	// ==== User Wallet ====
+	if err := migrate("UserWallet", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.UserWallet{})
+	}); err != nil {
+		return err
+	}
+
+	if err := migrate("WalletTransaction", func(db *gorm.DB) error {
+		return db.AutoMigrate(&models.WalletTransaction{})
+	}); err != nil {
+		return err
+	}
 	return nil
 }

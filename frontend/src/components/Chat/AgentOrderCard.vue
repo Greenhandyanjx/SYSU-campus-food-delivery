@@ -153,6 +153,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   sendMessage: [text: string]
+  modifyAddress: [orderId: number | string]
 }>()
 
 const router = useRouter()
@@ -204,9 +205,9 @@ function reviewOrder() {
   router.push(`/user/review/${props.data.orderId}`)
 }
 
-// 修改地址
+// 修改地址 — 发出事件，由父组件（聊天页）弹窗处理
 function modifyAddress() {
-  router.push(`/user/address`)
+  emit('modifyAddress', props.data.orderId)
 }
 
 // 联系商家

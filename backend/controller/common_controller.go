@@ -115,7 +115,12 @@ func GetUserProfile(c *gin.Context) {
 	// couponCount 暂时返回 0（或你可以接入 coupons 表）
 	couponCount := 0
 
-	// points 固定为 120（满足当前需求）
+	// 获取钱包余额
+	walletBalance := 0.0
+	var wallet models.UserWallet
+	if err := global.Db.Where("user_id = ?", baseUserID).First(&wallet).Error; err == nil {
+		walletBalance = wallet.Balance
+	}
 	points := 120
 
 	utils.Success(c, gin.H{
@@ -125,7 +130,8 @@ func GetUserProfile(c *gin.Context) {
 		"orderCount":  orderCount,
 		"couponCount": couponCount,
 		"phone":       phoneStr,
-		"avatar_url":  avatarUrl,
+		"avatar_url":    avatarUrl,
+		"walletBalance": walletBalance,
 	})
 }
 

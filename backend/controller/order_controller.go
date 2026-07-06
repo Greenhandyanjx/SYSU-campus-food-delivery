@@ -411,13 +411,6 @@ func GetUserOrderList(c *gin.Context) {
 	}
 	baseUserID := baseUserIDIface.(uint)
 
-	// Try cache first
-	userOrderKey := fmt.Sprintf("user:orders:%d:p%d:s%d:st%s", baseUserID, page, size, status)
-	var cachedOrders map[string]interface{}
-	if ok, _ := utils.GetJSON(context.Background(), userOrderKey, &cachedOrders); ok {
-		c.JSON(http.StatusOK, gin.H{"code": 1, "data": cachedOrders})
-		return
-	}
 
 	var orders []models.Order
 	var count int64
@@ -550,7 +543,7 @@ func GetUserOrderList(c *gin.Context) {
 		})
 	}
 
-	go utils.SetJSON(context.Background(), userOrderKey, gin.H{"items": items, "total": count}, 30*time.Second)
+	go utils.SetJSON(context.Background(), fmt.Sprintf("user:orders:list:%d", baseUserID), gin.H{"items": items, "total": count}, 30*time.Second)
 	c.JSON(http.StatusOK, gin.H{"code": 1, "data": gin.H{"items": items, "total": count}})
 }
 
@@ -575,13 +568,6 @@ func GetUserOrderDetail(c *gin.Context) {
 	}
 	baseUserID := baseUserIDIface.(uint)
 
-	// Try cache first
-	userDetailKey := fmt.Sprintf("user:orders:detail:%d", oid)
-	var cachedDetail map[string]interface{}
-	if ok, _ := utils.GetJSON(context.Background(), userDetailKey, &cachedDetail); ok {
-		c.JSON(http.StatusOK, cachedDetail)
-		return
-	}
 
 	var order models.Order
 	if err := global.Db.Preload("PayInfo").First(&order, oid).Error; err != nil {
@@ -719,7 +705,7 @@ func GetUserOrderDetail(c *gin.Context) {
 		response["data"].(gin.H)["payInfoUpdatedAt"] = order.PayInfo.UpdatedAt.Format(time.RFC3339)
 		response["data"].(gin.H)["pay_info_updated_at"] = order.PayInfo.UpdatedAt.Format(time.RFC3339)
 	}
-	go utils.SetJSON(context.Background(), userDetailKey, response, 30*time.Second)
+	go utils.SetJSON(context.Background(), fmt.Sprintf("user:orders:detail:%d", order.ID), response, 30*time.Second)
 	c.JSON(http.StatusOK, response)
 }
 
@@ -1204,13 +1190,6 @@ func UpdateOrderNotes(c *gin.Context) {
 	}
 	baseUserID := baseUserIDIface.(uint)
 
-	// Try cache first
-	userDetailKey := fmt.Sprintf("user:orders:detail:%d", oid)
-	var cachedDetail map[string]interface{}
-	if ok, _ := utils.GetJSON(context.Background(), userDetailKey, &cachedDetail); ok {
-		c.JSON(http.StatusOK, cachedDetail)
-		return
-	}
 
 	var order models.Order
 	if err := global.Db.First(&order, oid).Error; err != nil {
@@ -2071,7 +2050,8 @@ func PaymentNotify(c *gin.Context) {
 // CancelOrder 用户取消订单（将状态置为已取消，不再硬删除）
 func CancelOrder(c *gin.Context) {
 	var body struct {
-		ID interface{} `json:"id"`
+		ID        interface{} `json:"id"`
+		UseWallet bool        `json:"use_wallet"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid request body", "data": nil})
@@ -2099,13 +2079,6 @@ func CancelOrder(c *gin.Context) {
 	}
 	baseUserID := baseUserIDIface.(uint)
 
-	// Try cache first
-	userDetailKey := fmt.Sprintf("user:orders:detail:%d", oid)
-	var cachedDetail map[string]interface{}
-	if ok, _ := utils.GetJSON(context.Background(), userDetailKey, &cachedDetail); ok {
-		c.JSON(http.StatusOK, cachedDetail)
-		return
-	}
 
 	var order models.Order
 	if err := global.Db.First(&order, oid).Error; err != nil {
@@ -2156,7 +2129,8 @@ func CancelOrder(c *gin.Context) {
 // PayOrder 标记订单为已支付（用于前端测试/伪支付）
 func PayOrder(c *gin.Context) {
 	var body struct {
-		ID interface{} `json:"id"`
+		ID        interface{} `json:"id"`
+		UseWallet bool        `json:"use_wallet"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "invalid request body", "data": nil})
@@ -2184,13 +2158,6 @@ func PayOrder(c *gin.Context) {
 	}
 	baseUserID := baseUserIDIface.(uint)
 
-	// Try cache first
-	userDetailKey := fmt.Sprintf("user:orders:detail:%d", oid)
-	var cachedDetail map[string]interface{}
-	if ok, _ := utils.GetJSON(context.Background(), userDetailKey, &cachedDetail); ok {
-		c.JSON(http.StatusOK, cachedDetail)
-		return
-	}
 
 	var order models.Order
 	if err := global.Db.First(&order, oid).Error; err != nil {
@@ -2204,6 +2171,55 @@ func PayOrder(c *gin.Context) {
 	if order.Userid != baseUserID {
 		c.JSON(http.StatusForbidden, gin.H{"code": 0, "message": "forbidden"})
 		return
+	}
+
+	// 只允许支付待支付订单 (status=1)
+	if order.Status != 1 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    0,
+			"message": fmt.Sprintf("当前订单状态不允许支付（status=%d）", order.Status),
+			"data":    gin.H{"current_status": order.Status},
+		})
+		return
+	}
+
+	// 钱包支付：如果指定了 use_wallet，先检查余额并扣款
+	if body.UseWallet {
+		var wallet models.UserWallet
+		if err := global.Db.Where("user_id = ?", baseUserID).First(&wallet).Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 0, "message": "钱包未开通", "data": gin.H{"need_recharge": true}})
+			return
+		}
+		if wallet.Balance < order.TotalPrice {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"code":    0,
+				"message": fmt.Sprintf("余额不足，当前余额 ¥%.2f，需要 ¥%.2f", wallet.Balance, order.TotalPrice),
+				"data": gin.H{
+					"need_recharge":  true,
+					"balance":        wallet.Balance,
+					"required_amount": order.TotalPrice - wallet.Balance,
+				},
+			})
+			return
+		}
+		// 扣款
+		beforeAmt := wallet.Balance
+		afterAmt := beforeAmt - order.TotalPrice
+		if err := global.Db.Model(&models.UserWallet{}).Where("user_id = ?", baseUserID).
+			Update("balance", gorm.Expr("balance - ?", order.TotalPrice)).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"code": 0, "message": "钱包扣款失败"})
+			return
+		}
+		// 记录流水
+		global.Db.Create(&models.WalletTransaction{
+			UserID:        baseUserID,
+			Amount:        order.TotalPrice,
+			Type:          "payment",
+			BalanceBefore: beforeAmt,
+			BalanceAfter:  afterAmt,
+			Description:   fmt.Sprintf("支付订单 #%d", oid),
+			OrderID:       oid,
+		})
 	}
 
 	tx := global.Db.Begin()
@@ -2344,13 +2360,6 @@ func UpdateOrderAddress(c *gin.Context) {
 	}
 	baseUserID := baseUserIDIface.(uint)
 
-	// Try cache first
-	userDetailKey := fmt.Sprintf("user:orders:detail:%d", oid)
-	var cachedDetail map[string]interface{}
-	if ok, _ := utils.GetJSON(context.Background(), userDetailKey, &cachedDetail); ok {
-		c.JSON(http.StatusOK, cachedDetail)
-		return
-	}
 
 	var order models.Order
 	if err := global.Db.First(&order, oid).Error; err != nil {

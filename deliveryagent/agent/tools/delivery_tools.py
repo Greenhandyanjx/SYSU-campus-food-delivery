@@ -139,7 +139,7 @@ class GetStoresTool(Tool):
         lines = ["🏪 **全部商家列表**", "━━━━━━━━━━━━━━━━━━━━━"]
         for s in items:
             name = _safe_text(s, "name", "shop_name", "shopName")
-            sid = s.get("base_id") or s.get("baseId") or s.get("id") or ""
+            sid = s.get("id") or s.get("base_id") or s.get("baseId") or ""
             rating = _safe_float(s, "avg_score", "avgScore", "rating")
             sales = _safe_int(s, "sales")
             lines.append(f"  🆔 {sid} | {name} | ⭐ {rating} | 月售 {sales}")
@@ -196,7 +196,7 @@ class SearchStoreTool(Tool):
         lines = [f"🔍 **搜索「{query}」结果**", "━━━━━━━━━━━━━━━━━━━━━"]
         for s in items if isinstance(items, list) else [items]:
             name = _safe_text(s, "name", "shop_name", "shopName")
-            sid = s.get("base_id") or s.get("baseId") or s.get("id") or ""
+            sid = s.get("id") or s.get("base_id") or s.get("baseId") or ""
             desc = _safe_text(s, "shop_location", "desc", "description", default="—")
             lines.append(f"  🆔 {sid} | {name}")
             if desc and desc != "—":
@@ -226,7 +226,7 @@ class GetDishesTool(Tool):
         return {
             "merchant_id": {
                 "type": "integer",
-                "description": "商家 ID（base_id），可通过 get_stores 获取",
+                "description": "商家 ID（店铺ID），通过 get_stores 获取",
                 "required": True,
             },
         }
@@ -638,7 +638,7 @@ class PlaceOrderTool(Tool):
         return {
             "merchant_id": {
                 "type": "integer",
-                "description": "商家 ID（base_id），例如 4=麦当劳、18=川菜馆。通过 get_stores 或 search_store 获取",
+                "description": "商家 ID（店铺ID），通过 get_stores 获取",
                 "required": True,
             },
             "items": {
@@ -1445,7 +1445,7 @@ class PayOrderTool(Tool):
 
     @property
     def description(self) -> str:
-        return "支付指定订单（将待支付订单标记为已支付）。用户说'支付'、'付款'时使用。"
+        return "支付指定订单。用户说'支付'、'付款'时使用。可指定 use_wallet=True 来使用钱包余额支付。"
 
     @property
     def parameters(self) -> dict[str, Any]:
@@ -1455,19 +1455,29 @@ class PayOrderTool(Tool):
                 "description": "要支付的订单 ID",
                 "required": True,
             },
+            "use_wallet": {
+                "type": "boolean",
+                "description": "是否使用钱包余额支付（默认 false 使用扫码支付）。用户明确说'用余额'、'钱包支付'时传 true。",
+                "required": False,
+            },
         }
 
-    async def execute(self, order_id: int, **kwargs: Any) -> str:
+    async def execute(self, order_id: int, use_wallet: bool = False, **kwargs: Any) -> str:
         jwt_token = kwargs.get("_jwt_token", "")
         if not jwt_token:
             return "⚠️ 无法支付订单：未检测到登录状态。"
 
-        logger.info(f"[PayOrderTool] order_id={order_id}")
+        logger.info(f"[PayOrderTool] order_id={order_id}, use_wallet={use_wallet}")
+
+        payload: dict[str, Any] = {"id": order_id}
+        if use_wallet:
+            payload["use_wallet"] = True
+
         try:
             async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
                 resp = await client.post(
                     f"{DELIVERY_BACKEND_URL}/api/user/order/pay",
-                    json={"id": order_id},
+                    json=payload,
                     headers={"Authorization": f"Bearer {jwt_token}"},
                     follow_redirects=True,
                 )
@@ -1482,7 +1492,25 @@ class PayOrderTool(Tool):
             return f"⚠️ 请求出错: {type(e).__name__}"
 
         if data.get("code") == 1 or data.get("code") == "1":
+            if use_wallet:
+                return f"✅ **订单 #{order_id} 支付成功！** 已使用钱包余额支付，商家正在准备您的餐品 😊"
             return f"✅ **订单 #{order_id} 支付成功！** 商家正在准备您的餐品 😊"
+
+        # 检查是否是余额不足
+        err_data = data.get("data") or {}
+        if err_data.get("need_recharge"):
+            balance = err_data.get("balance", 0)
+            required = err_data.get("required_amount", 0)
+            return (
+                f"⚠️ **余额不足，无法使用钱包支付**\n\n"
+                f"当前余额：¥{balance:.2f}\n"
+                f"还需充值：¥{required:.2f}\n\n"
+                f"💡 您可以：\n"
+                f"1. 前往「我的 → 钱包」页面充值\n"
+                f"2. 或回复「扫码支付」使用扫码方式完成支付\n\n"
+                f"需要我帮您跳转到充值页面吗？"
+            )
+
         return f"⚠️ 支付失败: {data.get('msg') or data.get('message') or '未知错误'}"
 
 

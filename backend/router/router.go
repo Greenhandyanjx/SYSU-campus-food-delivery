@@ -181,6 +181,11 @@ func SetRouter() *gin.Engine {
 		// 更新订单备注（用于 checkout 时用户修改已存在 pending 订单的商家备注）
 		auth.POST("/user/order/updateNotes", controller.UpdateOrderNotes)
 		auth.POST("/user/order/updateAddress", controller.UpdateOrderAddress)
+			// 钱包接口
+			auth.GET("/user/wallet", controller.GetUserWallet)
+			auth.POST("/user/wallet/recharge", controller.RechargeWallet)
+			auth.POST("/user/wallet/recharge/confirm", controller.ConfirmRecharge)
+			auth.POST("/user/wallet/pay", controller.PayWithWallet)
 
 		// User address management
 		auth.GET("/user/addresses", controller.GetUserAddresses)

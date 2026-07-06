@@ -1,5 +1,5 @@
 # CLAUDE.md
-
+和外卖网站相关的操作都在d:\桌面\软件工程中级实训\SYSU-campus-food-delivery\deliveryagent文件夹中进行，在这个文件夹下进行文件的修改和测试验收，不要在深度学习文件夹下修改任何文件
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## 启动方式

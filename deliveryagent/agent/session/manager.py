@@ -681,16 +681,33 @@ class SessionManager:
 
     async def alist_sessions(self) -> list[dict]:
         """
-        异步列出所有会话（优先走 PG）。
+        异步列出所有会话（PG + JSONL 合并去重）。
 
-        如果 PG 不可用，回退到 JSONL 的文件扫描方式。
+        从 PG 和 JSONL 两边合并结果，按 updated_at 降序排列。
+        这样在 PG 表刚创建、旧数据仍在 JSONL 中时，会话不会丢失。
         """
+        seen: set[str] = set()
+        result: list[dict] = []
+
         if self._pg:
             try:
-                return await self._pg.list_keys()
+                pg_result = await self._pg.list_keys()
+                for s in pg_result:
+                    key = s.get("key", "")
+                    if key and key not in seen:
+                        seen.add(key)
+                        result.append(s)
             except Exception as e:
                 logger.warning(f"[SessionManager] PG 列出会话失败，回退 JSONL: {e}")
-        return self._jsonl.list_sessions()
+
+        for s in self._jsonl.list_sessions():
+            key = s.get("key", "")
+            if key and key not in seen:
+                seen.add(key)
+                result.append(s)
+
+        result.sort(key=lambda x: x.get("updated_at", "") or "", reverse=True)
+        return result
 
     async def alist_user_sessions(self, username: str) -> list[dict]:
         """

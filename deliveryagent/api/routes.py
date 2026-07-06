@@ -520,7 +520,7 @@ async def proactive_lunch(
                     lines = []
                     for s in stores[:8]:
                         name = s.get("name") or s.get("shop_name") or ""
-                        sid = s.get("base_id") or s.get("id") or ""
+                        sid = s.get("id") or s.get("base_id") or ""
                         rating = s.get("avg_score") or s.get("rating") or ""
                         lines.append(f"  - ID {sid}: {name} (评分: {rating})")
                     stores_text = "\n".join(lines)

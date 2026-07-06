@@ -1,0 +1,65 @@
+# ─────────────────────────────────────────────────────────
+# Docker Compose — 仅基础设施（Redis + PostgreSQL + RabbitMQ）
+# ─────────────────────────────────────────────────────────
+# 用于 start_all.bat 的 Docker 选项，只启动中间件，不启动
+# api/ui 服务（它们由 start_all.py 直接启动）。
+# ─────────────────────────────────────────────────────────
+
+services:
+  redis:
+    image: docker.m.daocloud.io/library/redis:7-alpine
+    container_name: jd-agent-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --save 300 10
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  postgres:
+    image: docker.m.daocloud.io/library/postgres:16-alpine
+    container_name: jd-agent-postgres
+    environment:
+      POSTGRES_DB: jdagent
+      POSTGRES_USER: jdagent
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-devpassword}
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jdagent -d jdagent"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  rabbitmq:
+    image: docker.m.daocloud.io/library/rabbitmq:3-management-alpine
+    container_name: jd-agent-rabbitmq
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redis-data:
+  rabbitmq-data:

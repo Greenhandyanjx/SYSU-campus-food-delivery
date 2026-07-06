@@ -141,3 +141,6 @@ backend/config/config.yaml
 backend/config/config.yaml
 backend/backend.exe
 backend/backend.exe
+
+# Office temp files
+~$*

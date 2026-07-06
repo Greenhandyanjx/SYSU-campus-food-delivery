@@ -1,0 +1,19 @@
+# ─────────────────────────────────────────────────────────
+# Docker Compose Override — DaoCloud 镜像加速（中国区）
+# ─────────────────────────────────────────────────────────
+# 用法: docker compose -f docker-compose.yml -f docker-compose.mirror.yml up -d
+#
+# 如果 Docker Desktop 的 registry-mirrors 不生效（常见于
+# containerd 模式），用此 override 文件直接指定 DaoCloud
+# 镜像地址来拉取。
+# ─────────────────────────────────────────────────────────
+
+services:
+  redis:
+    image: docker.m.daocloud.io/library/redis:7-alpine
+
+  postgres:
+    image: docker.m.daocloud.io/library/postgres:16-alpine
+
+  rabbitmq:
+    image: docker.m.daocloud.io/library/rabbitmq:3-management-alpine

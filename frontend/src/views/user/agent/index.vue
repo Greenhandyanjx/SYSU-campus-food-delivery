@@ -81,6 +81,7 @@
                       :key="'card-' + ci"
                       :data="card"
                       @send-message="onCardAction"
+                      @modify-address="onModifyAddress"
                     />
                     <div v-if="msg.orderCards.length > 10" class="order-cards-overflow" @click="onCardAction('查一下我的订单')">
                       <span>还有 {{ msg.orderCards.length - 10 }} 个订单 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>
@@ -148,16 +149,85 @@
       </main>
     </div>
   </div>
+
+  <!-- 修改地址弹窗 -->
+  <el-dialog v-model="showAddressPicker" title="选择收货地址" width="500px" :close-on-click-modal="false">
+    <div v-if="addresses.length === 0" style="text-align:center;padding:24px;color:#999">
+      暂无收货地址，请先在「我的地址」中添加
+    </div>
+    <div v-else class="addr-picker-list">
+      <el-card
+        v-for="a in addresses"
+        :key="a.id"
+        :class="['addr-card-item', { selected: selectedAddressId === a.id }]"
+        shadow="hover"
+        @click="selectedAddressId = a.id"
+      >
+        <div class="addr-item-top">
+          <strong>{{ a.name }}</strong>
+          <span style="margin-left:8px;color:#999">{{ a.phone }}</span>
+          <span v-if="a.isDefault" class="default-badge">默认</span>
+        </div>
+        <div class="addr-item-detail">{{ formatAddr(a) }}</div>
+      </el-card>
+    </div>
+    <template #footer>
+      <el-button @click="showAddressPicker = false">取消</el-button>
+      <el-button type="primary" :disabled="!selectedAddressId" @click="confirmAddressChange">确认修改</el-button>
+    </template>
+  </el-dialog>
+
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted } from 'vue'
+import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAgentChat, ChatMsg, SessionItem } from '@/composables/useAgentChat'
+import { useAgentChat, ChatMsg, SessionItem, OrderCardData } from '@/composables/useAgentChat'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useSpeechSynthesis } from '@/composables/useSpeechSynthesis'
 import AgentOrderCard from '@/components/Chat/AgentOrderCard.vue'
 import agentIcon from '@/assets/icons/agent.svg'
+import orderApi from '@/api/user/order'
+import request from '@/api/merchant/request'
+import { ElMessage } from 'element-plus'
+
+// ── 修改地址弹窗 ──
+const showAddressPicker = ref(false)
+const addresses = ref<any[]>([])
+const selectedAddressId = ref<number>(0)
+const modifyingOrderId = ref<number | string>(0)
+
+async function onModifyAddress(orderId: number | string) {
+  modifyingOrderId.value = orderId
+  selectedAddressId.value = 0
+  try {
+    const res = await request.get('/user/addresses')
+    const list = res?.data?.data || res?.data || []
+    addresses.value = Array.isArray(list) ? list : []
+  } catch (e) {
+    addresses.value = []
+  }
+  showAddressPicker.value = true
+}
+
+function formatAddr(a: any) {
+  const parts = [a.province || '', a.city || '', a.district || '', a.street || '', a.detail || ''].filter(Boolean)
+  return parts.join(' ') || '暂无详细地址'
+}
+
+async function confirmAddressChange() {
+  if (!selectedAddressId.value || !modifyingOrderId.value) return
+  try {
+    await orderApi.updateOrderAddress(String(modifyingOrderId.value), { consigneeid: selectedAddressId.value })
+    ElMessage.success('地址修改成功')
+    showAddressPicker.value = false
+    // 发送消息给助手更新状态
+    sendMessage('地址已修改，请帮我重新查询订单 #' + modifyingOrderId.value + ' 的最新信息')
+  } catch (e) {
+    ElMessage.error('地址修改失败，请重试')
+  }
+}
+
 
 const router = useRouter()
 const {
@@ -328,12 +398,14 @@ function confirmClear() {
 
 async function onSelectSession(s: { session_id: string }) {
   await loadSession(s.session_id)
+  await refreshOrderCards()
   await nextTick()
   scrollDown()
 }
 
 async function onSelectDay(day: SidebarDay) {
   await loadDaySessions(day.sessions)
+  await refreshOrderCards()
   await nextTick()
   scrollDown()
 }
@@ -352,8 +424,13 @@ function onSend() {
   setTimeout(() => scrollDown(), 150)
 }
 
-function onCardAction(text: string) {
+async function onCardAction(text: string) {
   if (!text.trim() || isLoading.value) return
+
+  // Layer 3: 检查卡片状态是否已过期
+  const canProceed = await checkCardStatusBeforeAction(text)
+  if (!canProceed) return
+
   inputMsg.value = text
   onSend()
 }
@@ -437,12 +514,108 @@ function formatLocalDate(d: Date): string {
   return `${y}-${m}-${day}`
 }
 
+// ── Order Card Status Refresh (Layer 2 + Layer 3) ──
+
+const ORDER_STATUS_MAP: Record<number, string> = {
+  1: '待支付',
+  2: '已支付',
+  3: '准备中',
+  4: '配送中',
+  5: '已完成',
+  6: '已取消',
+}
+
+/** 刷新消息中所有历史订单卡片的状态为最新 */
+async function refreshOrderCards() {
+  if (messages.value.length === 0) return
+
+  const orderToPositions = new Map<string, { msgIdx: number; cardIdx: number }[]>()
+  for (let mi = 0; mi < messages.value.length; mi++) {
+    const cards = messages.value[mi].orderCards
+    if (!cards) continue
+    for (let ci = 0; ci < cards.length; ci++) {
+      const id = String(cards[ci].orderId)
+      if (!orderToPositions.has(id)) orderToPositions.set(id, [])
+      orderToPositions.get(id)!.push({ msgIdx: mi, cardIdx: ci })
+    }
+  }
+  if (orderToPositions.size === 0) return
+
+  await Promise.all([...orderToPositions.entries()].map(async ([orderId, positions]) => {
+    try {
+      const res = await orderApi.getOrderDetail(orderId)
+      const data = res?.data?.data || res?.data
+      if (!data || data.status === undefined) return
+
+      for (const { msgIdx, cardIdx } of positions) {
+        const oldCard = messages.value[msgIdx]?.orderCards?.[cardIdx]
+        if (!oldCard || oldCard.status === data.status) continue
+
+        const newCards = [...messages.value[msgIdx].orderCards!]
+        newCards[cardIdx] = {
+          ...oldCard,
+          status: data.status,
+          merchant: data.storeName || data.merchant_name || oldCard.merchant,
+          amount: data.amount ?? data.total_price ?? oldCard.amount,
+          orderTime: data.orderTime || data.created_at || data.createdAt || oldCard.orderTime,
+          consignee: data.consignee || oldCard.consignee,
+          address: data.address || oldCard.address,
+          phone: data.phone || oldCard.phone,
+          logo: data.storeLogo || data.logo || oldCard.logo,
+          dishes: Array.isArray(data.items) ? data.items.map((item: any) => ({
+            name: item.name || '',
+            qty: item.qty || item.count || 1,
+            price: typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0,
+          })) : oldCard.dishes,
+        }
+        messages.value[msgIdx] = { ...messages.value[msgIdx], orderCards: newCards }
+      }
+    } catch {
+      // silently ignore
+    }
+  }))
+}
+
+/** Layer 3: 卡片操作前检查订单状态是否已变化 */
+async function checkCardStatusBeforeAction(text: string): Promise<boolean> {
+  const orderIdMatch = text.match(/#(\d+)/)
+  if (!orderIdMatch) return true
+
+  const targetOrderId = orderIdMatch[1]
+
+  for (let mi = 0; mi < messages.value.length; mi++) {
+    const cards = messages.value[mi].orderCards
+    if (!cards) continue
+    for (let ci = 0; ci < cards.length; ci++) {
+      if (String(cards[ci].orderId) !== targetOrderId) continue
+      const card = cards[ci]
+      try {
+        const res = await orderApi.getOrderDetail(targetOrderId)
+        const data = res?.data?.data || res?.data
+        if (!data || data.status === undefined || data.status === card.status) return true
+
+        const oldLabel = ORDER_STATUS_MAP[card.status] || `状态(${card.status})`
+        const newLabel = ORDER_STATUS_MAP[data.status] || `状态(${data.status})`
+        const newCards = [...cards]
+        newCards[ci] = { ...card, status: data.status }
+        messages.value[mi] = { ...messages.value[mi], orderCards: newCards }
+        ElMessage.info(`订单 #${targetOrderId} 状态已更新：${oldLabel} → ${newLabel}，请重新操作`)
+        return false
+      } catch {
+        return true
+      }
+    }
+  }
+  return true
+}
+
 onMounted(async () => {
   setToken()
   await loadSessions()
 
   // 导航回来：已有会话且消息还在，保持不动（只刷新侧边栏）
   if (currentSessionId.value && messages.value.length > 0) {
+    await refreshOrderCards()
     return
   }
 
@@ -455,12 +628,20 @@ onMounted(async () => {
     newSession()
   }
 
+  await refreshOrderCards()
   await nextTick()
   inputRef.value?.focus()
   scrollDown()
 
   // 非阻塞：主动午餐推荐（时间闸在函数内部）
   checkProactiveRecommendation()
+})
+
+// Agent 返回新消息后自动刷新卡片状态
+watch(isLoading, async (loading) => {
+  if (!loading && messages.value.length > 0) {
+    await refreshOrderCards()
+  }
 })
 </script>
 
@@ -925,6 +1106,15 @@ onMounted(async () => {
   align-items: flex-start;
   gap: 4px;
 }
+
+/* ── 地址选择弹窗样式 ── */
+.addr-picker-list { display: flex; flex-direction: column; gap: 12px; max-height: 400px; overflow-y: auto; }
+.addr-card-item { cursor: pointer; border: 2px solid transparent; transition: all 0.2s; }
+.addr-card-item:hover { border-color: #ffc8a8; }
+.addr-card-item.selected { border-color: #FF6B35; background: #FFF3E8; }
+.addr-item-top { margin-bottom: 4px; font-size: 14px; }
+.addr-item-detail { font-size: 13px; color: #666; }
+.default-badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; background: #fff3e0; color: #ff9800; margin-left: 6px; }
 
 /* ── 移动端适配 ── */
 @media (max-width: 768px) {
