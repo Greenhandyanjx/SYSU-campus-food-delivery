@@ -18,12 +18,7 @@
       :title="'打开外卖助手'"
       aria-label="打开外卖助手"
     >
-      <svg class="fab-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2Z" fill="currentColor" opacity="0.9"/>
-        <circle cx="9" cy="10" r="1.5" fill="white"/>
-        <circle cx="15" cy="10" r="1.5" fill="white"/>
-        <path d="M8 15C8 15 9.5 17 12 17C14.5 17 16 15 16 15" stroke="white" stroke-width="1.5" stroke-linecap="round" fill="none"/>
-      </svg>
+      <img :src="agentIcon" class="fab-icon-img" alt="AI" />
     </button>
   </Transition>
 
@@ -50,12 +45,7 @@
       <header v-if="!fullPage" class="agent-header">
         <div class="header-left">
           <div class="header-avatar">
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2Z" fill="white" opacity="0.9"/>
-              <circle cx="9" cy="10" r="1.5" fill="#FF6B35"/>
-              <circle cx="15" cy="10" r="1.5" fill="#FF6B35"/>
-              <path d="M8 15C8 15 9.5 17 12 17C14.5 17 16 15 16 15" stroke="#FF6B35" stroke-width="1.5" stroke-linecap="round" fill="none"/>
-            </svg>
+            <img :src="agentIcon" class="header-avatar-img" alt="AI" />
           </div>
           <div class="header-info">
             <span class="header-title">外卖助手</span>
@@ -76,12 +66,7 @@
         <!-- 欢迎消息 -->
         <div v-if="messages.length === 0" class="welcome-message">
           <div class="welcome-icon">
-            <svg viewBox="0 0 24 24" width="48" height="48" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect x="2" y="4" width="20" height="16" rx="3" fill="#FFF3E0" stroke="#FF6B35" stroke-width="1.5"/>
-              <circle cx="9" cy="11" r="1.5" fill="#FF6B35"/>
-              <circle cx="15" cy="11" r="1.5" fill="#FF6B35"/>
-              <path d="M8 15.5C8 15.5 9.5 17 12 17C14.5 17 16 15.5 16 15.5" stroke="#FF6B35" stroke-width="1.5" stroke-linecap="round" fill="none"/>
-            </svg>
+            <img :src="agentIcon" class="welcome-icon-img" alt="AI" />
           </div>
           <h3 class="welcome-title">你好！我是你的外卖助手 🎉</h3>
           <p class="welcome-desc">
@@ -99,12 +84,7 @@
         >
           <!-- AI 消息头像：流式加载时最后一条 AI 消息的头像由下方 loading 动画展示，避免重复 -->
           <div v-if="msg.role === 'assistant' && !(showLoadingDots && idx === messages.length - 1)" class="msg-avatar">
-            <svg viewBox="0 0 24 24" width="28" height="28" fill="none">
-              <circle cx="12" cy="12" r="10" fill="#FF6B35"/>
-              <circle cx="9" cy="10" r="1.5" fill="white"/>
-              <circle cx="15" cy="10" r="1.5" fill="white"/>
-              <path d="M8 14.5C8 14.5 9.5 16.5 12 16.5C14.5 16.5 16 14.5 16 14.5" stroke="white" stroke-width="1.5" stroke-linecap="round" fill="none"/>
-            </svg>
+            <img :src="agentIcon" alt="AI" />
           </div>
 
           <!-- 消息气泡：只有当消息有内容时才渲染 -->
@@ -120,11 +100,14 @@
           <template v-if="msg.role === 'assistant' && msg.orderCards && msg.orderCards.length > 0">
             <div class="order-cards-wrap">
               <AgentOrderCard
-                v-for="(card, ci) in msg.orderCards"
+                v-for="(card, ci) in msg.orderCards.slice(0, 10)"
                 :key="'card-' + ci"
                 :data="card"
                 @send-message="onCardAction"
               />
+              <div v-if="msg.orderCards.length > 10" class="order-cards-overflow" @click="onCardAction('查一下我的订单')">
+                <span>还有 {{ msg.orderCards.length - 10 }} 个订单 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>
+              </div>
             </div>
           </template>
         </div>
@@ -132,12 +115,7 @@
         <!-- 加载中的三点动画（替代空白气泡） -->
         <div v-if="showLoadingDots" class="message-row assistant">
           <div class="msg-avatar">
-            <svg viewBox="0 0 24 24" width="28" height="28" fill="none">
-              <circle cx="12" cy="12" r="10" fill="#FF6B35"/>
-              <circle cx="9" cy="10" r="1.5" fill="white"/>
-              <circle cx="15" cy="10" r="1.5" fill="white"/>
-              <path d="M8 14.5C8 14.5 9.5 16.5 12 16.5C14.5 16.5 16 14.5 16 14.5" stroke="white" stroke-width="1.5" stroke-linecap="round" fill="none"/>
-            </svg>
+            <img :src="agentIcon" alt="AI" />
           </div>
           <div class="message-bubble loading">
             <span class="dot"></span>
@@ -204,6 +182,7 @@
 import { ref, nextTick, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useAgentChat } from '@/composables/useAgentChat'
 import AgentOrderCard from '@/components/Chat/AgentOrderCard.vue'
+import agentIcon from '@/assets/icons/agent.svg'
 
 // ── Props ──
 const props = withDefaults(
@@ -470,6 +449,11 @@ onBeforeUnmount(() => {
   height: 28px;
 }
 
+.fab-icon-img {
+  width: 32px;
+  height: 32px;
+}
+
 /* FAB 进入/离开动画 */
 .fab-fade-enter-active,
 .fab-fade-leave-active {
@@ -577,9 +561,11 @@ onBeforeUnmount(() => {
   backdrop-filter: blur(4px);
 }
 
-.header-avatar svg {
+.header-avatar svg,
+.header-avatar-img {
   width: 24px;
   height: 24px;
+  border-radius: 4px;
 }
 
 .header-info {
@@ -674,6 +660,14 @@ onBeforeUnmount(() => {
 
 .welcome-icon {
   margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.welcome-icon-img {
+  width: 56px;
+  height: 56px;
 }
 
 .welcome-title {
@@ -709,14 +703,21 @@ onBeforeUnmount(() => {
 
 /* 消息头像 */
 .msg-avatar {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.msg-avatar svg {
-  width: 28px;
-  height: 28px;
+.msg-avatar svg,
+.msg-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 /* ── 消息气泡 ── */
@@ -762,6 +763,32 @@ onBeforeUnmount(() => {
 /* 订单卡片容器 */
 .order-cards-wrap {
   width: 100%;
+}
+
+.order-cards-overflow {
+  margin-top: 8px;
+  padding: 10px 14px;
+  background: #FFF8F4;
+  border: 1px dashed #FFB088;
+  border-radius: 12px;
+  text-align: center;
+  font-size: 13px;
+  color: #FF6B35;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.order-cards-overflow:hover {
+  background: #FFF0E8;
+  border-color: #FF6B35;
+}
+
+.order-cards-overflow svg {
+  vertical-align: middle;
 }
 
 .message-row.assistant .message-bubble strong {

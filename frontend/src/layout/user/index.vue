@@ -10,7 +10,7 @@
 					<el-col :span="5" class="tab" :class="{ active: route.path === '/user/home' }" @click="go('/user/home')">🏠 首页</el-col>
 					<el-col :span="5" class="tab" :class="{ active: route.path === '/user/orderlist' }" @click="go('/user/orderlist')">📋 订单</el-col>
 					<el-col :span="5" class="tab" :class="{ active: route.path === '/user/cart' }" @click="go('/user/cart')">🛒 购物车</el-col>
-					<el-col :span="5" class="tab" :class="{ active: route.path === '/user/agent' }" @click="go('/user/agent')">🤖 AI 助手</el-col>
+					<el-col :span="5" class="tab" :class="{ active: route.path === '/user/agent' }" @click="go('/user/agent')"><img :src="agentIcon" class="nav-agent-icon" /> AI 助手</el-col>
 					<el-col :span="4" class="tab" :class="{ active: route.path === '/user/my' }" @click="go('/user/my')">👤 我的</el-col>
 				</el-row>
 			</footer>
@@ -20,6 +20,7 @@
 <script setup lang="ts">
 import Navbar from './components/navbar.vue'
 import { useRouter, useRoute } from 'vue-router'
+import agentIcon from '@/assets/icons/agent.svg'
 
 const router = useRouter()
 const route = useRoute()
@@ -51,4 +52,11 @@ function go(path: string) {
 /* ensure content doesn't create its own scrollbar inside page-main */
 .page-main { overflow: visible }
 
+.nav-agent-icon {
+  width: 18px;
+  height: 18px;
+  vertical-align: middle;
+  margin-right: 3px;
+  margin-top: -2px;
+}
 </style>

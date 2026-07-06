@@ -65,6 +65,9 @@ const token = ref('')
 
 const AGENT_API_BASE = import.meta.env.VITE_AGENT_API_URL || 'http://127.0.0.1:8001'
 
+/** token 是否已在 mount 时捕获（防止跨 tab 污染） */
+let _tokenCaptured = false
+
 /**
  * 从消息内容中解析 ORDER_CARD 标记，提取订单卡片数据
  */
@@ -92,15 +95,25 @@ export function useAgentChat() {
   let streamTimeout: ReturnType<typeof setTimeout> | null = null
 
   /**
-   * 设置 JWT token（从 localStorage 获取）
+   * 设置 JWT token（mount 时从 localStorage 捕获一次，之后不再重读）
+   * 防止同一浏览器不同登录用户的 token 互相污染。
    */
   function setToken(t?: string) {
-    token.value = t || ''
-    try {
-      const stored = localStorage.getItem('token')
-      if (stored) token.value = stored
-    } catch {
-      // ignore
+    if (t) {
+      token.value = t
+      _tokenCaptured = true
+      return
+    }
+    if (!_tokenCaptured) {
+      try {
+        const stored = localStorage.getItem('token')
+        if (stored) {
+          token.value = stored
+          _tokenCaptured = true
+        }
+      } catch {
+        // ignore
+      }
     }
   }
 
@@ -191,11 +204,32 @@ export function useAgentChat() {
 
     // 按时间戳合并所有消息
     const allMessages: ChatMsg[] = []
+    let loadedCount = 0
     for (const result of results) {
-      if (result.status === 'fulfilled' && result.value.length > 0) {
-        allMessages.push(...result.value)
+      if (result.status === 'fulfilled') {
+        if (result.value.length > 0) {
+          allMessages.push(...result.value)
+          loadedCount++
+        } else {
+          console.warn('[AgentChat] loadDaySessions: 会话返回空历史', result.status)
+        }
+      } else {
+        console.warn('[AgentChat] loadDaySessions: 请求失败', result.reason)
       }
     }
+
+    console.warn(
+      `[AgentChat] loadDaySessions: ${loadedCount}/${sessions.length} 个会话加载成功，共 ${allMessages.length} 条消息`
+    )
+
+    if (allMessages.length === 0 && sessions.length > 0) {
+      // 合并结果为空，尝试逐个加载第一个会话作为应急
+      console.warn('[AgentChat] loadDaySessions: 所有会话为空，尝试回退 loadSession')
+      const first = sessions[0]
+      await loadSession(first.session_id)
+      return
+    }
+
     allMessages.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
 
     messages.value = allMessages
@@ -210,26 +244,41 @@ export function useAgentChat() {
    */
   async function _loadSingleSessionHistory(sessionKey: string): Promise<ChatMsg[]> {
     try {
-      const resp = await fetch(`${AGENT_API_BASE}/api/v1/history?session_key=${encodeURIComponent(sessionKey)}`)
-      if (!resp.ok) return []
+      const url = `${AGENT_API_BASE}/api/v1/history?session_key=${encodeURIComponent(sessionKey)}`
+      const resp = await fetch(url)
+      if (!resp.ok) {
+        console.warn(`[AgentChat] _loadSingleSessionHistory: HTTP ${resp.status} for ${sessionKey}`)
+        return []
+      }
       const data = await resp.json()
+      const history = data.history
+      if (!history || !Array.isArray(history)) {
+        console.warn(`[AgentChat] _loadSingleSessionHistory: 无 history 字段或非数组`, sessionKey)
+        return []
+      }
+      if (history.length === 0) {
+        console.warn(`[AgentChat] _loadSingleSessionHistory: 空 history`, sessionKey)
+        return []
+      }
       const msgs: ChatMsg[] = []
-      if (data.history && Array.isArray(data.history)) {
-        for (const msg of data.history) {
-          if (msg.role === 'user' || msg.role === 'assistant') {
-            const { cleanContent, cards } = parseOrderCards(msg.content || '')
-            let ts: number | undefined
-            if (msg.timestamp != null) {
-              ts = typeof msg.timestamp === 'number' ? msg.timestamp : new Date(msg.timestamp).getTime() / 1000
-            }
-            const entry: ChatMsg = { role: msg.role, content: cleanContent, timestamp: ts }
-            if (cards.length > 0) entry.orderCards = cards
-            msgs.push(entry)
+      let parsedCount = 0
+      for (const msg of history) {
+        if (msg.role === 'user' || msg.role === 'assistant') {
+          const { cleanContent, cards } = parseOrderCards(msg.content || '')
+          let ts: number | undefined
+          if (msg.timestamp != null) {
+            ts = typeof msg.timestamp === 'number' ? msg.timestamp : new Date(msg.timestamp).getTime() / 1000
           }
+          const entry: ChatMsg = { role: msg.role, content: cleanContent, timestamp: ts }
+          if (cards.length > 0) entry.orderCards = cards
+          msgs.push(entry)
+          parsedCount++
         }
       }
+      console.warn(`[AgentChat] _loadSingleSessionHistory: ${sessionKey} → ${parsedCount} msgs`)
       return msgs
-    } catch {
+    } catch (e) {
+      console.warn(`[AgentChat] _loadSingleSessionHistory: 异常 ${e}`, sessionKey)
       return []
     }
   }
@@ -349,6 +398,26 @@ export function useAgentChat() {
     messages.value = []
   }
 
+  /**
+   * 主动午餐推荐：调用后端获取个性化推荐消息
+   * 仅在时间闸（10:00-11:00）+ 今天未触发时由前端调用
+   */
+  async function proactiveLunch(): Promise<string | null> {
+    setToken()
+    if (!token.value) return null
+    try {
+      const resp = await fetch(`${AGENT_API_BASE}/api/v1/proactive/lunch`, {
+        headers: authHeaders(),
+      })
+      if (!resp.ok) return null
+      const data = await resp.json()
+      return data.message || null
+    } catch (e) {
+      console.warn('[AgentChat] 主动推荐请求失败', e)
+      return null
+    }
+  }
+
   return {
     messages,
     isLoading,
@@ -362,5 +431,6 @@ export function useAgentChat() {
     loadDaySessions,
     newSession,
     setToken,
+    proactiveLunch,
   }
 }
