@@ -608,7 +608,6 @@ async function init(activeIndex = 0, isSearchFlag?: boolean) {
 //   valueTime.value = []
 // }
   console.log('init 调用', { activeIndex, isSearchFlag })
-  if (loading.value) return
   loading.value = true
   try
   {console.log("valueTime = ", valueTime.value)
@@ -850,6 +849,7 @@ async function orderAcceptHandler(r: any, setTableFlag = true) {
       orderId.value = ''
       dialogVisible.value = false
       try { emitOrderChanged({ orderId: emittedId }) } catch (e) {}
+      init(orderStatus.value)
     } else {
       ElMessage.error(res.data.msg)
     }
@@ -901,6 +901,7 @@ async function confirmCancel() {
       const emittedId = orderId.value
       orderId.value = ''
       try { emitOrderChanged({ orderId: emittedId }) } catch (e) {}
+      init(orderStatus.value)
     } else {
       ElMessage.error(res.data.msg)
     }
@@ -919,6 +920,7 @@ async function cancelOrDeliveryOrComplete(status: number, id: string) {
       orderId.value = ''
       dialogVisible.value = false
       try { emitOrderChanged({ orderId: emittedId }) } catch (e) {}
+      init(orderStatus.value)
     } else {
       ElMessage.error(res.data.msg)
     }

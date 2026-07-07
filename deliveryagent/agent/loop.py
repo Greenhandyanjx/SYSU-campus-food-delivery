@@ -68,6 +68,7 @@ class AgentLoop:
     # 消息字段白名单（防止 LLM 塞入未知字段）
     _ALLOWED_MESSAGE_FIELDS = frozenset({
         "role", "content", "tool_calls", "tool_call_id", "name", "timestamp",
+        "type",
     })
 
     # ─── 消息消毒 ────────────────────────────
@@ -391,6 +392,9 @@ class AgentLoop:
                     continue
 
             # === LLM 调用 ===
+            # 规范化消息格式（确保所有消息含 type 字段，DeepSeek API 要求）
+            messages = self._normalize_messages(messages)
+
             if on_stream:
                 # 流式模式
                 response = await self.provider.chat_stream_with_retry(
@@ -513,9 +517,9 @@ class AgentLoop:
 
                 # 自动追加 ORDER_CARD 标记（从本轮工具执行结果中提取）
                 # LLM 经常忽略将其包含在回复中的指令，所以程序化追加确保前端能渲染订单卡片
-                # 但如果 LLM 已经包含了卡片（响应中已有 [ORDER_CARD_START]），则不再重复添加
+                # 无论 LLM 是否已经在回复中包含了卡片标记，都追加（前端负责去重）
                 logger.info(f"[Agent] ORDER_CARDS_FINAL: _order_cards={len(_order_cards)}, seen_ids={_seen_card_ids}")
-                if _order_cards and "[ORDER_CARD_START]" not in (final_content or ""):
+                if _order_cards:
                     final_content = (final_content or "") + "\n\n" + "\n\n".join(_order_cards)
                 break
 
@@ -615,7 +619,7 @@ JSON："""
     ) -> list[dict]:
         """添加 assistant 消息到消息列表"""
         # 确保 content 不会是 None → 某些 LLM API 将 null content 渲染为 "None"
-        msg = {"role": "assistant", "content": content or ""}
+        msg = {"role": "assistant", "content": content or "", "type": "assistant"}
         if tool_call_dicts:
             msg["tool_calls"] = tool_call_dicts
         if reasoning_content:
@@ -639,10 +643,29 @@ JSON："""
             content = content[:16000] + "\n... (结果过长已截断)"
         messages.append({
             "role": "tool",
+            "type": "tool",
             "tool_call_id": tool_call_id,
             "name": tool_name,
             "content": content,
         })
+        return messages
+
+    @staticmethod
+    def _normalize_messages(messages: list[dict]) -> list[dict]:
+        """
+        确保所有消息包含 LLM API 需要的 type 字段。
+        DeepSeek API 要求每条消息必须带 type 字段作为判别器。
+        """
+        _type_map = {
+            "system": "system",
+            "user": "user",
+            "assistant": "assistant",
+            "tool": "tool",
+        }
+        for msg in messages:
+            role = msg.get("role", "")
+            if role in _type_map and "type" not in msg:
+                msg["type"] = _type_map[role]
         return messages
 
     @staticmethod
@@ -845,6 +868,25 @@ JSON："""
         if final_content is None:
             final_content = "处理完成，但没有生成回复。"
 
+        # ── 强制注入订单地址信息 ──
+        # LLM 经常在重述工具结果时将地址信息省略，导致前端显示文本无地址。
+        # 这里从原始工具结果中提取地址并追加到 final_content。
+        order_tools = {"query_order", "get_user_orders", "place_order"}
+        if order_tools & set(tools_used):
+            addr_lines = []
+            for m in all_msgs:
+                if m.get("role") == "tool" and m.get("name") in order_tools:
+                    content = m.get("content", "")
+                    # 从工具结果文本中提取地址信息行
+                    for prefix in ("**收货人**", "**电话**", "**地址**", "📍", "收货人"):
+                        for line in content.split("\n"):
+                            stripped = line.strip()
+                            if stripped.startswith(prefix):
+                                if stripped not in addr_lines and stripped not in final_content:
+                                    addr_lines.append(stripped)
+            if addr_lines:
+                final_content += "\n\n" + "\n".join(addr_lines)
+
         # 持久化消息（异步三写：PG + Redis + JSONL）
         self._save_turn(session, all_msgs, 1 + len(history))
         await self.sessions.asave(session)
@@ -871,12 +913,18 @@ JSON："""
             # 触发记忆 consolidation
             await self.memory_consolidator.maybe_consolidate(session)
 
-            # 截断已 consolidated 的消息（仅清内存，不写存储）
-            # 数据已在 consolidation 前的 asave() 中持久化到 PG + JSONL + history.jsonl，
-            # 不再调用 asave() 避免用空 messages 覆盖 JSONL 文件。
-            if session.last_consolidated > 0:
-                session.messages[:session.last_consolidated] = []
-                session.last_consolidated = 0
+            # 注意：不再截断 session.messages
+            #
+            # 过去这里会执行：
+            #   session.messages[:session.last_consolidated] = []
+            # 目的是减少内存占用。但截断后 session.messages 比 PG 中的记录少，
+            # 下一次 asave() 会触发 pg_store.py 的 total < count 分支，
+            # 该分支会 DELETE PG 中所有消息并用截断后的少量消息覆盖，
+            # 导致刷新页面后历史记录丢失（仅剩 1~2 轮对话）。
+            #
+            # get_history(max_messages=30) 已通过 last_consolidated 偏移
+            # 控制 LLM 上下文长度，无需截断。完整的 messages 保持在内存中
+            # 对内存影响很小（千条消息约几百 KB），且能保证 PG 数据完整性。
 
             # 触发 Dream 归档（积攒至少 3 条未处理的 consolidation 时执行）
             try:

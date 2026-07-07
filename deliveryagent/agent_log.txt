@@ -1,0 +1,9 @@
+INFO:     Will watch for changes in these directories: ['D:\\×ÀÃæ\\Èí¼þ¹¤³ÌÖÐ¼¶ÊµÑµ\\SYSU-campus-food-delivery\\deliveryagent']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [25152] using WatchFiles
+INFO:     Started server process [23300]
+INFO:     Waiting for application startup.
+[32m2026-07-06 21:35:38.436[0m | [1mINFO    [0m | [36mapi.app[0m:[36mlifespan[0m:[36m36[0m - [1m\U0001f680 JD-Agent API ·þÎñÆô¶¯ÖÐ...[0m
+INFO:     Application startup complete.
+WARNING:  WatchFiles detected changes in 'agent\session\manager.py'. Reloading...
+ 

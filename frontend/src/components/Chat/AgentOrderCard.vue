@@ -232,6 +232,8 @@ function sendToAgent(text: string) {
   margin-bottom: 4px;
   font-size: 13px;
   line-height: 1.5;
+  width: 100%;
+  min-width: 300px;
 }
 
 /* 头部 */

@@ -14,7 +14,7 @@ import axios from "axios";
 // 使用相对路径 `/api`，在开发模式下 Vite 的 proxy 会将其转发到后端服务，避免硬编码主机/端口
 const service = axios.create({
   baseURL: '/api',
-  timeout: 5000,
+  timeout: 15000,
 });
 
 // 请求拦截器

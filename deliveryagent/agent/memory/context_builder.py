@@ -130,7 +130,7 @@ class ContextBuilder:
 
         # 组装消息
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": system_prompt, "type": "system"},
         ]
 
         # 追加历史消息（跳过已 consolidated 的）
@@ -143,13 +143,13 @@ class ContextBuilder:
             content_blocks = [{"type": "text", "text": current_message}]
             for m in media:
                 content_blocks.append({"type": "image_url", "image_url": {"url": m}})
-            messages.append({"role": "user", "content": content_blocks})
+            messages.append({"role": "user", "content": content_blocks, "type": "user"})
         else:
-            messages.append({"role": "user", "content": user_content})
+            messages.append({"role": "user", "content": user_content, "type": "user"})
 
         return messages
 
-    def _build_medium_term(self, chat_memory: "ChatMemory", max_entries: int = 5) -> str:
+    def _build_medium_term(self, chat_memory: "ChatMemory", max_entries: int = 20) -> str:
         """构建中期记忆上下文（从 history.jsonl 读取最近 N 条摘要）。"""
         entries = chat_memory.history_jsonl.read_all()
         if not entries:

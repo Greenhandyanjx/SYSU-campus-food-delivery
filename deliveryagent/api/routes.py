@@ -363,6 +363,7 @@ async def get_history(session_key: Optional[str] = Query(None, description="会�
     try:
         session = await orch.loop.sessions.aget_or_create(key)
         history = session.get_history(max_messages=200)
+        logger.info(f"[API] GET /history key={key} messages={len(session.messages)} history={len(history)} last_consolidated={session.last_consolidated}")
         # 返回完整消息列表（包含 tool_calls），由前端自行过滤展示
         # 相比之前跳过 tool_calls 消息的策略，前端需要完整上下文
         cleaned = []
@@ -429,6 +430,7 @@ async def list_sessions(
         sessions_list = await orch.loop.sessions.alist_user_sessions(username)
     else:
         sessions_list = await _fallback_list_sessions(orch, username)
+    logger.info(f"[API] GET /sessions username={username} -> {len(sessions_list)} sessions")
 
     # 构建 SessionItem 并按日期分组
     all_items: list[SessionItem] = []

@@ -83,6 +83,7 @@
               剩余支付时间：<strong>{{ countdown }}</strong>
             </div>
             <el-button @click="onCancel" plain>取消订单</el-button>
+            <el-button @click="onModifyAddress" plain>修改地址</el-button>
             <el-button type="primary" @click="onPay">去付款</el-button>
           </template>
 
@@ -116,13 +117,16 @@
       <div v-else class="empty">未能加载订单详情</div>
     </div>
   </div>
+
+  <AddressManager v-model:visible="showAddressPicker" @confirm="onAddressManagerConfirm" />
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import orderApi from '@/api/user/order'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import AddressManager from '@/components/AddressManager.vue'
 import noImg from '@/assets/noImg.png'
 import userPng from '@/assets/user.png'
 import { safeImage } from '@/utils/asset'
@@ -292,7 +296,6 @@ function onImgError(e) {
   try {
     const t = e && e.target
     if (!t) return
-    // If it's a rider avatar, use user default; otherwise use generic noImg
     const cls = (t.className || '')
     if (cls && cls.toString().indexOf('rider-avatar') !== -1) {
       t.src = userPng
@@ -300,6 +303,26 @@ function onImgError(e) {
       t.src = noImg
     }
   } catch (err) {}
+}
+
+// ── 修改地址弹窗 ──
+const showAddressPicker = ref(false)
+const modifyingOrderId = ref<number | string>(0)
+
+async function onModifyAddress() {
+  modifyingOrderId.value = order.value?.id || id
+  showAddressPicker.value = true
+}
+
+async function onAddressManagerConfirm(addr: any) {
+  if (!addr?.id || !modifyingOrderId.value) return
+  try {
+    await orderApi.updateOrderAddress(String(modifyingOrderId.value), { consigneeid: addr.id })
+    ElMessage.success('地址修改成功')
+    fetch()
+  } catch (e) {
+    ElMessage.error('地址修改失败，请重试')
+  }
 }
 
 // 更新倒计时
@@ -715,16 +738,16 @@ onBeforeUnmount(() => {
     width: 90%;
     padding: 16px;
   }
-  
+
   .goods-img {
     width: 50px;
     height: 50px;
   }
-  
+
   .action-bar {
     flex-wrap: wrap;
   }
-  
+
   .countdown {
     width: 100%;
     margin-bottom: 12px;
@@ -732,3 +755,4 @@ onBeforeUnmount(() => {
   }
 }
 </style>
+

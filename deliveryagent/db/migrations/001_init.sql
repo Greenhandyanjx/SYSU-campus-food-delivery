@@ -23,18 +23,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_session_ts
 CREATE INDEX IF NOT EXISTS idx_messages_role
     ON messages(role);
 
-CREATE OR REPLACE FUNCTION touch_session_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-    UPDATE sessions SET updated_at = NOW()
-    WHERE key = COALESCE(NEW.session_key, OLD.session_key);
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
+-- cleanup: 移除旧的 FOR EACH ROW trigger，它会在每次插入消息时覆盖
+-- updated_at，导致 JSONL 迁移过来的会话日期全部变成当前时间
 DROP TRIGGER IF EXISTS trg_messages_touch_session ON messages;
-
-CREATE TRIGGER trg_messages_touch_session
-    AFTER INSERT OR UPDATE OR DELETE ON messages
-    FOR EACH ROW
-    EXECUTE FUNCTION touch_session_updated_at();
+DROP FUNCTION IF EXISTS touch_session_updated_at;

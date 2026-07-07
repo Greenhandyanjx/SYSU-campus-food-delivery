@@ -445,6 +445,56 @@ func GetUserOrderList(c *gin.Context) {
 		merchantMap[m.ID] = m
 	}
 
+	// 批量加载收货人+地址信息（列表接口也返回 consignee/phone/address）
+	type consigneeAddr struct {
+		Name    string
+		Phone   string
+		Address string
+	}
+	orderAddrMap := make(map[uint]consigneeAddr)
+	consigneeIDSet := make(map[int]struct{})
+	for _, o := range orders {
+		consigneeIDSet[o.Consigneeid] = struct{}{}
+	}
+	consigneeIDs := make([]int, 0, len(consigneeIDSet))
+	for id := range consigneeIDSet {
+		consigneeIDs = append(consigneeIDs, id)
+	}
+	if len(consigneeIDs) > 0 {
+		var consignees []models.Consignee
+		global.Db.Where("id IN ?", consigneeIDs).Find(&consignees)
+		addrIDSet := make(map[int]struct{})
+		consigneeMap := make(map[int]models.Consignee)
+		for _, c := range consignees {
+			consigneeMap[int(c.ID)] = c
+			addrIDSet[c.Addressid] = struct{}{}
+		}
+		addrIDs := make([]int, 0, len(addrIDSet))
+		for id := range addrIDSet {
+			addrIDs = append(addrIDs, id)
+		}
+		addrMap := make(map[int]models.Address)
+		if len(addrIDs) > 0 {
+			var addrs []models.Address
+			global.Db.Where("id IN ?", addrIDs).Find(&addrs)
+			for _, a := range addrs {
+				addrMap[a.ID] = a
+			}
+		}
+		for _, o := range orders {
+			if c, ok := consigneeMap[o.Consigneeid]; ok {
+				addrStr := ""
+				if a, ok2 := addrMap[c.Addressid]; ok2 {
+					addrStr = a.Province + " " + a.City + " " + a.District + " " + a.Street + " " + a.Detail
+				}
+				orderAddrMap[o.ID] = consigneeAddr{
+					Name:    c.Name,
+					Phone:   c.Phone,
+					Address: addrStr,
+				}
+			}
+		}
+	}
 	// 为避免 N+1 查询：一次性加载所有 order_meals 与 order_dishes（及其关联 Meal/Dish），
 	// 然后按 order_id 分组以便快速组装返回数据
 	orderIDList := make([]uint, 0, len(orders))
@@ -540,6 +590,18 @@ func GetUserOrderList(c *gin.Context) {
 			"is_commented":         o.IsCommented,
 			"merchant_avg_score":   m.AvgScore,
 			"merchant_score_count": m.ScoreCount,
+			"consignee": func() string {
+				if ca, ok := orderAddrMap[o.ID]; ok { return ca.Name }
+				return ""
+			}(),
+			"phone": func() string {
+				if ca, ok := orderAddrMap[o.ID]; ok { return ca.Phone }
+				return ""
+			}(),
+			"address": func() string {
+				if ca, ok := orderAddrMap[o.ID]; ok { return ca.Address }
+				return ""
+			}(),
 		})
 	}
 

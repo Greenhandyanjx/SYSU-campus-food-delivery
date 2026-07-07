@@ -49,47 +49,61 @@
             <!-- 日期间隔（类似微信的日期条） -->
             <div v-if="group.dateLabel" class="date-separator">{{ group.dateLabel }}</div>
 
-            <div
-              v-for="(msg, mi) in group.items"
-              :key="gi + '-' + mi"
-              class="msg-row"
-              :class="msg.role"
-            >
-              <div v-if="msg.role === 'assistant' && msg.content" class="msg-avatar"><img :src="agentIcon" alt="AI" /></div>
-              <div class="msg-content-wrap">
-                <!-- 时间戳（类似微信：同 sender 5分钟内不重复） -->
-                <div v-if="msg.showTime" class="msg-time">{{ formatTime(msg.timestamp) }}</div>
-                <div class="msg-bubble-row">
-                  <div v-if="shouldShowBubble(msg, mi, group.items)" class="msg-bubble" v-html="formatContent(msg.content)"></div>
-                  <button
-                    v-if="msg.role === 'assistant' && msg.content && ttsSupported"
-                    class="speaker-btn"
-                    :class="{ speaking: isSpeaking && speakingText === msg.content }"
-                    @click="toggleSpeak(msg.content)"
-                    :title="isSpeaking && speakingText === msg.content ? '停止朗读' : '朗读'"
-                  >
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M11 5L6 9H2v6h4l5 4V5z"/>
-                      <path v-if="isSpeaking && speakingText === msg.content" d="M16 9a5 5 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/>
-                    </svg>
-                  </button>
-                </div>
-                <template v-if="msg.role === 'assistant' && msg.orderCards && msg.orderCards.length > 0">
-                  <div class="order-cards-wrap">
-                    <AgentOrderCard
-                      v-for="(card, ci) in msg.orderCards.slice(0, 10)"
-                      :key="'card-' + ci"
-                      :data="card"
-                      @send-message="onCardAction"
-                      @modify-address="onModifyAddress"
-                    />
-                    <div v-if="msg.orderCards.length > 10" class="order-cards-overflow" @click="onCardAction('查一下我的订单')">
-                      <span>还有 {{ msg.orderCards.length - 10 }} 个订单 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>
-                    </div>
+            <template v-for="(msg, mi) in group.items" :key="gi + '-' + mi">
+              <div class="msg-row" :class="msg.role">
+                <div v-if="msg.role === 'assistant' && msg.content" class="msg-avatar"><img :src="agentIcon" alt="AI" /></div>
+                <div class="msg-content-wrap">
+                  <!-- 时间戳（类似微信：同 sender 5分钟内不重复） -->
+                  <div v-if="msg.showTime" class="msg-time">{{ formatTime(msg.timestamp) }}</div>
+                  <div class="msg-bubble-row">
+                    <div v-if="shouldShowBubble(msg, mi, group.items)" class="msg-bubble" v-html="formatContent(msg.content)"></div>
+                    <button
+                      v-if="msg.role === 'assistant' && msg.content && ttsSupported"
+                      class="speaker-btn"
+                      :class="{ speaking: isSpeaking && speakingText === msg.content }"
+                      @click="toggleSpeak(msg.content)"
+                      :title="isSpeaking && speakingText === msg.content ? '停止朗读' : '朗读'"
+                    >
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+                        <path v-if="isSpeaking && speakingText === msg.content" d="M16 9a5 5 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/>
+                      </svg>
+                    </button>
                   </div>
-                </template>
+                </div>
               </div>
-            </div>
+
+              <!-- 订单卡片：移出 msg-content-wrap，放在消息下方，宽度由自身内容决定 -->
+              <div v-if="msg.role === 'assistant' && msg.orderCards && msg.orderCards.length > 0 && cardsReady" class="order-cards-block">
+                <div class="order-cards-wrap">
+                  <AgentOrderCard
+                    v-for="(card, ci) in msg.orderCards.slice(0, 10)"
+                    :key="'card-' + ci"
+                    :data="card"
+                    @send-message="onCardAction"
+                    @modify-address="onModifyAddress"
+                  />
+                  <div v-if="msg.orderCards.length > 10" class="order-cards-overflow" @click="onCardAction('查一下我的订单')">
+                    <span>还有 {{ msg.orderCards.length - 10 }} 个订单 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 商家卡片 -->
+              <div v-if="msg.role === 'assistant' && msg.storeCards && msg.storeCards.length > 0 && cardsReady" class="order-cards-block">
+                <div class="order-cards-wrap">
+                  <AgentStoreCard
+                    v-for="(card, ci) in msg.storeCards.slice(0, 10)"
+                    :key="'store-' + ci"
+                    :data="card"
+                    @send-message="onCardAction"
+                  />
+                  <div v-if="msg.storeCards.length > 10" class="order-cards-overflow" @click="onCardAction('查一下有哪些商家')">
+                    <span>还有 {{ msg.storeCards.length - 10 }} 个商家 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>
+                  </div>
+                </div>
+              </div>
+            </template>
           </template>
 
           <div v-if="showLoading" class="msg-row assistant">
@@ -150,33 +164,7 @@
     </div>
   </div>
 
-  <!-- 修改地址弹窗 -->
-  <el-dialog v-model="showAddressPicker" title="选择收货地址" width="500px" :close-on-click-modal="false">
-    <div v-if="addresses.length === 0" style="text-align:center;padding:24px;color:#999">
-      暂无收货地址，请先在「我的地址」中添加
-    </div>
-    <div v-else class="addr-picker-list">
-      <el-card
-        v-for="a in addresses"
-        :key="a.id"
-        :class="['addr-card-item', { selected: selectedAddressId === a.id }]"
-        shadow="hover"
-        @click="selectedAddressId = a.id"
-      >
-        <div class="addr-item-top">
-          <strong>{{ a.name }}</strong>
-          <span style="margin-left:8px;color:#999">{{ a.phone }}</span>
-          <span v-if="a.isDefault" class="default-badge">默认</span>
-        </div>
-        <div class="addr-item-detail">{{ formatAddr(a) }}</div>
-      </el-card>
-    </div>
-    <template #footer>
-      <el-button @click="showAddressPicker = false">取消</el-button>
-      <el-button type="primary" :disabled="!selectedAddressId" @click="confirmAddressChange">确认修改</el-button>
-    </template>
-  </el-dialog>
-
+  <AddressManager v-model:visible="showAddressPicker" @confirm="onAddressManagerConfirm" />
 </template>
 
 <script setup lang="ts">
@@ -186,48 +174,11 @@ import { useAgentChat, ChatMsg, SessionItem, OrderCardData } from '@/composables
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useSpeechSynthesis } from '@/composables/useSpeechSynthesis'
 import AgentOrderCard from '@/components/Chat/AgentOrderCard.vue'
+import AgentStoreCard from '@/components/Chat/AgentStoreCard.vue'
 import agentIcon from '@/assets/icons/agent.svg'
 import orderApi from '@/api/user/order'
-import request from '@/api/merchant/request'
 import { ElMessage } from 'element-plus'
-
-// ── 修改地址弹窗 ──
-const showAddressPicker = ref(false)
-const addresses = ref<any[]>([])
-const selectedAddressId = ref<number>(0)
-const modifyingOrderId = ref<number | string>(0)
-
-async function onModifyAddress(orderId: number | string) {
-  modifyingOrderId.value = orderId
-  selectedAddressId.value = 0
-  try {
-    const res = await request.get('/user/addresses')
-    const list = res?.data?.data || res?.data || []
-    addresses.value = Array.isArray(list) ? list : []
-  } catch (e) {
-    addresses.value = []
-  }
-  showAddressPicker.value = true
-}
-
-function formatAddr(a: any) {
-  const parts = [a.province || '', a.city || '', a.district || '', a.street || '', a.detail || ''].filter(Boolean)
-  return parts.join(' ') || '暂无详细地址'
-}
-
-async function confirmAddressChange() {
-  if (!selectedAddressId.value || !modifyingOrderId.value) return
-  try {
-    await orderApi.updateOrderAddress(String(modifyingOrderId.value), { consigneeid: selectedAddressId.value })
-    ElMessage.success('地址修改成功')
-    showAddressPicker.value = false
-    // 发送消息给助手更新状态
-    sendMessage('地址已修改，请帮我重新查询订单 #' + modifyingOrderId.value + ' 的最新信息')
-  } catch (e) {
-    ElMessage.error('地址修改失败，请重试')
-  }
-}
-
+import AddressManager from '@/components/AddressManager.vue'
 
 const router = useRouter()
 const {
@@ -236,7 +187,63 @@ const {
   loadDaySessions, newSession, setToken, proactiveLunch,
 } = useAgentChat()
 
+// ── 修改地址弹窗 ──
+const showAddressPicker = ref(false)
+const modifyingOrderId = ref<number | string>(0)
+
+async function onModifyAddress(orderId: number | string) {
+  modifyingOrderId.value = orderId
+  showAddressPicker.value = true
+}
+
+async function onAddressManagerConfirm(addr: any) {
+  if (!addr?.id || !modifyingOrderId.value) return
+  try {
+    await orderApi.updateOrderAddress(String(modifyingOrderId.value), { consigneeid: addr.id })
+    ElMessage.success('地址修改成功')
+
+    // 直接刷新订单卡片，避免 agent 用错误工具查默认地址
+    const orderIdStr = String(modifyingOrderId.value)
+    try {
+      const res = await orderApi.getOrderDetail(orderIdStr)
+      const data = res?.data?.data || res?.data
+      if (data && data.status !== undefined) {
+        for (let mi = 0; mi < messages.value.length; mi++) {
+          const cards = messages.value[mi].orderCards
+          if (!cards) continue
+          for (let ci = 0; ci < cards.length; ci++) {
+            if (String(cards[ci].orderId) !== orderIdStr) continue
+            const newCards = [...cards]
+            newCards[ci] = {
+              ...cards[ci],
+              status: data.status,
+              merchant: data.storeName || data.merchant_name || cards[ci].merchant,
+              amount: data.amount ?? data.total_price ?? cards[ci].amount,
+              consignee: data.consignee || addr.name || cards[ci].consignee,
+              address: data.address || cards[ci].address,
+              phone: data.phone || addr.phone || cards[ci].phone,
+              orderTime: data.orderTime || data.created_at || data.createdAt || cards[ci].orderTime,
+              logo: data.storeLogo || data.logo || cards[ci].logo,
+              dishes: Array.isArray(data.items) ? data.items.map((item: any) => ({
+                name: item.name || '',
+                qty: item.qty || item.count || 1,
+                price: typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0,
+              })) : cards[ci].dishes,
+            }
+            messages.value[mi] = { ...messages.value[mi], orderCards: newCards }
+          }
+        }
+      }
+    } catch {
+      // 卡片刷新失败不影响主流程
+    }
+  } catch (e) {
+    ElMessage.error('地址修改失败，请重试')
+  }
+}
+
 const inputMsg = ref('')
+const cardsReady = ref(false)
 
 // ── 语音输入（麦克风） ──
 const {
@@ -397,15 +404,19 @@ function confirmClear() {
 }
 
 async function onSelectSession(s: { session_id: string }) {
+  cardsReady.value = false
   await loadSession(s.session_id)
   await refreshOrderCards()
+  cardsReady.value = true
   await nextTick()
   scrollDown()
 }
 
 async function onSelectDay(day: SidebarDay) {
+  cardsReady.value = false
   await loadDaySessions(day.sessions)
   await refreshOrderCards()
+  cardsReady.value = true
   await nextTick()
   scrollDown()
 }
@@ -525,7 +536,7 @@ const ORDER_STATUS_MAP: Record<number, string> = {
   6: '已取消',
 }
 
-/** 刷新消息中所有历史订单卡片的状态为最新 */
+/** 刷新消息中所有历史订单卡片的状态为最新（批量更新，一次触发 Vue 渲染） */
 async function refreshOrderCards() {
   if (messages.value.length === 0) return
 
@@ -541,39 +552,51 @@ async function refreshOrderCards() {
   }
   if (orderToPositions.size === 0) return
 
-  await Promise.all([...orderToPositions.entries()].map(async ([orderId, positions]) => {
-    try {
-      const res = await orderApi.getOrderDetail(orderId)
-      const data = res?.data?.data || res?.data
-      if (!data || data.status === undefined) return
-
-      for (const { msgIdx, cardIdx } of positions) {
-        const oldCard = messages.value[msgIdx]?.orderCards?.[cardIdx]
-        if (!oldCard || oldCard.status === data.status) continue
-
-        const newCards = [...messages.value[msgIdx].orderCards!]
-        newCards[cardIdx] = {
-          ...oldCard,
-          status: data.status,
-          merchant: data.storeName || data.merchant_name || oldCard.merchant,
-          amount: data.amount ?? data.total_price ?? oldCard.amount,
-          orderTime: data.orderTime || data.created_at || data.createdAt || oldCard.orderTime,
-          consignee: data.consignee || oldCard.consignee,
-          address: data.address || oldCard.address,
-          phone: data.phone || oldCard.phone,
-          logo: data.storeLogo || data.logo || oldCard.logo,
-          dishes: Array.isArray(data.items) ? data.items.map((item: any) => ({
-            name: item.name || '',
-            qty: item.qty || item.count || 1,
-            price: typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0,
-          })) : oldCard.dishes,
-        }
-        messages.value[msgIdx] = { ...messages.value[msgIdx], orderCards: newCards }
-      }
-    } catch {
-      // silently ignore
-    }
+  // 并发拉取最新数据
+  const results = await Promise.allSettled([...orderToPositions.entries()].map(async ([orderId, positions]) => {
+    const res = await orderApi.getOrderDetail(orderId)
+    const data = res?.data?.data || res?.data
+    if (!data || data.status === undefined) return null
+    return { data, positions }
   }))
+
+  // 同步批量应用所有更新（一次 Vue 刷新）
+  const pendingUpdates: Array<{ msgIdx: number; newCards: OrderCardData[] }> = []
+  for (const result of results) {
+    if (result.status !== 'fulfilled' || !result.value) continue
+    const { data, positions } = result.value
+    for (const { msgIdx, cardIdx } of positions) {
+      const oldCard = messages.value[msgIdx]?.orderCards?.[cardIdx]
+      if (!oldCard || oldCard.status === data.status) continue
+
+      let existing = pendingUpdates.find(u => u.msgIdx === msgIdx)
+      if (!existing) {
+        existing = { msgIdx, newCards: [...messages.value[msgIdx].orderCards!] }
+        pendingUpdates.push(existing)
+      }
+      existing.newCards[cardIdx] = {
+        ...oldCard,
+        status: data.status,
+        merchant: data.storeName || data.merchant_name || oldCard.merchant,
+        amount: data.amount ?? data.total_price ?? oldCard.amount,
+        orderTime: data.orderTime || data.created_at || data.createdAt || oldCard.orderTime,
+        consignee: data.consignee || oldCard.consignee,
+        address: data.address || oldCard.address,
+        phone: data.phone || oldCard.phone,
+        logo: data.storeLogo || data.logo || oldCard.logo,
+        dishes: Array.isArray(data.items) ? data.items.map((item: any) => ({
+          name: item.name || '',
+          qty: item.qty || item.count || 1,
+          price: typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0,
+        })) : oldCard.dishes,
+      }
+    }
+  }
+
+  // 一次同步赋值触发一次 Vue 更新
+  for (const { msgIdx, newCards } of pendingUpdates) {
+    messages.value[msgIdx] = { ...messages.value[msgIdx], orderCards: newCards }
+  }
 }
 
 /** Layer 3: 卡片操作前检查订单状态是否已变化 */
@@ -610,12 +633,14 @@ async function checkCardStatusBeforeAction(text: string): Promise<boolean> {
 }
 
 onMounted(async () => {
+  cardsReady.value = false
   setToken()
   await loadSessions()
 
   // 导航回来：已有会话且消息还在，保持不动（只刷新侧边栏）
   if (currentSessionId.value && messages.value.length > 0) {
     await refreshOrderCards()
+    cardsReady.value = true
     return
   }
 
@@ -629,6 +654,7 @@ onMounted(async () => {
   }
 
   await refreshOrderCards()
+  cardsReady.value = true
   await nextTick()
   inputRef.value?.focus()
   scrollDown()
@@ -650,8 +676,9 @@ watch(isLoading, async (loading) => {
 .agent-layout {
   display: flex !important;
   flex-direction: row !important;
+  margin: 0 auto !important;
   padding: 0 !important;
-  width: 85% !important;
+  width: 60% !important;
   max-width: 1100px !important;
   height: calc(100vh - 64px - 56px - 24px);
   height: calc(100dvh - 64px - 56px - 24px);
@@ -933,7 +960,17 @@ watch(isLoading, async (loading) => {
   flex-direction: column;
 }
 
-.order-cards-wrap { width: 100%; }
+.order-cards-block {
+  align-self: flex-start;
+  margin-top: 2px;
+  margin-bottom: 6px;
+  margin-left: 40px;
+}
+.order-cards-wrap {
+  width: 100%;
+  min-width: 300px;
+  max-width: 400px;
+}
 .order-cards-overflow {
   margin-top: 8px;
   padding: 10px 14px;
@@ -1107,15 +1144,6 @@ watch(isLoading, async (loading) => {
   gap: 4px;
 }
 
-/* ── 地址选择弹窗样式 ── */
-.addr-picker-list { display: flex; flex-direction: column; gap: 12px; max-height: 400px; overflow-y: auto; }
-.addr-card-item { cursor: pointer; border: 2px solid transparent; transition: all 0.2s; }
-.addr-card-item:hover { border-color: #ffc8a8; }
-.addr-card-item.selected { border-color: #FF6B35; background: #FFF3E8; }
-.addr-item-top { margin-bottom: 4px; font-size: 14px; }
-.addr-item-detail { font-size: 13px; color: #666; }
-.default-badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; background: #fff3e0; color: #ff9800; margin-left: 6px; }
-
 /* ── 移动端适配 ── */
 @media (max-width: 768px) {
   .agent-layout { width: 100% !important; flex-direction: column !important; height: auto; border-radius: 0; }
@@ -1123,3 +1151,4 @@ watch(isLoading, async (loading) => {
   .chat-main { height: calc(100vh - 64px - 56px - 200px); }
 }
 </style>
+

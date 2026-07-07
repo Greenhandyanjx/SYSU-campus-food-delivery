@@ -76,41 +76,57 @@
         </div>
 
         <!-- 消息列表 -->
-        <div
-          v-for="(msg, idx) in messages"
-          :key="idx"
-          class="message-row"
-          :class="msg.role"
-        >
-          <!-- AI 消息头像：流式加载时最后一条 AI 消息的头像由下方 loading 动画展示，避免重复 -->
-          <div v-if="msg.role === 'assistant' && !(showLoadingDots && idx === messages.length - 1)" class="msg-avatar">
-            <img :src="agentIcon" alt="AI" />
+        <template v-for="(msg, idx) in messages" :key="idx">
+          <div
+            class="message-row"
+            :class="msg.role"
+          >
+            <!-- AI 消息头像：流式加载时最后一条 AI 消息的头像由下方 loading 动画展示，避免重复 -->
+            <div v-if="msg.role === 'assistant' && !(showLoadingDots && idx === messages.length - 1)" class="msg-avatar">
+              <img :src="agentIcon" alt="AI" />
+            </div>
+
+            <!-- 消息气泡：只有当消息有内容时才渲染 -->
+            <!-- isLoading 时的空 AI 占位由下方的三点动画展示，避免空白气泡闪现 -->
+            <div
+              v-if="shouldShowBubble(msg, idx)"
+              class="message-bubble"
+              :class="{ 'is-streaming': msg.role === 'assistant' && idx === messages.length - 1 && isLoading }"
+              v-html="formatMessage(msg.content)"
+            ></div>
           </div>
 
-          <!-- 消息气泡：只有当消息有内容时才渲染 -->
-          <!-- isLoading 时的空 AI 占位由下方的三点动画展示，避免空白气泡闪现 -->
-          <div
-            v-if="shouldShowBubble(msg, idx)"
-            class="message-bubble"
-            :class="{ 'is-streaming': msg.role === 'assistant' && idx === messages.length - 1 && isLoading }"
-            v-html="formatMessage(msg.content)"
-          ></div>
-
-          <!-- 订单卡片（仅 AI 消息且包含解析后的卡片数据） -->
-          <template v-if="msg.role === 'assistant' && msg.orderCards && msg.orderCards.length > 0">
+          <!-- 订单卡片：移出 message-row，放在消息下方，宽度由自身内容决定 -->
+          <div v-if="msg.role === 'assistant' && msg.orderCards && msg.orderCards.length > 0 && cardsReady" class="order-cards-block">
             <div class="order-cards-wrap">
               <AgentOrderCard
                 v-for="(card, ci) in msg.orderCards.slice(0, 10)"
                 :key="'card-' + ci"
                 :data="card"
                 @send-message="onCardAction"
+                @modify-address="onModifyAddress"
               />
               <div v-if="msg.orderCards.length > 10" class="order-cards-overflow" @click="onCardAction('查一下我的订单')">
                 <span>还有 {{ msg.orderCards.length - 10 }} 个订单 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>
               </div>
             </div>
-          </template>
-        </div>
+          </div>
+
+          <!-- 商家卡片 -->
+          <div v-if="msg.role === 'assistant' && msg.storeCards && msg.storeCards.length > 0 && cardsReady" class="order-cards-block">
+            <div class="order-cards-wrap">
+              <AgentStoreCard
+                v-for="(card, ci) in msg.storeCards.slice(0, 10)"
+                :key="'store-' + ci"
+                :data="card"
+                @send-message="onCardAction"
+              />
+              <div v-if="msg.storeCards.length > 10" class="order-cards-overflow" @click="onCardAction('查一下有哪些商家')">
+                <span>还有 {{ msg.storeCards.length - 10 }} 个商家 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span>
+              </div>
+            </div>
+          </div>
+        </template>
 
         <!-- 加载中的三点动画（替代空白气泡） -->
         <div v-if="showLoadingDots" class="message-row assistant">
@@ -171,6 +187,8 @@
       </div>
     </div>
   </div>
+
+  <AddressManager v-model:visible="showAddressPicker" @confirm="onAddressManagerConfirm" />
 </template>
 
 <script setup lang="ts">
@@ -179,10 +197,14 @@
  * =========================================
  * 使用 <script setup> 语法，依赖 @/composables/useAgentChat 共享状态。
  */
-import { ref, nextTick, computed, onMounted, onBeforeUnmount } from 'vue'
-import { useAgentChat } from '@/composables/useAgentChat'
+import { ref, nextTick, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useAgentChat, OrderCardData } from '@/composables/useAgentChat'
 import AgentOrderCard from '@/components/Chat/AgentOrderCard.vue'
+import AgentStoreCard from '@/components/Chat/AgentStoreCard.vue'
 import agentIcon from '@/assets/icons/agent.svg'
+import orderApi from '@/api/user/order'
+import { ElMessage } from 'element-plus'
+import AddressManager from '@/components/AddressManager.vue'
 
 // ── Props ──
 const props = withDefaults(
@@ -212,6 +234,9 @@ const panelVisible = ref(props.fullPage)
 
 /** 输入框消息文本 */
 const inputMessage = ref('')
+
+/** 订单卡片是否就绪（首次加载时避免渲染旧状态卡片） */
+const cardsReady = ref(false)
 
 /** 是否显示三点 loading（最后一条 AI 消息内容为空时显示，替代空白气泡） */
 const showLoadingDots = computed(() => {
@@ -249,6 +274,7 @@ const suggestions = [
 
 async function openPanel() {
   panelVisible.value = true
+  cardsReady.value = false
   setToken()
   await loadSessions()
   // 查找今天的会话
@@ -268,13 +294,129 @@ async function openPanel() {
   if (!loadedToday) {
     newSession()
   }
+
+  await refreshOrderCards()
+  cardsReady.value = true
   await nextTick()
   inputRef.value?.focus()
   scrollToBottom()
 }
 
+// Agent 返回新消息后自动刷新卡片状态
+watch(isLoading, async (loading) => {
+  if (!loading && messages.value.length > 0) {
+    await refreshOrderCards()
+  }
+})
+
 function closePanel() {
   panelVisible.value = false
+}
+
+// ── Order Card Status Refresh (Layer 2 + Layer 3) ──
+
+const ORDER_STATUS_MAP: Record<number, string> = {
+  1: '待支付',
+  2: '已支付',
+  3: '准备中',
+  4: '配送中',
+  5: '已完成',
+  6: '已取消',
+}
+
+async function refreshOrderCards() {
+  if (messages.value.length === 0) return
+
+  // 收集所有卡片位置
+  const orderToPositions = new Map<string, { msgIdx: number; cardIdx: number }[]>()
+  for (let mi = 0; mi < messages.value.length; mi++) {
+    const cards = messages.value[mi].orderCards
+    if (!cards) continue
+    for (let ci = 0; ci < cards.length; ci++) {
+      const id = String(cards[ci].orderId)
+      if (!orderToPositions.has(id)) orderToPositions.set(id, [])
+      orderToPositions.get(id)!.push({ msgIdx: mi, cardIdx: ci })
+    }
+  }
+  if (orderToPositions.size === 0) return
+
+  // 并发拉取最新数据
+  const results = await Promise.allSettled([...orderToPositions.entries()].map(async ([orderId, positions]) => {
+    const res = await orderApi.getOrderDetail(orderId)
+    const data = res?.data?.data || res?.data
+    if (!data || data.status === undefined) return null
+    return { data, positions }
+  }))
+
+  // 同步批量应用所有更新（一次 Vue 刷新）
+  const pendingUpdates: Array<{ msgIdx: number; newCards: OrderCardData[] }> = []
+  for (const result of results) {
+    if (result.status !== 'fulfilled' || !result.value) continue
+    const { data, positions } = result.value
+    for (const { msgIdx, cardIdx } of positions) {
+      const oldCard = messages.value[msgIdx]?.orderCards?.[cardIdx]
+      if (!oldCard || oldCard.status === data.status) continue
+
+      let existing = pendingUpdates.find(u => u.msgIdx === msgIdx)
+      if (!existing) {
+        existing = { msgIdx, newCards: [...messages.value[msgIdx].orderCards!] }
+        pendingUpdates.push(existing)
+      }
+      existing.newCards[cardIdx] = {
+        ...oldCard,
+        status: data.status,
+        merchant: data.storeName || data.merchant_name || oldCard.merchant,
+        amount: data.amount ?? data.total_price ?? oldCard.amount,
+        orderTime: data.orderTime || data.created_at || data.createdAt || oldCard.orderTime,
+        consignee: data.consignee || oldCard.consignee,
+        address: data.address || oldCard.address,
+        phone: data.phone || oldCard.phone,
+        logo: data.storeLogo || data.logo || oldCard.logo,
+        dishes: Array.isArray(data.items) ? data.items.map((item: any) => ({
+          name: item.name || '',
+          qty: item.qty || item.count || 1,
+          price: typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0,
+        })) : oldCard.dishes,
+      }
+    }
+  }
+
+  // 一次同步赋值触发一次 Vue 更新
+  for (const { msgIdx, newCards } of pendingUpdates) {
+    messages.value[msgIdx] = { ...messages.value[msgIdx], orderCards: newCards }
+  }
+}
+
+async function checkCardStatusBeforeAction(text: string): Promise<boolean> {
+  const orderIdMatch = text.match(/#(\d+)/)
+  if (!orderIdMatch) return true
+
+  const targetOrderId = orderIdMatch[1]
+
+  for (let mi = 0; mi < messages.value.length; mi++) {
+    const cards = messages.value[mi].orderCards
+    if (!cards) continue
+    for (let ci = 0; ci < cards.length; ci++) {
+      if (String(cards[ci].orderId) !== targetOrderId) continue
+      const card = cards[ci]
+      try {
+        const res = await orderApi.getOrderDetail(targetOrderId)
+        const data = res?.data?.data || res?.data
+        if (!data || data.status === undefined || data.status === card.status) return true
+
+        const oldLabel = ORDER_STATUS_MAP[card.status] || `状态(${card.status})`
+        const newLabel = ORDER_STATUS_MAP[data.status] || `状态(${data.status})`
+        const newCards = [...cards]
+        newCards[ci] = { ...card, status: data.status }
+        messages.value[mi] = { ...messages.value[mi], orderCards: newCards }
+        ElMessage.info(`订单 #${targetOrderId} 状态已更新：${oldLabel} → ${newLabel}，请重新操作`)
+        return false
+      } catch {
+        return true
+      }
+    }
+  }
+  return true
 }
 
 // ── 消息渲染判定 ──
@@ -308,9 +450,15 @@ function sendQuickMessage(text: string) {
 
 /**
  * 处理订单卡片按钮触发的消息发送（如"支付订单"、"取消订单"等）
+ * 包含 Layer 3 校验：检查订单状态是否已过期
  */
-function onCardAction(text: string) {
+async function onCardAction(text: string) {
   if (!text.trim() || isLoading.value) return
+
+  // Layer 3: 检查卡片状态是否已过期
+  const canProceed = await checkCardStatusBeforeAction(text)
+  if (!canProceed) return
+
   scrollToBottom()
   sendMessage(text)
   setTimeout(() => scrollToBottom(), 150)
@@ -335,6 +483,61 @@ function handleSend() {
 }
 
 // ── 工具方法 ──
+
+// ── 修改地址弹窗 ──
+const showAddressPicker = ref(false)
+const modifyingOrderId = ref<number | string>(0)
+
+async function onModifyAddress(orderId: number | string) {
+  modifyingOrderId.value = orderId
+  showAddressPicker.value = true
+}
+
+async function onAddressManagerConfirm(addr: any) {
+  if (!addr?.id || !modifyingOrderId.value) return
+  try {
+    await orderApi.updateOrderAddress(String(modifyingOrderId.value), { consigneeid: addr.id })
+    ElMessage.success('地址修改成功')
+
+    // 直接刷新订单卡片数据，避免 agent 收到消息后用 get_user_default_info 查默认地址
+    const orderIdStr = String(modifyingOrderId.value)
+    try {
+      const res = await orderApi.getOrderDetail(orderIdStr)
+      const data = res?.data?.data || res?.data
+      if (data && data.status !== undefined) {
+        for (let mi = 0; mi < messages.value.length; mi++) {
+          const cards = messages.value[mi].orderCards
+          if (!cards) continue
+          for (let ci = 0; ci < cards.length; ci++) {
+            if (String(cards[ci].orderId) !== orderIdStr) continue
+            const newCards = [...cards]
+            newCards[ci] = {
+              ...cards[ci],
+              status: data.status,
+              merchant: data.storeName || data.merchant_name || cards[ci].merchant,
+              amount: data.amount ?? data.total_price ?? cards[ci].amount,
+              consignee: data.consignee || addr.name || cards[ci].consignee,
+              address: data.address || cards[ci].address,
+              phone: data.phone || addr.phone || cards[ci].phone,
+              orderTime: data.orderTime || data.created_at || data.createdAt || cards[ci].orderTime,
+              logo: data.storeLogo || data.logo || cards[ci].logo,
+              dishes: Array.isArray(data.items) ? data.items.map((item: any) => ({
+                name: item.name || '',
+                qty: item.qty || item.count || 1,
+                price: typeof item.price === 'number' ? item.price : parseFloat(item.price) || 0,
+              })) : cards[ci].dishes,
+            }
+            messages.value[mi] = { ...messages.value[mi], orderCards: newCards }
+          }
+        }
+      }
+    } catch {
+      // 卡片刷新失败不影响主流程
+    }
+  } catch (e) {
+    ElMessage.error('地址修改失败，请重试')
+  }
+}
 
 /**
  * 格式化消息内容（安全转义 HTML + Markdown 风格格式化）
@@ -538,7 +741,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
+  padding: 12px 16px;
   background: linear-gradient(135deg, #FF6B35, #FF8C42);
   color: white;
   flex-shrink: 0;
@@ -628,11 +831,11 @@ onBeforeUnmount(() => {
 .chat-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 16px;
   background: #F8F9FA;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   scroll-behavior: smooth;
 }
 
@@ -723,10 +926,10 @@ onBeforeUnmount(() => {
 /* ── 消息气泡 ── */
 
 .message-bubble {
-  padding: 10px 14px;
-  border-radius: 16px;
-  font-size: 14px;
-  line-height: 1.6;
+  padding: 8px 12px;
+  border-radius: 14px;
+  font-size: 13px;
+  line-height: 1.5;
   word-break: break-word;
   position: relative;
 }
@@ -761,8 +964,17 @@ onBeforeUnmount(() => {
 }
 
 /* 订单卡片容器 */
+.order-cards-block {
+  align-self: flex-start;
+  /* 不设 width，由内容决定宽度 */
+  margin-top: 2px;
+  margin-bottom: 6px;
+  margin-left: 40px;  /* 与头像缩进对齐（avatar 32px + gap 8px） */
+}
 .order-cards-wrap {
   width: 100%;
+  min-width: 280px;
+  max-width: 360px;  /* 限制最大宽度，避免拉伸到父容器宽度 */
 }
 
 .order-cards-overflow {
@@ -957,8 +1169,8 @@ onBeforeUnmount(() => {
   .agent-panel.is-floating {
     right: 20px;
     bottom: 80px;
-    width: 400px;
-    height: 600px;
+    width: 440px;
+    height: 640px;
     border-radius: 16px;
     overflow: hidden;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
@@ -995,4 +1207,7 @@ onBeforeUnmount(() => {
     padding: 8px 12px 12px;
   }
 }
+
+
 </style>
+

@@ -36,38 +36,20 @@ export function getOrderDetailPage(params: any) {
   })
 }
 
-// 合并/缓存相同分页请求：
-// - 若已有未完成的相同请求，返回相同的 Promise
-// - 若最近（TTL ms）内有相同请求的已完成结果，直接返回已缓存结果
+// 合并相同分页请求（仅合并并发中的请求，不做响应缓存，保证状态变更后刷新到最新数据）
 const _inFlightOrderPage: Record<string, Promise<any>> = {}
-const _orderPageCache: Record<string, { ts: number; res: any }> = {}
-const _CACHE_TTL = 500 // ms
 export function getOrderDetailPageCoalesced(params: any) {
   const key = JSON.stringify({ url: '/merchant/orders/page', params: params || {} })
-  const now = Date.now()
-  // recent cached result
-  const cached = _orderPageCache[key]
-  if (cached && now - cached.ts < _CACHE_TTL) {
-    try {
-      console.warn('ORDERS_PAGE_COALESCE - CACHE_HIT', { key, ttl: _CACHE_TTL })
-    } catch (e) { }
-    return Promise.resolve(cached.res)
-  }
   if (_inFlightOrderPage[key]) {
-    try { console.warn('ORDERS_PAGE_COALESCE - INFLIGHT_HIT', { key }) } catch (e) { }
     return _inFlightOrderPage[key]
   }
-  try { console.warn('ORDERS_PAGE_COALESCE - NETWORK_CALL', { key, params }) } catch (e) { }
   const p = getOrderDetailPage(params)
   _inFlightOrderPage[key] = p
   p.then((r: any) => {
-    try {
-      _orderPageCache[key] = { ts: Date.now(), res: r }
-    } catch (e) { }
-    try { delete _inFlightOrderPage[key] } catch (e) { }
+    delete _inFlightOrderPage[key]
     return r
   }).catch((err: any) => {
-    try { delete _inFlightOrderPage[key] } catch (e) { }
+    delete _inFlightOrderPage[key]
     throw err
   })
   return p
@@ -87,29 +69,21 @@ export function queryOrderDetailById(params: { orderId: string | number }) {
   })
 }
 
-// 合并/缓存相同的订单详情请求，避免同时触发多个相同的网络请求
+// 合并相同的订单详情请求（仅合并并发中的请求，不缓存响应）
 const _inFlightOrderDetails: Record<string, Promise<any>> = {}
-const _orderDetailCache: Record<string, { ts: number; res: any }> = {}
-const _DETAIL_CACHE_TTL = 500 // ms
 export function queryOrderDetailByIdCoalesced(params: { orderId: string | number }) {
   const id = String(params.orderId || '')
   const key = JSON.stringify({ url: '/merchant/order/detail', id })
-  const now = Date.now()
-  const cached = _orderDetailCache[key]
-  if (cached && now - cached.ts < _DETAIL_CACHE_TTL) {
-    return Promise.resolve(cached.res)
-  }
   if (_inFlightOrderDetails[key]) {
     return _inFlightOrderDetails[key]
   }
   const p = queryOrderDetailById(params)
   _inFlightOrderDetails[key] = p
   p.then((r: any) => {
-    try { _orderDetailCache[key] = { ts: Date.now(), res: r } } catch (e) { }
-    try { delete _inFlightOrderDetails[key] } catch (e) { }
+    delete _inFlightOrderDetails[key]
     return r
   }).catch((err: any) => {
-    try { delete _inFlightOrderDetails[key] } catch (e) { }
+    delete _inFlightOrderDetails[key]
     throw err
   })
   return p

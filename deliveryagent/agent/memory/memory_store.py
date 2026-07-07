@@ -178,7 +178,7 @@ class MemoryConsolidator:
         context_builder: Any,  # ContextBuilder, 用于 build_messages
         sessions: "SessionManager",
         consolidate_every_n: int = 20,  # 每 N 条消息后触发
-        consolidate_interval_min: int = 15,  # 最短间隔 15 分钟
+        consolidate_interval_min: int = 30,  # 最短间隔 15 分钟
     ):
         self.workspace = workspace
         self.provider = provider
@@ -198,7 +198,11 @@ class MemoryConsolidator:
         1. 自上次 consolidation 以来有新消息
         2. 达到消息数阈值或时间间隔
         """
-        new_count = len(session.messages) - session.last_consolidated
+        # 只统计 user 角色的消息，排除 assistant/tool/system 等内部消息
+        # 原因是: 一次用户输入可能生成 3~4 条内部消息（assistant 回复、tool call、tool result），
+        # 如果按总消息数算，用户感觉只发了 5 条消息却触发了 20 条的阈值。
+        unconsolidated = session.messages[session.last_consolidated:]
+        new_count = sum(1 for m in unconsolidated if m.get("role") == "user")
         if new_count == 0:
             return
 
@@ -209,7 +213,7 @@ class MemoryConsolidator:
         hit_count = new_count >= self._consolidate_every_n
         hit_time = (
             time_since_last >= self._consolidate_interval_min * 60
-            and new_count >= min(5, self._consolidate_every_n // 2)
+            and new_count >= 3  # 时间达标时至少 3 条用户消息才触发
         )
 
         if not hit_count and not hit_time:

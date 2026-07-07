@@ -233,7 +233,7 @@ class Dream:
         if len(parts) >= 2:
             summary = parts[-1].strip()
             lines = [l.strip("- *") for l in summary.split("\n") if l.strip() and not l.startswith("#")]
-            return "\n".join(lines[:5])
+            return "\n".join(lines[:20])
         return ""
 
     def _dedup(self, existing: str, new_facts: list[str]) -> dict[str, Any]:

@@ -24,6 +24,21 @@ from typing import Any
 from loguru import logger
 
 
+def _ensure_metadata_dict(raw: Any) -> dict:
+    """确保 metadata 为 dict 类型，修复 JSONB/字符串反序列化导致的类型不一致。"""
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        import json as _json
+        try:
+            parsed = _json.loads(raw)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            pass
+    return {}
+
+
 class PgBackend:
     """
     PostgreSQL 存储后端。
@@ -189,21 +204,10 @@ class PgBackend:
     CREATE INDEX IF NOT EXISTS idx_messages_role
         ON messages(role);
 
-    CREATE OR REPLACE FUNCTION touch_session_updated_at()
-    RETURNS TRIGGER AS $$
-    BEGIN
-        UPDATE sessions SET updated_at = NOW()
-        WHERE key = COALESCE(NEW.session_key, OLD.session_key);
-        RETURN NEW;
-    END;
-    $$ LANGUAGE plpgsql;
-
+    -- cleanup: 移除旧的 FOR EACH ROW trigger，它会在每次插入消息时覆盖
+    -- updated_at，导致 JSONL 迁移过来的会话日期全部变成当前时间
     DROP TRIGGER IF EXISTS trg_messages_touch_session ON messages;
-
-    CREATE TRIGGER trg_messages_touch_session
-        AFTER INSERT OR UPDATE OR DELETE ON messages
-        FOR EACH ROW
-        EXECUTE FUNCTION touch_session_updated_at();
+    DROP FUNCTION IF EXISTS touch_session_updated_at;
     """
 
     # ─── 核心 CRUD ─────────────────────────────────────
@@ -247,7 +251,7 @@ class PgBackend:
                 "messages": [self._row_to_message(r) for r in msg_rows],
                 "created_at": row["created_at"],
                 "updated_at": row["updated_at"],
-                "metadata": row["metadata"] or {},
+                "metadata": _ensure_metadata_dict(row["metadata"]),
                 "last_consolidated": row["last_consolidated"] or 0,
             }
         except Exception as e:
@@ -333,23 +337,40 @@ class PgBackend:
                         # 正常情况：有新增消息，只追加差异部分
                         new_msgs = messages[count:]
                     else:
-                        # 异常情况：内存中的 messages 被 truncate 过
-                        # （例如 consolidation 后清除了前半部分）
-                        # 此时 PG 中的记录数多于内存中的记录数。
+                        # total < count：内存中的 messages 数量少于 PG
                         #
-                        # 策略分支：
-                        # - total > 0：部分截断，删除 PG 旧消息后重新写入剩余消息
-                        # - total == 0：纯 truncation（session.messages 被清空但 PG 数据
-                        #   依然有效），跳过删除，保留 PG 中已有的消息
-                        if total > 0:
-                            await conn.execute(
-                                "DELETE FROM messages WHERE session_key = $1", key
+                        # 这种情况发生在 consolidation（记忆压缩）之后：
+                        # session.messages 被截断为最近 N 条，但 PG 中仍保留全部历史。
+                        #
+                        # 注意不能直接 new_msgs = [] 跳过写入，因为当前轮次的
+                        # 新消息（assistant 回复等）可能尚未写入 PG。必须找出
+                        # 哪些是真正的新消息并写入，同时绝不删除/覆盖 PG 中的任何数据。
+                        #
+                        # 做法：加载 PG 中现有消息的签名（role+content+tool_call_id+name），
+                        # 只写入内存中不存在于 PG 的新消息。
+                        existing_rows = await conn.fetch(
+                            "SELECT role, content, COALESCE(tool_call_id, '') AS tcid, "
+                            "COALESCE(name, '') AS msg_name FROM messages "
+                            "WHERE session_key = $1", key
+                        )
+                        existing_sigs: set[tuple[str, str, str, str]] = set()
+                        for row in existing_rows:
+                            existing_sigs.add((
+                                row["role"],
+                                row["content"] or "",
+                                row["tcid"],
+                                row["msg_name"],
+                            ))
+                        new_msgs = []
+                        for msg in messages:
+                            sig = (
+                                msg.get("role", ""),
+                                msg.get("content", ""),
+                                msg.get("tool_call_id") or "",
+                                msg.get("name") or "",
                             )
-                            new_msgs = messages
-                            count = 0
-                        else:
-                            # total == 0：纯 truncation，PG 数据是完整的，跳过写操作
-                            new_msgs = []
+                            if sig not in existing_sigs:
+                                new_msgs.append(msg)
 
                     # ── Step 4: 批量写入消息 ──
                     if new_msgs:

@@ -78,10 +78,9 @@ async def handle_consolidation(data: dict, loop: "AgentLoop") -> None:
 
     await loop.memory_consolidator.maybe_consolidate(session)
 
-    # 如果做了 consolidation，截断已归档的消息
-    if session.last_consolidated > 0:
-        session.messages[:session.last_consolidated] = []
-        session.last_consolidated = 0
+    # 注意：不再截断 session.messages，原因见 loop.py 中的注释。
+    # 截断会导致下一次 asave() 覆盖 PG 中的完整历史记录。
+    # last_consolidated 由 asave() 持久化到 sessions 表即可。
 
     # 保存回存储（会覆盖 JSONL/PG）
     await loop.sessions.asave(session)

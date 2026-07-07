@@ -4,8 +4,17 @@ export async function listAddresses() {
   try {
     const res = await request.get('/user/addresses')
     return res.data
-  } catch (e) {
-    return { code: 0, msg: 'failed', data: null }
+  } catch (e: any) {
+    console.error('[AddressAPI] listAddresses error:', e?.response?.status, e?.response?.data || e?.message || e)
+    // 如果是 401（未登录/令牌过期），返回明确信息
+    if (e?.response?.status === 401) {
+      return { code: 401, msg: '登录已过期，请重新登录', data: null }
+    }
+    // 网络错误或超时
+    if (e?.code === 'ECONNABORTED') {
+      return { code: 0, msg: '请求超时，请检查网络', data: null }
+    }
+    return { code: 0, msg: e?.message || '加载地址失败', data: null }
   }
 }
 

@@ -1,0 +1,101 @@
+@startuml
+skinparam style strictuml
+skinparam backgroundColor #FEFEFE
+skinparam defaultFontName Microsoft YaHei
+skinparam state {
+  BackgroundColor #F5F5F5
+  BorderColor #333333
+  FontColor #333333
+  BorderThickness 2
+  FontSize 14
+}
+skinparam note {
+  BackgroundColor #FFFDE7
+  BorderColor #999999
+  FontSize 12
+}
+
+title 外卖订单状态机 — Agent 智能辅助场景
+
+' ===== 状态定义 =====
+
+state "1. 待支付\nPending" as PENDING #FFE4E1
+state "2. 已支付\nPaid" as PAID #E1F5FE
+state "3. 已接单\nAccepted" as ACCEPTED #E8F5E9
+state "4. 配送中\nDelivering" as DELIVERING #FFF3E0
+state "5. 已完成\nCompleted" as COMPLETED #F3E5F5
+state "6. 已取消\nCancelled" as CANCELLED #ECEFF1
+
+' ===== 横向状态转移 =====
+
+[*] --> PENDING : 用户下单
+
+PENDING -right-> PAID : 支付成功
+PENDING -down-> CANCELLED : 15 分钟超时
+PENDING --> CANCELLED : 用户取消
+
+PAID -right-> ACCEPTED : 商家接单
+PAID -down-> CANCELLED : 商家拒单
+
+ACCEPTED -right-> DELIVERING : 开始配送
+
+DELIVERING -right-> COMPLETED : 确认送达
+
+' ===== Agent 场景标注 =====
+
+note right of PENDING
+  **智能点餐**
+  "帮我点一份黄焖鸡米饭送到宿舍"
+  Agent 自动完成：
+  ① 搜索商家 → 查询菜单
+  ② 从记忆系统调取默认地址
+  ③ 展示订单信息确认
+  ④ 调用 createPending 创建订单
+  ⑤ 引导用户完成支付
+end note
+
+note right of PAID
+  **订单跟踪**
+  "我的订单现在怎么样了"
+  Agent 查询当前状态：
+  ① 读取订单状态
+  ② 如商家未接单 → 可催促
+  ③ 异常状态主动通知用户
+end note
+
+note right of ACCEPTED
+  **状态推送**
+  Agent 后台感知状态变更：
+  ① 商家已接单 → 准备中
+  ② 无需用户反复刷新
+  ③ 自动推送备餐进度
+end note
+
+note right of DELIVERING
+  **配送追踪**
+  "我的外卖到哪了"
+  Agent 实时查询物流：
+  ① 骑手当前位置
+  ② 预计送达时间
+  ③ 剩余距离
+end note
+
+note right of COMPLETED
+  **售后闭环**
+  Agent 主动跟进：
+  ① 送达确认通知
+  ② 邀请用户评价
+  ③ 记录口味偏好至记忆系统
+end note
+
+note left of CANCELLED
+  **售后客服**
+  "我想取消订单"
+  Agent 处理取消流程：
+  ① 查订单状态判断是否可取消
+  ② 校验订单归属
+  ③ 执行取消操作并告知结果
+  ④ 超时场景提前提醒用户续期
+end note
+
+@enduml

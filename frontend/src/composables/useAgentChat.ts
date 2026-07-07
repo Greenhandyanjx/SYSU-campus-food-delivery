@@ -46,12 +46,33 @@ export interface SessionItem {
   message_count?: number
 }
 
+// ── 商家卡片数据类型 ──
+export interface StoreDish {
+  name: string
+  price: number
+  image?: string
+}
+
+export interface StoreCardData {
+  id: number | string
+  name: string
+  rating: number
+  sales: number
+  desc?: string
+  logo?: string
+  deliveryFee?: number
+  minOrder?: number
+  dishes?: StoreDish[]
+  tags?: string[]
+}
+
 // ── 消息类型定义 ──
 export interface ChatMsg {
   role: 'user' | 'assistant'
   content: string
   timestamp?: number      // Unix 时间戳（秒），用于展示消息时间
   orderCards?: OrderCardData[]
+  storeCards?: StoreCardData[]
   showTime?: boolean
 }
 
@@ -77,6 +98,24 @@ function parseOrderCards(content: string): { cleanContent: string; cards: OrderC
   const cleanContent = content.replace(regex, (_match, jsonStr) => {
     try {
       const data = JSON.parse(jsonStr.trim()) as OrderCardData
+      cards.push(data)
+    } catch {
+      // ignore parse errors
+    }
+    return ''
+  })
+  return { cleanContent: cleanContent.trim(), cards }
+}
+
+/**
+ * 从消息内容中解析 STORE_CARD 标记，提取商家卡片数据
+ */
+function parseStoreCards(content: string): { cleanContent: string; cards: StoreCardData[] } {
+  const cards: StoreCardData[] = []
+  const regex = /\[STORE_CARD_START\]([\s\S]*?)\[STORE_CARD_END\]/g
+  const cleanContent = content.replace(regex, (_match, jsonStr) => {
+    try {
+      const data = JSON.parse(jsonStr.trim()) as StoreCardData
       cards.push(data)
     } catch {
       // ignore parse errors
@@ -327,7 +366,7 @@ export function useAgentChat() {
       streamTimeout = setTimeout(() => {
         if (!receivedAnyChunk) {
           console.warn('[AgentChat] 流式超时，回退非流式')
-          _fallbackNonStream(text, aiIdx)
+          _fallbackNonStream(text, aiIdx, sid)
         }
       }, STREAM_TIMEOUT_MS)
 
@@ -348,10 +387,15 @@ export function useAgentChat() {
           }
           isLoading.value = false
           if (messages.value[aiIdx]) {
-            const { cleanContent, cards } = parseOrderCards(messages.value[aiIdx].content)
-            messages.value[aiIdx].content = cleanContent
-            if (cards.length > 0) {
-              messages.value[aiIdx].orderCards = cards
+            const rawContent = messages.value[aiIdx].content
+            const { cleanContent: cleanOrder, cards: orderCards } = parseOrderCards(rawContent)
+            const { cleanContent: cleanStore, cards: storeCards } = parseStoreCards(cleanOrder || rawContent)
+            messages.value[aiIdx].content = cleanStore || cleanOrder
+            if (orderCards.length > 0) {
+              messages.value[aiIdx].orderCards = orderCards
+            }
+            if (storeCards.length > 0) {
+              messages.value[aiIdx].storeCards = storeCards
             }
           }
           loadSessions()
@@ -380,10 +424,15 @@ export function useAgentChat() {
   async function _fallbackNonStream(text: string, aiIdx: number, sid?: string) {
     try {
       const resp = await apiSendMessage(text, sid)
-      const { cleanContent, cards } = parseOrderCards(resp.response)
-      messages.value[aiIdx].content = cleanContent
-      if (cards.length > 0) {
-        messages.value[aiIdx].orderCards = cards
+      const rawContent = resp.response
+      const { cleanContent: cleanOrder, cards: orderCards } = parseOrderCards(rawContent)
+      const { cleanContent: cleanStore, cards: storeCards } = parseStoreCards(cleanOrder || rawContent)
+      messages.value[aiIdx].content = cleanStore || cleanOrder
+      if (orderCards.length > 0) {
+        messages.value[aiIdx].orderCards = orderCards
+      }
+      if (storeCards.length > 0) {
+        messages.value[aiIdx].storeCards = storeCards
       }
       loadSessions()
     } catch (err: any) {

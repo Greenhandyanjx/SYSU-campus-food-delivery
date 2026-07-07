@@ -443,7 +443,7 @@ class QueryOrderTool(Tool):
 
     @property
     def description(self) -> str:
-        return "查询订单状态和详情，包括订单状态、菜品列表、金额、下单时间等。"
+        return "查询订单状态和详情，包括订单状态、菜品列表、金额、下单时间、收货地址等。每次调用都从后端重新查询最新数据，不要使用之前工具调用的缓存结果。"
 
     @property
     def parameters(self) -> dict[str, Any]:
@@ -456,12 +456,21 @@ class QueryOrderTool(Tool):
         }
 
     async def execute(self, order_id: str, **kwargs: Any) -> str:
-        url = f"{DELIVERY_BACKEND_URL}/api/order/status?orderId={order_id}"
+        jwt_token = kwargs.get("_jwt_token", "")
+
+        # 优先用 JWT 调用完整订单详情端点（含商家、菜品、收货信息）
+        # 退而用无鉴权的简单状态端点
+        if jwt_token:
+            url = f"{DELIVERY_BACKEND_URL}/api/merchant/order/detail?orderId={order_id}"
+            headers = {"Authorization": f"Bearer {jwt_token}"}
+        else:
+            url = f"{DELIVERY_BACKEND_URL}/api/order/status?orderId={order_id}"
+            headers = {}
         logger.info(f"[QueryOrderTool] order_id={order_id}")
 
         try:
             async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
-                resp = await client.get(url, follow_redirects=True)
+                resp = await client.get(url, headers=headers, follow_redirects=True)
                 resp.raise_for_status()
                 data = resp.json()
         except httpx.TimeoutException:
@@ -480,7 +489,8 @@ class QueryOrderTool(Tool):
         lines = [f"📋 **订单详情** (ID: {order_id})", "━━━━━━━━━━━━━━━━━━━━━"]
 
         status_map = {
-            0: "⏳ 待支付", 1: "✅ 已支付", 2: "🚴 配送中", 3: "✅ 已完成", 4: "❌ 已取消",
+            1: "⏳ 待支付", 2: "✅ 已支付", 3: "👨‍🍳 已接单", 4: "🚴 配送中",
+            5: "✅ 已完成", 6: "❌ 已取消",
             "pending": "⏳ 待处理", "accepted": "✅ 已接单", "preparing": "👨‍🍳 准备中",
             "delivering": "🚴 配送中", "delivered": "📦 已送达", "completed": "✅ 已完成",
             "cancelled": "❌ 已取消",
@@ -488,16 +498,16 @@ class QueryOrderTool(Tool):
         status = info.get("status")
         status_str = status_map.get(status) if status is not None else str(status or "未知")
         lines.append(f"**状态**: {status_str}")
-        created = _safe_text(info, "createdAt", "created_at", "createTime", default="—")
-        amount = info.get("totalAmount") or info.get("total_amount") or info.get("totalPrice") or "—"
+        created = _safe_text(info, "orderTime", "createdAt", "created_at", "createTime", default="—")
+        amount = info.get("totalAmount") or info.get("total_amount") or info.get("totalPrice") or info.get("amount") or "—"
         lines.append(f"**下单时间**: {created}")
         lines.append(f"**金额**: ¥{amount}")
 
-        merchant = _safe_text(info, "merchantName", "merchant_name", "shopName")
+        merchant = _safe_text(info, "storeName", "merchantName", "merchant_name", "shopName")
         if merchant:
             lines.append(f"**商家**: {merchant}")
 
-        dishes = info.get("dishes") or info.get("items") or info.get("orderItems") or []
+        dishes = info.get("items") or info.get("dishes") or info.get("orderItems") or info.get("orderDetailList") or []
         dish_list = []
         if isinstance(dishes, list) and dishes:
             lines.append("\n**菜品**:")
@@ -507,20 +517,33 @@ class QueryOrderTool(Tool):
                 dq = d.get("quantity") or d.get("qty") or 1
                 lines.append(f"  {i}. {dn} × {dq}  ¥{dp}")
                 dish_list.append({"name": dn, "qty": int(dq), "price": float(dp) if dp != "—" else 0})
+        else:
+            lines.append("\n**菜品**: (暂无明细)")
 
-        # 返回格式文本 + 追加结构化订单卡片
+        consignee = _safe_text(info, "consignee", "consigneeName", "name")
+        address = _safe_text(info, "address", "consigneeAddress", "deliveryAddress")
+        phone = _safe_text(info, "phone", "consigneePhone")
+        order_time = _safe_text(info, "orderTime", "createdAt", "created_at", "createTime")
+        logo = _safe_text(info, "storeLogo", "logo", "merchantLogo")
+        logger.info(f"[QueryOrderTool] order_id={order_id} -> consignee={consignee!r} address={address!r} phone={phone!r}")
+
+        # 地址信息始终展示（即使为空，用 — 占位。保证 LLM 不会完全省略）
         result = "\n".join(lines)
+        result += f"\n**收货人**: {consignee or '—'}"
+        result += f"\n**电话**: {phone or '—'}"
+        result += f"\n**地址**: {address or '—'}"
+
         card_data = {
-            "orderId": _safe_int(info, "id", "ID", "orderId"),
+            "orderId": _safe_int(info, "orderId", "id", "ID"),
             "status": _format_status(info.get("status")),
-            "merchant": _safe_text(info, "merchantName", "merchant_name", "shopName"),
-            "amount": float(_safe_float(info, "totalAmount", "total_amount", "totalPrice") or 0),
+            "merchant": merchant or "",
+            "amount": float(_safe_float(info, "totalAmount", "total_amount", "totalPrice", "amount") or 0),
             "dishes": dish_list,
-            "consignee": _safe_text(info, "consignee", "consigneeName", "name"),
-            "address": _safe_text(info, "address", "consigneeAddress", "deliveryAddress"),
-            "phone": _safe_text(info, "phone", "consigneePhone"),
-            "orderTime": _safe_text(info, "createdAt", "created_at", "createTime"),
-            "logo": _safe_text(info, "storeLogo", "logo", "merchantLogo"),
+            "consignee": consignee or "",
+            "address": address or "",
+            "phone": phone or "",
+            "orderTime": order_time or "",
+            "logo": logo or "",
         }
         return _append_order_card(result, card_data)
 
@@ -605,7 +628,16 @@ class CheckDeliveryStatusTool(Tool):
             except (ValueError, TypeError):
                 pass
 
-        return "\n".join(lines)
+        result = "\n".join(lines)
+        card_data = {
+            "orderId": _safe_int(info, "id", "ID", "orderId"),
+            "status": _format_status(info.get("status")),
+            "merchant": _safe_text(info, "merchantName", "merchant_name", "shopName"),
+            "amount": float(_safe_float(info, "totalAmount", "total_amount", "totalPrice") or 0),
+            "dishes": [],
+            "orderTime": _safe_text(info, "createdAt", "created_at", "createTime"),
+        }
+        return _append_order_card(result, card_data)
 
 
 # ─────────────────────────────────────────────────────────
@@ -696,6 +728,8 @@ class PlaceOrderTool(Tool):
         # ── Step 3: 计算总价 ──
         total_price = sum(float(it["price"]) * int(it["qty"]) for it in resolved_items)
         total_price = round(total_price, 2)
+        # Go 后端在 createPending 中自动加 deliveryAmount，所以 totalPrice 只需菜品价
+        display_total = round(total_price + 2.0, 2)  # 显示给用户时含配送费
 
         # ── Step 4: 调用 createPending 创建待支付订单 ──
         payload = {
@@ -752,7 +786,7 @@ class PlaceOrderTool(Tool):
             "━━━━━━━━━━━━━━━━━━━━━",
             f"**订单号**: #{order_id}",
             f"**菜品**:\n{item_detail}",
-            f"**总计**: ¥{total_price:.2f}（含配送费 ¥2.00）",
+            f"**总计**: ¥{display_total:.2f}（含配送费 ¥2.00）",
         ]
         if notes:
             result_lines.append(f"**备注**: {notes}")
@@ -762,11 +796,54 @@ class PlaceOrderTool(Tool):
         result_lines.append("👉 回复「支付」或「付款」即可用 pay_order 工具完成支付。")
 
         # ── Step 5: 如果用户要求立即支付 ──
+        pay_now_ok = False
         if pay_now:
             pay_result = await self._pay_order(order_id, jwt_token)
             result_lines.append(f"\n{pay_result}")
+            pay_now_ok = "成功" in pay_result
 
-        return "\n".join(result_lines)
+        result = "\n".join(result_lines)
+
+        # ── Step 6: 查询订单详情，获取商家名称和收货地址（用于卡片） ──
+        merchant_name = f"商家 #{merchant_id}"
+        consignee_name = ""
+        consignee_addr = ""
+        consignee_phone = ""
+        order_time = ""
+        try:
+            async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+                detail_resp = await client.get(
+                    f"{DELIVERY_BACKEND_URL}/api/merchant/order/detail?orderId={order_id}",
+                    headers={"Authorization": f"Bearer {jwt_token}"},
+                    follow_redirects=True,
+                )
+                if detail_resp.status_code == 200:
+                    detail_data = detail_resp.json()
+                    detail_raw = _extract_data(detail_data)
+                    if detail_raw:
+                        if detail_raw.get("storeName"):
+                            merchant_name = detail_raw["storeName"]
+                        consignee_name = detail_raw.get("consigneeName") or detail_raw.get("consignee") or ""
+                        consignee_addr = detail_raw.get("consigneeAddress") or detail_raw.get("address") or ""
+                        consignee_phone = detail_raw.get("consigneePhone") or detail_raw.get("phone") or ""
+                        order_time = detail_raw.get("orderTime") or detail_raw.get("createdAt") or ""
+        except Exception:
+            logger.info(f"[PlaceOrderTool] 获取订单详情失败，使用默认卡片数据")
+
+        # 追加订单卡片（含地址信息）
+        card_data = {
+            "orderId": int(order_id) if str(order_id).isdigit() else 0,
+            "status": 2 if pay_now_ok else 1,
+            "merchant": merchant_name,
+            "amount": display_total,
+            "deliveryFee": 2.0,
+            "dishes": [{"name": it["dish_name"], "qty": it["qty"], "price": float(it["price"])} for it in resolved_items],
+            "consignee": consignee_name,
+            "address": consignee_addr,
+            "phone": consignee_phone,
+            "orderTime": order_time,
+        }
+        return _append_order_card(result, card_data)
 
     async def _get_default_consignee_id(self, jwt_token: str) -> int:
         """通过 /api/user/addresses 获取用户的默认收货人 ID"""
@@ -861,12 +938,12 @@ class PlaceOrderTool(Tool):
         return resolved
 
     async def _pay_order(self, order_id: int, jwt_token: str) -> str:
-        """调用 /api/user/order/pay 完成支付"""
+        """调用 /api/user/order/pay 完成支付（默认使用钱包余额）"""
         try:
             async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
                 resp = await client.post(
                     f"{DELIVERY_BACKEND_URL}/api/user/order/pay",
-                    json={"id": order_id},
+                    json={"id": order_id, "use_wallet": True},
                     headers={"Authorization": f"Bearer {jwt_token}"},
                     follow_redirects=True,
                 )
@@ -1267,7 +1344,7 @@ class GetUserOrdersTool(Tool):
 
     @property
     def description(self) -> str:
-        return "获取当前登录用户的订单列表。用户说'我的订单'、'查看订单'时使用。"
+        return "获取当前登录用户的订单列表，每次调用都会从后端重新查询最新数据（含收货地址）。用户说'我的订单'、'查看订单'时使用。不要使用之前工具调用的缓存数据，每次都重新调用此工具获取最新数据。"
 
     @property
     def parameters(self) -> dict[str, Any]:
@@ -1344,6 +1421,20 @@ class GetUserOrdersTool(Tool):
                 lines.append(f"   🕐 {time_str[:16]}")
             if item_names:
                 lines.append(f"   🍽️ {item_names}")
+            # 显示收货地址信息（已通过详情接口补全）
+            consignee = _safe_text(order, "consignee", "consigneeName", "name", default="")
+            address = _safe_text(order, "address", "consigneeAddress", "deliveryAddress", default="")
+            phone = _safe_text(order, "phone", "consigneePhone", default="")
+            logger.info(f"[GetUserOrdersTool] order_id={oid} -> consignee={consignee!r} address={address!r} phone={phone!r}")
+            if consignee or address:
+                addr_parts = []
+                if consignee:
+                    addr_parts.append(f"📍 {consignee}")
+                    if phone:
+                        addr_parts.append(f"📞 {phone}")
+                lines.append("   " + " | ".join(addr_parts))
+                if address:
+                    lines.append(f"   🏠 {address}")
 
         result = "\n".join(lines)
 
@@ -1370,6 +1461,9 @@ class GetUserOrdersTool(Tool):
                 "dishes": dish_list,
                 "orderTime": time_str,
                 "logo": _safe_text(order, "storeLogo", "logo"),
+                "consignee": _safe_text(order, "consignee", "consigneeName", "name"),
+                "address": _safe_text(order, "address", "consigneeAddress", "deliveryAddress"),
+                "phone": _safe_text(order, "phone", "consigneePhone"),
             }
             result = _append_order_card(result, card_data)
 
@@ -1427,7 +1521,9 @@ class CancelOrderTool(Tool):
             return f"⚠️ 请求出错: {type(e).__name__}"
 
         if data.get("code") == 1 or data.get("code") == "1":
-            return f"✅ **订单 #{order_id} 已成功取消**"
+            result = f"✅ **订单 #{order_id} 已成功取消**"
+            card_data = {"orderId": order_id, "status": 6}
+            return _append_order_card(result, card_data)
         return f"⚠️ 取消订单失败: {data.get('msg') or data.get('message') or '未知错误'}"
 
 
@@ -1445,7 +1541,7 @@ class PayOrderTool(Tool):
 
     @property
     def description(self) -> str:
-        return "支付指定订单。用户说'支付'、'付款'时使用。可指定 use_wallet=True 来使用钱包余额支付。"
+        return "支付指定订单。用户说'支付'、'付款'时使用。默认使用钱包余额支付，余额不足时会返回充值提示。"
 
     @property
     def parameters(self) -> dict[str, Any]:
@@ -1457,12 +1553,12 @@ class PayOrderTool(Tool):
             },
             "use_wallet": {
                 "type": "boolean",
-                "description": "是否使用钱包余额支付（默认 false 使用扫码支付）。用户明确说'用余额'、'钱包支付'时传 true。",
+                "description": "是否使用钱包余额支付（默认 true）。当余额不足时，可传 false 切换为扫码支付。",
                 "required": False,
             },
         }
 
-    async def execute(self, order_id: int, use_wallet: bool = False, **kwargs: Any) -> str:
+    async def execute(self, order_id: int, use_wallet: bool = True, **kwargs: Any) -> str:
         jwt_token = kwargs.get("_jwt_token", "")
         if not jwt_token:
             return "⚠️ 无法支付订单：未检测到登录状态。"
@@ -1493,15 +1589,18 @@ class PayOrderTool(Tool):
 
         if data.get("code") == 1 or data.get("code") == "1":
             if use_wallet:
-                return f"✅ **订单 #{order_id} 支付成功！** 已使用钱包余额支付，商家正在准备您的餐品 😊"
-            return f"✅ **订单 #{order_id} 支付成功！** 商家正在准备您的餐品 😊"
+                result = f"✅ **订单 #{order_id} 支付成功！** 已使用钱包余额支付，商家正在准备您的餐品 😊"
+            else:
+                result = f"✅ **订单 #{order_id} 支付成功！** 商家正在准备您的餐品 😊"
+            card_data = {"orderId": order_id, "status": 2}
+            return _append_order_card(result, card_data)
 
         # 检查是否是余额不足
         err_data = data.get("data") or {}
         if err_data.get("need_recharge"):
             balance = err_data.get("balance", 0)
             required = err_data.get("required_amount", 0)
-            return (
+            err_msg = (
                 f"⚠️ **余额不足，无法使用钱包支付**\n\n"
                 f"当前余额：¥{balance:.2f}\n"
                 f"还需充值：¥{required:.2f}\n\n"
@@ -1510,6 +1609,8 @@ class PayOrderTool(Tool):
                 f"2. 或回复「扫码支付」使用扫码方式完成支付\n\n"
                 f"需要我帮您跳转到充值页面吗？"
             )
+            card_data = {"orderId": order_id, "status": 1}
+            return _append_order_card(err_msg, card_data)
 
         return f"⚠️ 支付失败: {data.get('msg') or data.get('message') or '未知错误'}"
 

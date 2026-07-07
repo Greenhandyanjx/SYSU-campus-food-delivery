@@ -116,17 +116,24 @@ async function doRecharge() {
   if (!rechargeAmount.value || rechargeAmount.value <= 0) return
   showRechargeQr.value = true
 
+  // 后台发起充值请求（不阻塞，confirm 独立工作）
+  request.post('/user/wallet/recharge', { amount: rechargeAmount.value }).catch(() => {})
+
   // 3秒后自动确认充值（模拟扫码支付成功）
   setTimeout(async () => {
     try {
       const res = await request.post('/user/wallet/recharge/confirm', { amount: rechargeAmount.value })
-      if (res?.data?.code === 1) {
-        balance.value = res.data.data.balance || balance.value + rechargeAmount.value
-        ElMessage.success(`充值成功！余额 ¥${(res.data.data.balance || 0).toFixed(2)}`)
+      // request.ts 返回完整 AxiosResponse，data 为后端 JSON 体 {code, data, msg}
+      const body = res?.data || res
+      if (body?.code === 1) {
+        const newBalance = body?.data?.balance || balance.value + rechargeAmount.value
+        balance.value = newBalance
+        ElMessage.success(`充值成功！余额 ¥${(newBalance || 0).toFixed(2)}`)
       } else {
-        ElMessage.error('充值失败')
+        ElMessage.error(body?.msg || '充值失败')
       }
-    } catch (e) {
+    } catch (e: any) {
+      console.error('充值确认失败:', e?.response?.data || e?.message || e)
       ElMessage.error('充值失败，请重试')
     }
     showRechargeQr.value = false

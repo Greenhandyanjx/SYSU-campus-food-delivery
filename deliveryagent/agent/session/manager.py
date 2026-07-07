@@ -31,8 +31,10 @@
   避免 LLM 将 null 渲染为 "None"
 """
 
+import asyncio
 import json
 import os
+import time
 from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -150,12 +152,18 @@ class Session:
         按以下规则过滤：
         1. 跳过已 consolidated 的消息（从 last_consolidated 之后开始）
         2. 最多返回 max_messages 条（取最后 N 条）
-        3. 跳过开头的孤儿 tool 消息（参考 find_legal_message_start）
-        4. 确保 content 不会是 None（某些 LLM API 对 null 敏感）
-        5. 确保 tool_calls 始终是 list[dict]（某些后端会序列化为字符串）
+        3. 如果所有消息都已 consolidated，仍然返回最近 max_messages 条
+           （避免 consolidation 后 LLM 看到空历史导致失忆）
+        4. 跳过开头的孤儿 tool 消息（参考 find_legal_message_start）
+        5. 确保 content 不会是 None（某些 LLM API 对 null 敏感）
+        6. 确保 tool_calls 始终是 list[dict]（某些后端会序列化为字符串）
         """
-        unconsolidated = self.messages[self.last_consolidated:]
-        sliced = unconsolidated[-max_messages:]
+        if self.last_consolidated >= len(self.messages):
+            # 全部已 consolidated：回退到最近 N 条，确保 LLM 有上下文
+            sliced = self.messages[-max_messages:]
+        else:
+            unconsolidated = self.messages[self.last_consolidated:]
+            sliced = unconsolidated[-max_messages:]
 
         # 统一 tool_calls 类型：字符串 → list[dict]
         # JSONL 存储时 tool_calls 被序列化为字符串，但 LLM API 要求数组
@@ -355,6 +363,13 @@ class _JsonlBackend:
 
                     if data.get("_type") == "metadata":
                         metadata = data.get("metadata", {})
+                        if isinstance(metadata, str):
+                            try:
+                                metadata = json.loads(metadata)
+                            except (json.JSONDecodeError, TypeError):
+                                metadata = {}
+                        if not isinstance(metadata, dict):
+                            metadata = {}
                         if data.get("created_at"):
                             with suppress(ValueError):
                                 created_at = datetime.fromisoformat(data["created_at"])
@@ -434,6 +449,10 @@ class SessionManager:
 
         # PG 后端（L3 主存储，可选）
         self._pg = None
+        self._pg_config = pg_config  # 保存配置，用于重连时重建 PgBackend
+        self._pg_retry_interval = 60  # 重连尝试间隔（秒）
+        self._last_pg_retry: float = 0.0
+        self._pg_retry_lock = asyncio.Lock()
         if pg_config and pg_config.get("dsn"):
             from agent.session.pg_store import PgBackend
             self._pg = PgBackend(pg_config)
@@ -467,6 +486,46 @@ class SessionManager:
         """关闭 PG 连接池"""
         if self._pg:
             await self._pg.close()
+
+    async def _ensure_pg_connection(self) -> bool:
+        """
+        确保 PG 连接可用，必要时自动重连。
+
+        每次调用先检查 self._pg 是否已存在：
+        - 有 → 直接返回 True
+        - 无 → 检查重连间隔（默认 60s），够时才真正尝试
+
+        间隔保护 + asyncio.Lock 双重防并发冲击。
+        """
+        if self._pg is not None:
+            return True
+        if not self._pg_config:
+            return False
+
+        now = time.monotonic()
+        if now - self._last_pg_retry < self._pg_retry_interval:
+            return False
+
+        async with self._pg_retry_lock:
+            if self._pg is not None:
+                return True
+            if now - self._last_pg_retry < self._pg_retry_interval:
+                return False
+
+            self._last_pg_retry = now
+            try:
+                from agent.session.pg_store import PgBackend
+
+                new_pg = PgBackend(self._pg_config)
+                await new_pg.initialize()
+                self._pg = new_pg
+                logger.info("[SessionManager] PostgreSQL 已重新连接")
+                return True
+            except Exception as e:
+                logger.warning(
+                    f"[SessionManager] PostgreSQL 重连失败（{self._pg_retry_interval}s 后重试）: {e}"
+                )
+                return False
 
     @property
     def pg_available(self) -> bool:
@@ -533,6 +592,9 @@ class SessionManager:
         - L3 PG：跨进程持久化，支持 SQL 查询
         - L4 JSONL：PG 迁移/故障期间的数据恢复路径
         """
+        # 尝试 PG 自动重连（如 PG 之前不可用，现在可能已恢复）
+        await self._ensure_pg_connection()
+
         # L1: 内存缓存
         if key in self._cache:
             return self._cache[key]
@@ -605,6 +667,9 @@ class SessionManager:
         - JSONL 保底：同步写入文件系统（崩溃恢复用）
         - 任何后端写失败：记警告日志 + 继续（不抛异常，不影响业务）
         """
+        # 尝试 PG 自动重连（如 PG 之前不可用，现在可能已恢复）
+        await self._ensure_pg_connection()
+
         pg_ok = False
         if self._pg:
             try:
@@ -802,8 +867,10 @@ class SessionManager:
         是 Unix 浮点数，而 PG 返回的是 datetime 对象转的 ISO 字符串。
         Redis 缓存中统一存 ISO 格式，避免下游消费时类型混乱。
         """
-        MAX_CACHED_MESSAGES = 50
-        messages = session.messages[-MAX_CACHED_MESSAGES:] if len(session.messages) > MAX_CACHED_MESSAGES else session.messages
+        # 缓存全部消息，不限制数量。
+        # 之前限制 50 条会导致：加载到截断数据 → 内存 session 少消息 → 下一次 asave() 触发
+        # pg_store.py 的 total < count 分支 → 跳过写入 → 新消息丢失。
+        messages = session.messages
 
         # 规范化每条消息的时间戳为 ISO 字符串
         normalized = []

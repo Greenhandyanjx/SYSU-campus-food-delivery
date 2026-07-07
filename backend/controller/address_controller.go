@@ -14,41 +14,44 @@ import (
 // GET /user/addresses
 func GetUserAddresses(c *gin.Context) {
 	userID := c.MustGet("baseUserID").(uint)
-	var consignees []models.Consignee
-	if err := global.Db.Where("userid = ?", userID).Find(&consignees).Error; err != nil {
+
+	// 单次 JOIN 查询替代 N+1：一次查出所有 consignees 及其关联的 address
+	type ConsigneeAddrRow struct {
+		models.Consignee
+		Province string `gorm:"column:province"`
+		City     string `gorm:"column:city"`
+		District string `gorm:"column:district"`
+		Street   string `gorm:"column:street"`
+		Detail   string `gorm:"column:detail"`
+	}
+	var rows []ConsigneeAddrRow
+	if err := global.Db.Table("consignees").
+		Select("consignees.*, addresses.province, addresses.city, addresses.district, addresses.street, addresses.detail").
+		Joins("LEFT JOIN addresses ON addresses.id = consignees.addressid").
+		Where("consignees.userid = ?", userID).
+		Find(&rows).Error; err != nil {
 		utils.Error(c, err)
 		return
 	}
 
-	// Load address details for each consignee
-	out := make([]gin.H, 0, len(consignees))
-	for _, con := range consignees {
-		var addr models.Address
-		if err := global.Db.First(&addr, con.Addressid).Error; err != nil {
-			// ignore missing address, still return consignee base
-			out = append(out, gin.H{
-				"id":        con.ID,
-				"name":      con.Name,
-				"phone":     con.Phone,
-				"addressId": con.Addressid,
-				"tag":       con.Tag,
-				"isDefault": con.IsDefault,
-			})
-			continue
+	out := make([]gin.H, 0, len(rows))
+	for _, row := range rows {
+		entry := gin.H{
+			"id":        row.ID,
+			"name":      row.Name,
+			"phone":     row.Phone,
+			"addressId": row.Addressid,
+			"tag":       row.Tag,
+			"isDefault": row.IsDefault,
 		}
-		out = append(out, gin.H{
-			"id":        con.ID,
-			"name":      con.Name,
-			"phone":     con.Phone,
-			"addressId": con.Addressid,
-			"province":  addr.Province,
-			"city":      addr.City,
-			"district":  addr.District,
-			"street":    addr.Street,
-			"detail":    addr.Detail,
-			"tag":       con.Tag,
-			"isDefault": con.IsDefault,
-		})
+		if row.Detail != "" || row.Province != "" {
+			entry["province"] = row.Province
+			entry["city"] = row.City
+			entry["district"] = row.District
+			entry["street"] = row.Street
+			entry["detail"] = row.Detail
+		}
+		out = append(out, entry)
 	}
 
 	// 返回地址数组（前端期望直接是 list）
