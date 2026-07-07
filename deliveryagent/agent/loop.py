@@ -516,11 +516,24 @@ class AgentLoop:
                 final_content = response.content
 
                 # 自动追加 ORDER_CARD 标记（从本轮工具执行结果中提取）
-                # LLM 经常忽略将其包含在回复中的指令，所以程序化追加确保前端能渲染订单卡片
-                # 无论 LLM 是否已经在回复中包含了卡片标记，都追加（前端负责去重）
+                # LLM 可能已经在回复中包含了 ORDER_CARD（prompts/main_prompt.txt 要求如此），
+                # 检查避免重复追加。若 LLM 未包含，则程序化追加确保前端能渲染订单卡片。
                 logger.info(f"[Agent] ORDER_CARDS_FINAL: _order_cards={len(_order_cards)}, seen_ids={_seen_card_ids}")
-                if _order_cards:
-                    final_content = (final_content or "") + "\n\n" + "\n\n".join(_order_cards)
+                if _order_cards and "[ORDER_CARD_START]" not in (final_content or ""):
+                    card_text = "\n\n" + "\n\n".join(_order_cards)
+                    final_content = (final_content or "") + card_text
+
+                    # 流式模式：将卡片标记也通过 on_stream 推送，确保前端收到
+                    if on_stream:
+                        await on_stream(card_text)
+
+                    # 同步更新 messages 中最后一条 assistant 消息的内容，
+                    # 使 ORDER_CARD 被持久化到历史记录中（页面刷新后仍可渲染卡片）
+                    if messages and messages[-1].get("role") == "assistant":
+                        existing = messages[-1].get("content", "") or ""
+                        messages[-1]["content"] = existing + card_text
+                elif _order_cards and "[ORDER_CARD_START]" in (final_content or ""):
+                    logger.info(f"[Agent] ORDER_CARD already in LLM response, skip append")
                 break
 
         # 超过最大迭代次数
@@ -871,7 +884,7 @@ JSON："""
         # ── 强制注入订单地址信息 ──
         # LLM 经常在重述工具结果时将地址信息省略，导致前端显示文本无地址。
         # 这里从原始工具结果中提取地址并追加到 final_content。
-        order_tools = {"query_order", "get_user_orders", "place_order"}
+        order_tools = {"query_order", "get_user_orders", "place_order", "pay_order"}
         if order_tools & set(tools_used):
             addr_lines = []
             for m in all_msgs:

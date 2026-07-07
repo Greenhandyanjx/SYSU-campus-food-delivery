@@ -1,11 +1,14 @@
 {
   "cuisines": [
-    "麻辣烫"
+    "麻辣烫",
+    "甜口"
   ],
-  "dislikes": [],
+  "dislikes": [
+    "辣"
+  ],
   "favorite_stores": [],
   "price_range": "经济",
   "order_times": [],
   "notes": "喜欢夜宵场景，偏好热乎、有肉有面的搭配，曾点过麦当劳。",
-  "updated_at": "2026-07-06T22:50:58.537160"
+  "updated_at": "2026-07-07T14:24:53.143013"
 }

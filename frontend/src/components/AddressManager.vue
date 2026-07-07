@@ -113,7 +113,7 @@
       </div>
     </el-form-item>
 
-    <div class="floating-form">
+    <div class="floating-form address-manager-floating-form">
       <div class="form-item" :class="{ 'has-value': addressForm.name }">
         <input type="text" v-model="addressForm.name" id="am-name" required />
         <label for="am-name" :class="{ active: addressForm.name }">收货人</label>
@@ -689,6 +689,47 @@ function destroyMap() {
 }
 .form-item.has-value label,
 .form-item label.active {
+  top: 0;
+  font-size: 12px;
+  color: #409EFF;
+  transform: translateY(-50%);
+}
+</style>
+
+<!-- 非 scoped 样式：第二个 el-dialog 使用 append-to-body teleport 到 body，scoped CSS 不作用于 teleport 内的元素 -->
+<style>
+.address-manager-floating-form .form-item {
+  position: relative;
+  width: 100%;
+}
+.address-manager-floating-form .form-item input,
+.address-manager-floating-form .form-item select {
+  width: 100%;
+  padding: 16px;
+  font-size: 15px;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  background: white;
+  box-sizing: border-box;
+}
+.address-manager-floating-form .form-item input[readonly] {
+  background-color: white;
+  cursor: default;
+}
+.address-manager-floating-form .form-item label {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 15px;
+  color: #909399;
+  pointer-events: none;
+  transition: 0.2s;
+  background: white;
+  padding: 0 4px;
+}
+.address-manager-floating-form .form-item.has-value label,
+.address-manager-floating-form .form-item label.active {
   top: 0;
   font-size: 12px;
   color: #409EFF;

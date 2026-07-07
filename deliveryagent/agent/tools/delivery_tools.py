@@ -1592,7 +1592,59 @@ class PayOrderTool(Tool):
                 result = f"✅ **订单 #{order_id} 支付成功！** 已使用钱包余额支付，商家正在准备您的餐品 😊"
             else:
                 result = f"✅ **订单 #{order_id} 支付成功！** 商家正在准备您的餐品 😊"
-            card_data = {"orderId": order_id, "status": 2}
+
+            # 支付成功后查询完整订单详情，构建完整卡片
+            merchant_name = ""
+            consignee_name = ""
+            consignee_addr = ""
+            consignee_phone = ""
+            order_time = ""
+            amount = 0.0
+            dishes = []
+            logo = ""
+            try:
+                async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+                    detail_resp = await client.get(
+                        f"{DELIVERY_BACKEND_URL}/api/merchant/order/detail?orderId={order_id}",
+                        headers={"Authorization": f"Bearer {jwt_token}"},
+                        follow_redirects=True,
+                    )
+                    if detail_resp.status_code == 200:
+                        detail_data = detail_resp.json()
+                        detail_raw = _extract_data(detail_data)
+                        if detail_raw and isinstance(detail_raw, dict):
+                            merchant_name = _safe_text(detail_raw, "storeName", "merchantName", "merchant_name", "shopName")
+                            consignee_name = _safe_text(detail_raw, "consigneeName", "consignee", "name")
+                            consignee_addr = _safe_text(detail_raw, "consigneeAddress", "address", "deliveryAddress")
+                            consignee_phone = _safe_text(detail_raw, "consigneePhone", "phone")
+                            order_time = _safe_text(detail_raw, "orderTime", "createdAt", "created_at", "createTime")
+                            amount = _safe_float(detail_raw, "totalAmount", "total_amount", "totalPrice", "amount")
+                            logo = _safe_text(detail_raw, "storeLogo", "logo", "merchantLogo")
+                            raw_dishes = detail_raw.get("items") or detail_raw.get("dishes") or detail_raw.get("orderItems") or detail_raw.get("orderDetailList") or []
+                            for d in raw_dishes:
+                                dn = d.get("name") or d.get("dishName") or ""
+                                dp = d.get("price") or d.get("dishPrice") or 0
+                                dq = d.get("quantity") or d.get("qty") or 1
+                                dishes.append({"name": dn, "qty": int(dq), "price": float(dp) if dp != "—" else 0})
+                        else:
+                            logger.warning(f"[PayOrderTool] 订单详情 API 返回空数据: code={detail_data.get('code')}, msg={detail_data.get('msg', '')[:100]}")
+                    else:
+                        logger.warning(f"[PayOrderTool] 订单详情 API 非 200: status={detail_resp.status_code}")
+            except Exception as exc:
+                logger.warning(f"[PayOrderTool] 获取订单详情失败: {type(exc).__name__}: {exc}")
+
+            card_data = {
+                "orderId": order_id,
+                "status": 2,
+                "merchant": merchant_name or "",
+                "amount": float(amount),
+                "dishes": dishes,
+                "consignee": consignee_name or "",
+                "address": consignee_addr or "",
+                "phone": consignee_phone or "",
+                "orderTime": order_time or "",
+                "logo": logo or "",
+            }
             return _append_order_card(result, card_data)
 
         # 检查是否是余额不足

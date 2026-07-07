@@ -94,11 +94,15 @@ let _tokenCaptured = false
  */
 function parseOrderCards(content: string): { cleanContent: string; cards: OrderCardData[] } {
   const cards: OrderCardData[] = []
+  const seenIds = new Set<number | string>()
   const regex = /(?:<!--ORDER_CARD-->|\[ORDER_CARD_START\])([\s\S]*?)(?:<!--END-->|\[ORDER_CARD_END\])/g
   const cleanContent = content.replace(regex, (_match, jsonStr) => {
     try {
       const data = JSON.parse(jsonStr.trim()) as OrderCardData
-      cards.push(data)
+      if (data.orderId != null && !seenIds.has(data.orderId)) {
+        seenIds.add(data.orderId)
+        cards.push(data)
+      }
     } catch {
       // ignore parse errors
     }

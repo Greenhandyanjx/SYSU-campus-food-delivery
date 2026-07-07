@@ -372,7 +372,6 @@ if __name__ == "__main__":
         elif arg == "--docker":
             if not docker_check():
                 sys.exit(1)
-            # 直接检查容器名（兼容不同 compose 文件启动的容器）
             r = subprocess.run(
                 ["docker", "ps", "--filter", "name=jd-agent", "-q"],
                 capture_output=True, timeout=10
@@ -383,9 +382,61 @@ if __name__ == "__main__":
                 if docker_up():
                     show_status()
             sys.exit(0)
+        elif arg == "--start-service":
+            if len(sys.argv) < 3:
+                print("用法: python start_all.py --start-service <服务名>")
+                print("服务名: go, fastapi, vue, docker")
+                sys.exit(1)
+            svc = sys.argv[2].lower()
+            if svc == "docker":
+                docker_auto_start()
+            elif svc == "go":
+                start_service(
+                    cmd=[GO_BACKEND], cwd=GO_BACKEND_DIR,
+                    name="Go 后端", port=3000, wait_seconds=4,
+                )
+            elif svc == "fastapi":
+                start_service(
+                    cmd=["uvicorn", "api.app:app", "--host", "127.0.0.1", "--port", "8000", "--reload"],
+                    name="FastAPI", port=8000, cwd=BASE_DIR,
+                    health_url="http://127.0.0.1:8000/api/v1/health", wait_seconds=2,
+                )
+            elif svc == "vue":
+                start_service(
+                    cmd=["npm", "run", "dev"],
+                    name="Vue 前端", port=5173, cwd=FRONTEND_DIR, wait_seconds=6,
+                )
+            else:
+                print(f"未知服务: {svc}")
+                print("服务名: go, fastapi, vue, docker")
+                sys.exit(1)
+            print(f"\n  [{svc}] 已启动")
+            sys.exit(0)
+        elif arg == "--stop-service":
+            if len(sys.argv) < 3:
+                print("用法: python start_all.py --stop-service <服务名>")
+                print("服务名: go, fastapi, vue, docker")
+                sys.exit(1)
+            svc = sys.argv[2].lower()
+            if svc == "docker":
+                docker_stop()
+            elif svc == "go":
+                kill_port(3000)
+            elif svc == "fastapi":
+                kill_port(8000)
+            elif svc == "vue":
+                kill_port(5173)
+            else:
+                print(f"未知服务: {svc}")
+                sys.exit(1)
+            print(f"\n  [{svc}] 已停止")
+            sys.exit(0)
         elif arg == "--menu":
-            # bat 模式：启动服务后退出，bat 接管菜单
-            sys.exit(main())
+            # bat 模式：只做 docker 自动检测，不启动本地服务，bat 接管菜单
+            print("\n  [Docker] 检查基础设施...")
+            docker_auto_start()
+            show_status()
+            sys.exit(0)
         else:
             print(f"未知参数: {arg}")
             print(__doc__)
